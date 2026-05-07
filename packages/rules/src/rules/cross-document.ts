@@ -140,6 +140,123 @@ export const CROSS_004: RuleDefinition = {
   },
 }
 
+export const CROSS_006: RuleDefinition = {
+  code: 'CROSS-006',
+  name: 'Invoice net weight must match packing list net weight',
+  severity: RuleSeverity.ERROR,
+  appliesToDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST],
+
+  evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
+    const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
+    const pl = ctx.documents.find((d) => d.docType === DocumentType.PACKING_LIST)
+
+    if (!invoice || !pl) return null
+    if (!invoice.data['net_weight'] || !pl.data['net_weight']) return null
+
+    const invWeight = Number(invoice.data['net_weight'])
+    const plWeight = Number(pl.data['net_weight'])
+
+    if (isNaN(invWeight) || isNaN(plWeight) || invWeight === 0 || plWeight === 0) return null
+
+    const pass = withinTolerance(invWeight, plWeight)
+
+    return {
+      ruleCode: this.code,
+      severity: this.severity,
+      result: pass ? 'PASS' : 'FAIL',
+      message: pass
+        ? `Net weight matches: invoice (${invWeight} kg) ≈ packing list (${plWeight} kg).`
+        : `Net weight mismatch: invoice (${invWeight} kg) differs from packing list (${plWeight} kg) by more than 1%.`,
+      sourceRefs: pass
+        ? []
+        : [
+            { docType: DocumentType.INVOICE, field: 'net_weight', value: invWeight },
+            { docType: DocumentType.PACKING_LIST, field: 'net_weight', value: plWeight },
+          ],
+    }
+  },
+}
+
+export const CROSS_007: RuleDefinition = {
+  code: 'CROSS-007',
+  name: 'Currency must match across invoice and declaration',
+  severity: RuleSeverity.ERROR,
+  appliesToDocTypes: [DocumentType.INVOICE, DocumentType.DECLARATION_OUTPUT],
+
+  evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
+    const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
+    const snap = ctx.declarationSnapshot
+
+    if (!invoice || !snap) return null
+    if (!invoice.data['currency'] || !snap.currency) return null
+
+    const invCcy = String(invoice.data['currency']).toUpperCase().trim()
+    const declCcy = String(snap.currency).toUpperCase().trim()
+
+    if (invCcy === declCcy) {
+      return {
+        ruleCode: this.code,
+        severity: this.severity,
+        result: 'PASS',
+        message: `Currency matches: invoice and declaration both use ${invCcy}.`,
+        sourceRefs: [],
+      }
+    }
+
+    return {
+      ruleCode: this.code,
+      severity: this.severity,
+      result: 'FAIL',
+      message: `Currency mismatch: invoice uses "${invCcy}" but declaration uses "${declCcy}".`,
+      sourceRefs: [
+        { docType: DocumentType.INVOICE, field: 'currency', value: invCcy },
+        { docType: DocumentType.DECLARATION_OUTPUT, field: 'currency', value: declCcy },
+      ],
+    }
+  },
+}
+
+export const CROSS_008: RuleDefinition = {
+  code: 'CROSS-008',
+  name: 'Package count in packing list must match declaration',
+  severity: RuleSeverity.ERROR,
+  appliesToDocTypes: [DocumentType.PACKING_LIST, DocumentType.DECLARATION_OUTPUT],
+
+  evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
+    const pl = ctx.documents.find((d) => d.docType === DocumentType.PACKING_LIST)
+    const snap = ctx.declarationSnapshot
+
+    if (!pl || !snap) return null
+    if (!pl.data['package_count'] || !snap.packageCount) return null
+
+    const plCount = Number(pl.data['package_count'])
+    const declCount = Number(snap.packageCount)
+
+    if (isNaN(plCount) || isNaN(declCount)) return null
+
+    if (plCount === declCount) {
+      return {
+        ruleCode: this.code,
+        severity: this.severity,
+        result: 'PASS',
+        message: `Package count matches: packing list and declaration both have ${plCount} packages.`,
+        sourceRefs: [],
+      }
+    }
+
+    return {
+      ruleCode: this.code,
+      severity: this.severity,
+      result: 'FAIL',
+      message: `Package count mismatch: packing list has ${plCount} packages but declaration has ${declCount}.`,
+      sourceRefs: [
+        { docType: DocumentType.PACKING_LIST, field: 'package_count', value: plCount },
+        { docType: DocumentType.DECLARATION_OUTPUT, field: 'package_count', value: declCount },
+      ],
+    }
+  },
+}
+
 export const CROSS_005: RuleDefinition = {
   code: 'CROSS-005',
   name: 'Seller in invoice must match shipper in loading instruction',

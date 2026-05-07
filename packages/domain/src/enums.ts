@@ -3,9 +3,16 @@ export const DocumentType = {
   INVOICE: 'INVOICE',
   PACKING_LIST: 'PACKING_LIST',
   LOADING_INSTRUCTION: 'LOADING_INSTRUCTION',
-  TRANSPORT_DOC: 'TRANSPORT_DOC',
+  // Transport documents
+  TRANSPORT_DOC: 'TRANSPORT_DOC',         // generic transport document
+  BILL_OF_LADING: 'BILL_OF_LADING',       // maritime B/L (konşimento)
+  AIRWAY_BILL: 'AIRWAY_BILL',             // air freight AWB
+  // Declaration & tariff
   DECLARATION_OUTPUT: 'DECLARATION_OUTPUT',
-  ORIGIN_DOC: 'ORIGIN_DOC',
+  // Origin & certification
+  ORIGIN_DOC: 'ORIGIN_DOC',              // generic origin document
+  CERTIFICATE_OF_ORIGIN: 'CERTIFICATE_OF_ORIGIN', // formal A.TR / EUR.1 / Form A
+  // Other
   PERMIT_DOC: 'PERMIT_DOC',
   OTHER: 'OTHER',
 } as const
