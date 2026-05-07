@@ -24,5 +24,17 @@
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@11.0.8"
+  "packageManager": "pnpm@11.0.8",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sharp",
+      "unrs-resolver",
+      "@prisma/client",
+      "prisma",
+      "esbuild",
+      "lightningcss",
+      "@next/swc-darwin-arm64",
+      "@next/swc-linux-x64-gnu"
+    ]
+  }
 }
