@@ -8,6 +8,7 @@
  * CLASSIFYING → EXTRACTING → NORMALIZING → RUNNING_RULES → GENERATING_REPORT → COMPLETED
  */
 import { prisma } from '@gumrukyz/db'
+import { Prisma } from '@gumrukyz/db'
 import { RuleEvaluator, ALL_RULES } from '@gumrukyz/rules'
 import type { SubmissionContext, ExtractionData } from '@gumrukyz/rules'
 import { OpenAIProvider } from '@gumrukyz/ai'
@@ -137,9 +138,10 @@ export async function processSubmission(
           try {
             const schema = getExtractionSchema(docType)
             if (schema) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const { result, meta } = await ai.extractStructured(
                 rawText,
-                schema,
+                schema as any,
                 `${docType.toLowerCase()}_extraction`,
                 docType,
               )
@@ -160,7 +162,7 @@ export async function processSubmission(
                 where: { id: extraction.id },
                 data: {
                   extractionStatus: 'DONE',
-                  structuredJson: structuredData,
+                  structuredJson: structuredData as Prisma.InputJsonValue,
                   confidence: aiConfidence,
                   providerRunId: providerRun.id,
                 },
@@ -236,7 +238,7 @@ export async function processSubmission(
             totalNetWeight: numberOrNull(d['net_weight']),
             totalGrossWeight: numberOrNull(d['gross_weight']),
             packageCount: intOrNull(d['package_count']),
-            rawJson: d,
+            rawJson: d as Prisma.InputJsonValue,
           },
         })
       }
@@ -289,7 +291,7 @@ export async function processSubmission(
       severity: r.severity,
       result: r.result,
       message: r.message,
-      sourceRefsJson: r.sourceRefs as unknown as import('@prisma/client').Prisma.JsonValue,
+      sourceRefsJson: r.sourceRefs as Prisma.InputJsonValue,
       ruleId: ruleIdMap.get(r.ruleCode) ?? null,
     }))
 
@@ -302,7 +304,7 @@ export async function processSubmission(
         severity: 'WARNING',
         result: 'REVIEW_NEEDED',
         message: `Document type ${lowDoc.docType} has low extraction confidence (${(lowDoc.confidence * 100).toFixed(0)}%). Manual review recommended.`,
-        sourceRefsJson: [{ docType: lowDoc.docType, field: 'confidence', value: lowDoc.confidence }] as unknown as import('@prisma/client').Prisma.JsonValue,
+        sourceRefsJson: [{ docType: lowDoc.docType, field: 'confidence', value: lowDoc.confidence }] as Prisma.InputJsonValue,
         ruleId: null,
       })
     }
@@ -342,7 +344,7 @@ export async function processSubmission(
         totalWarnings: warnings,
         totalReviewNeeded: reviewNeeded,
         summaryText,
-        snapshotJson: resultRows as unknown as import('@prisma/client').Prisma.JsonValue,
+        snapshotJson: resultRows as Prisma.InputJsonValue,
       },
     })
 

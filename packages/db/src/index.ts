@@ -1,5 +1,5 @@
 export { prisma } from './client.js'
-export { PrismaClient } from '@prisma/client'
+export { PrismaClient, Prisma } from '@prisma/client'
 export { searchRegulations } from './vector-search.js'
 export type { RegulationCitation } from './vector-search.js'
 export type {

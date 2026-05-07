@@ -118,14 +118,14 @@ export default async function AdminRulesPage() {
                 <td className="px-6 py-4">
                   <div className="flex gap-1">
                     {rule.fixturePassRef ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" title="Pass fixture" />
+                      <CheckCircle className="h-4 w-4 text-green-500" />
                     ) : (
-                      <XCircle className="h-4 w-4 text-red-400" title="Missing pass fixture" />
+                      <XCircle className="h-4 w-4 text-red-400" />
                     )}
                     {rule.fixtureFailRef ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" title="Fail fixture" />
+                      <CheckCircle className="h-4 w-4 text-green-500" />
                     ) : (
-                      <XCircle className="h-4 w-4 text-red-400" title="Missing fail fixture" />
+                      <XCircle className="h-4 w-4 text-red-400" />
                     )}
                   </div>
                 </td>
