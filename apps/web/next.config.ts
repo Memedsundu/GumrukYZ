@@ -10,11 +10,17 @@ const nextConfig: NextConfig = {
     '@gumrukyz/shared',
   ],
   serverExternalPackages: ['prisma', '@prisma/client', 'pdfjs-dist'],
-  eslint: {
-    ignoreDuringBuilds: false,
-  },
   typescript: {
     ignoreBuildErrors: false,
+  },
+  // Resolve TypeScript-ESM .js → .ts extension aliases
+  // (workspace packages use .js imports per TS ESM convention)
+  webpack(config) {
+    config.resolve.extensionAlias = {
+      '.js': ['.ts', '.tsx', '.js', '.jsx'],
+      '.jsx': ['.tsx', '.jsx'],
+    }
+    return config
   },
 }
 
