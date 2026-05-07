@@ -1,0 +1,405 @@
+/**
+ * Core document processing pipeline.
+ *
+ * Sprint 1 implementation: synchronous in-process execution.
+ * Sprint 2: replace with Trigger.dev durable job.
+ *
+ * Pipeline steps:
+ * CLASSIFYING → EXTRACTING → NORMALIZING → RUNNING_RULES → GENERATING_REPORT → COMPLETED
+ */
+import { prisma } from '@gumrukyz/db'
+import { RuleEvaluator, ALL_RULES } from '@gumrukyz/rules'
+import type { SubmissionContext, ExtractionData } from '@gumrukyz/rules'
+import { OpenAIProvider } from '@gumrukyz/ai'
+import {
+  InvoiceExtractionSchema,
+  PackingListExtractionSchema,
+  LoadingInstructionExtractionSchema,
+  TransportDocExtractionSchema,
+  DeclarationOutputExtractionSchema,
+} from '@gumrukyz/ai'
+import { logger } from '@gumrukyz/shared'
+import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
+import { extractTextFromPdf } from './pdf-extractor'
+
+const LOW_CONFIDENCE_THRESHOLD = 0.5
+
+async function updateJobStatus(
+  jobId: string,
+  submissionId: string,
+  status: string,
+  step: string,
+  errorMessage?: string,
+) {
+  await prisma.processingJob.update({
+    where: { id: jobId },
+    data: {
+      status,
+      currentStep: step,
+      errorMessage: errorMessage ?? null,
+      ...(status === 'COMPLETED' || status === 'FAILED' ? { completedAt: new Date() } : {}),
+    },
+  })
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data: { status },
+  })
+}
+
+export async function processSubmission(
+  submissionId: string,
+  tenantId: string,
+  jobId: string,
+): Promise<void> {
+  logger.info('processSubmission.start', { submissionId, jobId })
+
+  try {
+    // Fetch submission with documents
+    const submission = await prisma.submission.findUnique({
+      where: { id: submissionId },
+      include: {
+        documents: {
+          include: { latestVersion: true },
+        },
+      },
+    })
+
+    if (!submission) throw new Error('Submission not found')
+
+    const ai = new OpenAIProvider()
+    const extractionResults: ExtractionData[] = []
+
+    // ─── EXTRACTING ────────────────────────────────────────────────────────────
+    await updateJobStatus(jobId, submissionId, 'EXTRACTING', 'EXTRACTING')
+
+    for (const doc of submission.documents) {
+      if (!doc.latestVersion) continue
+
+      const docType = doc.docType as DocumentType
+
+      // Update document status
+      await prisma.document.update({
+        where: { id: doc.id },
+        data: { status: 'PROCESSING' },
+      })
+
+      try {
+        // Step 1: Extract raw text from PDF
+        const textResult = await extractTextFromPdf(doc.latestVersion.fileUrl)
+        const rawText = textResult.text
+        const textConfidence = textResult.confidence
+
+        // Step 2: Create extraction record
+        const extraction = await prisma.documentExtraction.create({
+          data: {
+            documentVersionId: doc.latestVersion.id,
+            tenantId,
+            extractionStatus: 'PENDING',
+            extractionMethod: 'TEXT_PDF',
+            rawText,
+            confidence: textConfidence,
+          },
+        })
+
+        if (textConfidence < LOW_CONFIDENCE_THRESHOLD) {
+          // Low confidence — flag for review, don't run AI extraction
+          await prisma.documentExtraction.update({
+            where: { id: extraction.id },
+            data: { extractionStatus: 'LOW_CONFIDENCE' },
+          })
+          await prisma.document.update({
+            where: { id: doc.id },
+            data: { status: 'DONE' },
+          })
+          extractionResults.push({
+            docType,
+            data: {},
+            confidence: textConfidence,
+          })
+          continue
+        }
+
+        // Step 3: AI structured extraction (if OpenAI is configured)
+        let structuredData: Record<string, unknown> = {}
+        let aiConfidence = textConfidence
+
+        if (ai.isEnabled() && rawText.length > 50) {
+          const providerRun = await prisma.providerRun.create({
+            data: {
+              tenantId,
+              provider: 'openai',
+              model: process.env['OPENAI_MODEL'] ?? 'gpt-4o',
+              operation: `extract_${docType.toLowerCase()}`,
+              status: 'OK',
+            },
+          })
+
+          try {
+            const schema = getExtractionSchema(docType)
+            if (schema) {
+              const { result, meta } = await ai.extractStructured(
+                rawText,
+                schema,
+                `${docType.toLowerCase()}_extraction`,
+                docType,
+              )
+              structuredData = result as Record<string, unknown>
+              aiConfidence = 0.85
+
+              await prisma.providerRun.update({
+                where: { id: providerRun.id },
+                data: {
+                  inputTokens: meta.inputTokens,
+                  outputTokens: meta.outputTokens,
+                  estimatedCostUsd: meta.estimatedCostUsd,
+                  durationMs: meta.durationMs,
+                },
+              })
+
+              await prisma.documentExtraction.update({
+                where: { id: extraction.id },
+                data: {
+                  extractionStatus: 'DONE',
+                  structuredJson: structuredData,
+                  confidence: aiConfidence,
+                  providerRunId: providerRun.id,
+                },
+              })
+            }
+          } catch (aiErr) {
+            logger.warn('AI extraction failed, using text-only', {
+              docType,
+              error: aiErr instanceof Error ? aiErr.message : String(aiErr),
+            })
+            await prisma.providerRun.update({
+              where: { id: providerRun.id },
+              data: {
+                status: 'ERROR',
+                errorMessage: aiErr instanceof Error ? aiErr.message : 'AI extraction failed',
+              },
+            })
+            await prisma.documentExtraction.update({
+              where: { id: extraction.id },
+              data: { extractionStatus: 'DONE', confidence: textConfidence * 0.7 },
+            })
+          }
+        } else {
+          await prisma.documentExtraction.update({
+            where: { id: extraction.id },
+            data: { extractionStatus: 'DONE' },
+          })
+        }
+
+        await prisma.document.update({
+          where: { id: doc.id },
+          data: { status: 'DONE' },
+        })
+
+        extractionResults.push({
+          docType,
+          data: structuredData,
+          confidence: aiConfidence,
+        })
+      } catch (docErr) {
+        logger.error('Document extraction failed', {
+          docId: doc.id,
+          error: docErr instanceof Error ? docErr.message : String(docErr),
+        })
+        await prisma.document.update({
+          where: { id: doc.id },
+          data: { status: 'FAILED' },
+        })
+      }
+    }
+
+    // ─── NORMALIZING ───────────────────────────────────────────────────────────
+    await updateJobStatus(jobId, submissionId, 'NORMALIZING', 'NORMALIZING')
+
+    // Build declaration snapshot from DECLARATION_OUTPUT extractions
+    const declData = extractionResults.find((e) => e.docType === 'DECLARATION_OUTPUT')
+    if (declData && Object.keys(declData.data).length > 0) {
+      const d = declData.data as Record<string, unknown>
+
+      const sourceDoc = submission.documents.find((doc) => doc.docType === 'DECLARATION_OUTPUT')
+      if (sourceDoc?.latestVersionId) {
+        await prisma.declarationSnapshot.create({
+          data: {
+            submissionId,
+            tenantId,
+            sourceDocumentVersionId: sourceDoc.latestVersionId,
+            declarationNumber: stringOrNull(d['declaration_number']),
+            declarationDate: dateOrNull(d['declaration_date']),
+            regimeCode: stringOrNull(d['regime_code']),
+            incoterm: stringOrNull(d['incoterm']),
+            totalValue: numberOrNull(d['total_value']),
+            currency: stringOrNull(d['currency']),
+            totalNetWeight: numberOrNull(d['net_weight']),
+            totalGrossWeight: numberOrNull(d['gross_weight']),
+            packageCount: intOrNull(d['package_count']),
+            rawJson: d,
+          },
+        })
+      }
+    }
+
+    // ─── RUNNING_RULES ─────────────────────────────────────────────────────────
+    await updateJobStatus(jobId, submissionId, 'RUNNING_RULES', 'RUNNING_RULES')
+
+    const declarationSnap = await prisma.declarationSnapshot.findFirst({
+      where: { submissionId },
+    })
+
+    const ctx: SubmissionContext = {
+      submissionId,
+      tenantId,
+      tradeFlow: submission.tradeFlow as TradeFlow,
+      documents: extractionResults,
+      declarationSnapshot: declarationSnap
+        ? {
+            declarationNumber: declarationSnap.declarationNumber,
+            incoterm: declarationSnap.incoterm,
+            totalValue: declarationSnap.totalValue ? Number(declarationSnap.totalValue) : null,
+            currency: declarationSnap.currency,
+            totalNetWeight: declarationSnap.totalNetWeight ? Number(declarationSnap.totalNetWeight) : null,
+            totalGrossWeight: declarationSnap.totalGrossWeight ? Number(declarationSnap.totalGrossWeight) : null,
+            packageCount: declarationSnap.packageCount,
+            gtipCode: null,
+            regimeCode: declarationSnap.regimeCode,
+          }
+        : null,
+    }
+
+    // Also handle low-confidence documents by adding REVIEW_NEEDED results
+    const lowConfidenceDocs = extractionResults.filter((e) => e.confidence < LOW_CONFIDENCE_THRESHOLD)
+
+    const evaluator = new RuleEvaluator(ALL_RULES)
+    const ruleResults = evaluator.evaluate(ctx)
+
+    // Fetch active rules for ID lookup
+    const activeRules = await prisma.rule.findMany({
+      where: { lifecycleStatus: 'ACTIVE' },
+      select: { id: true, ruleCode: true },
+    })
+    const ruleIdMap = new Map(activeRules.map((r) => [r.ruleCode, r.id]))
+
+    const resultRows = ruleResults.map((r) => ({
+      submissionId,
+      tenantId,
+      ruleCode: r.ruleCode,
+      severity: r.severity,
+      result: r.result,
+      message: r.message,
+      sourceRefsJson: r.sourceRefs as unknown as import('@prisma/client').Prisma.JsonValue,
+      ruleId: ruleIdMap.get(r.ruleCode) ?? null,
+    }))
+
+    // Add REVIEW_NEEDED for low-confidence documents
+    for (const lowDoc of lowConfidenceDocs) {
+      resultRows.push({
+        submissionId,
+        tenantId,
+        ruleCode: 'OCR-001',
+        severity: 'WARNING',
+        result: 'REVIEW_NEEDED',
+        message: `Document type ${lowDoc.docType} has low extraction confidence (${(lowDoc.confidence * 100).toFixed(0)}%). Manual review recommended.`,
+        sourceRefsJson: [{ docType: lowDoc.docType, field: 'confidence', value: lowDoc.confidence }] as unknown as import('@prisma/client').Prisma.JsonValue,
+        ruleId: null,
+      })
+    }
+
+    if (resultRows.length > 0) {
+      await prisma.ruleResult.createMany({ data: resultRows })
+    }
+
+    // ─── GENERATING_REPORT ─────────────────────────────────────────────────────
+    await updateJobStatus(jobId, submissionId, 'GENERATING_REPORT', 'GENERATING_REPORT')
+
+    const errors = resultRows.filter((r) => r.result === 'FAIL').length
+    const warnings = resultRows.filter((r) => r.result === 'WARN').length
+    const reviewNeeded = resultRows.filter((r) => r.result === 'REVIEW_NEEDED').length
+
+    let summaryText: string | null = null
+    if (ai.isEnabled() && resultRows.some((r) => r.result !== 'PASS')) {
+      try {
+        const findings = resultRows
+          .filter((r) => r.result !== 'PASS' && r.result !== 'SKIP')
+          .map((r) => ({ ruleCode: r.ruleCode, severity: r.severity, message: r.message }))
+
+        const { result } = await ai.generateRiskSummary(findings, submission.tradeFlow)
+        summaryText = result.summary
+      } catch (err) {
+        logger.warn('Risk summary generation failed', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+
+    await prisma.riskReport.create({
+      data: {
+        submissionId,
+        tenantId,
+        totalErrors: errors,
+        totalWarnings: warnings,
+        totalReviewNeeded: reviewNeeded,
+        summaryText,
+        snapshotJson: resultRows as unknown as import('@prisma/client').Prisma.JsonValue,
+      },
+    })
+
+    // ─── COMPLETED ─────────────────────────────────────────────────────────────
+    await updateJobStatus(jobId, submissionId, 'COMPLETED', 'COMPLETED')
+
+    logger.info('processSubmission.complete', {
+      submissionId,
+      errors,
+      warnings,
+      reviewNeeded,
+    })
+  } catch (err) {
+    logger.error('processSubmission.failed', {
+      submissionId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    await updateJobStatus(
+      jobId,
+      submissionId,
+      'FAILED',
+      'FAILED',
+      err instanceof Error ? err.message : 'Unknown error',
+    ).catch(() => {})
+  }
+}
+
+function getExtractionSchema(docType: DocumentType) {
+  switch (docType) {
+    case 'INVOICE': return InvoiceExtractionSchema
+    case 'PACKING_LIST': return PackingListExtractionSchema
+    case 'LOADING_INSTRUCTION': return LoadingInstructionExtractionSchema
+    case 'TRANSPORT_DOC': return TransportDocExtractionSchema
+    case 'DECLARATION_OUTPUT': return DeclarationOutputExtractionSchema
+    default: return null
+  }
+}
+
+function stringOrNull(val: unknown): string | null {
+  if (val == null) return null
+  const s = String(val).trim()
+  return s === '' ? null : s
+}
+
+function numberOrNull(val: unknown): number | null {
+  if (val == null) return null
+  const n = Number(val)
+  return isNaN(n) ? null : n
+}
+
+function intOrNull(val: unknown): number | null {
+  const n = numberOrNull(val)
+  return n !== null ? Math.round(n) : null
+}
+
+function dateOrNull(val: unknown): Date | null {
+  if (val == null) return null
+  const d = new Date(String(val))
+  return isNaN(d.getTime()) ? null : d
+}

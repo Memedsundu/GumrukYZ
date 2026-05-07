@@ -1,0 +1,25 @@
+{
+  "name": "@gumrukyz/ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "ai": "^4.3.16",
+    "@ai-sdk/openai": "^1.3.22",
+    "zod": "^3.24.2",
+    "@gumrukyz/domain": "workspace:*",
+    "@gumrukyz/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

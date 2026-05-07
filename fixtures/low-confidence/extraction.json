@@ -1,0 +1,25 @@
+{
+  "_fixture": "low-confidence",
+  "_description": "Low-confidence extraction from scanned/degraded PDF — should produce REVIEW_NEEDED, not FAIL",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.32,
+      "data": {
+        "invoice_number": null,
+        "invoice_date": null,
+        "seller_name": "????? GmbH",
+        "buyer_name": null,
+        "currency": null,
+        "total_amount": null,
+        "incoterm": null
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "PRES-001": "REVIEW_NEEDED_OR_PASS"
+  },
+  "_notes": "This fixture validates that low-confidence extractions (confidence < 0.5) produce REVIEW_NEEDED rather than triggering rule failures from bad OCR data."
+}

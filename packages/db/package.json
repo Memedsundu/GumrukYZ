@@ -1,0 +1,30 @@
+{
+  "name": "@gumrukyz/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "push": "prisma db push",
+    "seed": "tsx src/seed.ts",
+    "studio": "prisma studio",
+    "generate": "prisma generate",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "@gumrukyz/domain": "workspace:*",
+    "@gumrukyz/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "prisma": "^6.7.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

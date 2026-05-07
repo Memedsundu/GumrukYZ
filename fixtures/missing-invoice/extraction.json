@@ -1,0 +1,50 @@
+{
+  "_fixture": "missing-invoice",
+  "_description": "Import package with no invoice — PRES-001 should FAIL",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.92,
+      "data": {
+        "package_count": 5,
+        "package_type": "Cartons",
+        "gross_weight": 250.00,
+        "net_weight": 220.00,
+        "goods_description": "Electronic components",
+        "shipper": "Tech Supplies Ltd",
+        "consignee": "Elektronik Dağıtım A.Ş.",
+        "items": [
+          {
+            "description": "Electronic components",
+            "quantity": 200,
+            "net_weight": 220.00,
+            "gross_weight": 250.00
+          }
+        ]
+      }
+    },
+    {
+      "docType": "TRANSPORT_DOC",
+      "confidence": 0.88,
+      "data": {
+        "document_number": "AWB-2024-555123",
+        "document_type": "AWB",
+        "shipper": "Tech Supplies Ltd",
+        "consignee": "Elektronik Dağıtım A.Ş.",
+        "transport_mode": "AIR",
+        "departure": "London Heathrow",
+        "destination": "İstanbul Atatürk",
+        "goods_description": "Electronic components",
+        "gross_weight": 250.00,
+        "package_count": 5,
+        "vehicle_plate_or_ref": "TK0012"
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "PRES-001": "FAIL",
+    "PRES-002": "PASS"
+  }
+}

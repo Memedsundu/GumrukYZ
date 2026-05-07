@@ -1,0 +1,392 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ============================================================
+// CORE
+// ============================================================
+
+model Tenant {
+  id                          String   @id @default(uuid())
+  clerkOrgId                  String   @unique @map("clerk_org_id")
+  name                        String
+  plan                        String   @default("internal") // TenantPlan
+  dataClassificationAllowed   String[] @map("data_classification_allowed")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  users              User[]
+  submissions        Submission[]
+  documents          Document[]
+  documentVersions   DocumentVersion[]
+  extractions        DocumentExtraction[]
+  declarationSnaps   DeclarationSnapshot[]
+  declarationItems   DeclarationItem[]
+  ruleResults        RuleResult[]
+  riskReports        RiskReport[]
+  overrideActions    OverrideAction[]
+  auditLogs          AuditLog[]
+  providerRuns       ProviderRun[]
+  processingJobs     ProcessingJob[]
+  candidateRules     CandidateRule[]
+
+  @@map("tenants")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  clerkUserId String   @unique @map("clerk_user_id")
+  email       String
+  role        String   // UserRole
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  submissions     Submission[]
+  uploadedVersions DocumentVersion[]
+  overrides       OverrideAction[]
+  reviewedRules   CandidateRule[]
+
+  @@map("users")
+}
+
+model Submission {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  createdBy          String   @map("created_by")
+  tradeFlow          String   @map("trade_flow") // TradeFlow
+  title              String
+  status             String   @default("PENDING") // SubmissionStatus
+  dataClassification String   @default("SYNTHETIC") @map("data_classification") // DataClassification
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant              Tenant               @relation(fields: [tenantId], references: [id])
+  creator             User                 @relation(fields: [createdBy], references: [id])
+  documents           Document[]
+  declarationSnaps    DeclarationSnapshot[]
+  ruleResults         RuleResult[]
+  riskReports         RiskReport[]
+  processingJobs      ProcessingJob[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("submissions")
+}
+
+model Document {
+  id              String   @id @default(uuid())
+  submissionId    String   @map("submission_id")
+  tenantId        String   @map("tenant_id")
+  docType         String   @map("doc_type") // DocumentType
+  label           String
+  isRequiredGuess Boolean  @default(false) @map("is_required_guess")
+  latestVersionId String?  @map("latest_version_id")
+  status          String   @default("PENDING") // DocumentStatus
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant        Tenant            @relation(fields: [tenantId], references: [id])
+  submission    Submission        @relation(fields: [submissionId], references: [id])
+  versions      DocumentVersion[]
+  latestVersion DocumentVersion?  @relation("LatestVersion", fields: [latestVersionId], references: [id])
+
+  @@index([submissionId])
+  @@index([tenantId])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id               String   @id @default(uuid())
+  documentId       String   @map("document_id")
+  tenantId         String   @map("tenant_id")
+  versionNumber    Int      @map("version_number")
+  fileUrl          String   @map("file_url")
+  originalFilename String   @map("original_filename")
+  mimeType         String   @map("mime_type")
+  fileSizeBytes    Int?     @map("file_size_bytes")
+  checksumSha256   String?  @map("checksum_sha256")
+  isActive         Boolean  @default(true) @map("is_active")
+  uploadedBy       String   @map("uploaded_by")
+  uploadedAt       DateTime @default(now()) @map("uploaded_at")
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id])
+  document   Document             @relation(fields: [documentId], references: [id])
+  uploader   User                 @relation(fields: [uploadedBy], references: [id])
+  extractions DocumentExtraction[]
+  declarationSnaps DeclarationSnapshot[]
+  latestForDocuments Document[] @relation("LatestVersion")
+
+  @@index([documentId])
+  @@index([tenantId])
+  @@map("document_versions")
+}
+
+model DocumentExtraction {
+  id               String   @id @default(uuid())
+  documentVersionId String  @map("document_version_id")
+  tenantId         String   @map("tenant_id")
+  extractionStatus String   @default("PENDING") @map("extraction_status") // ExtractionStatus
+  extractionMethod String?  @map("extraction_method") // ExtractionMethod
+  rawText          String?  @map("raw_text")
+  structuredJson   Json?    @map("structured_json")
+  confidence       Float?
+  providerRunId    String?  @map("provider_run_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id])
+  providerRun     ProviderRun?    @relation(fields: [providerRunId], references: [id])
+
+  @@index([documentVersionId])
+  @@index([tenantId])
+  @@map("document_extractions")
+}
+
+model DeclarationSnapshot {
+  id                      String    @id @default(uuid())
+  submissionId            String    @map("submission_id")
+  tenantId                String    @map("tenant_id")
+  sourceDocumentVersionId String    @map("source_document_version_id")
+  declarationNumber       String?   @map("declaration_number")
+  declarationDate         DateTime? @map("declaration_date")
+  regimeCode              String?   @map("regime_code")
+  incoterm                String?
+  totalValue              Decimal?  @map("total_value") @db.Decimal(15, 2)
+  currency                String?
+  totalNetWeight          Decimal?  @map("total_net_weight") @db.Decimal(12, 3)
+  totalGrossWeight        Decimal?  @map("total_gross_weight") @db.Decimal(12, 3)
+  packageCount            Int?      @map("package_count")
+  rawJson                 Json?     @map("raw_json")
+  createdAt               DateTime  @default(now()) @map("created_at")
+
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  submission    Submission      @relation(fields: [submissionId], references: [id])
+  sourceVersion DocumentVersion @relation(fields: [sourceDocumentVersionId], references: [id])
+  items         DeclarationItem[]
+
+  @@index([submissionId])
+  @@index([tenantId])
+  @@map("declaration_snapshots")
+}
+
+model DeclarationItem {
+  id                     String   @id @default(uuid())
+  declarationSnapshotId  String   @map("declaration_snapshot_id")
+  tenantId               String   @map("tenant_id")
+  lineNumber             Int      @map("line_number")
+  gtipCode               String?  @map("gtip_code")
+  goodsDescription       String?  @map("goods_description")
+  quantity               Decimal? @db.Decimal(15, 4)
+  unit                   String?
+  netWeight              Decimal? @map("net_weight") @db.Decimal(12, 3)
+  grossWeight            Decimal? @map("gross_weight") @db.Decimal(12, 3)
+  value                  Decimal? @db.Decimal(15, 2)
+  currency               String?
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id])
+  snapshot DeclarationSnapshot @relation(fields: [declarationSnapshotId], references: [id])
+
+  @@index([declarationSnapshotId])
+  @@map("declaration_items")
+}
+
+// ============================================================
+// KNOWLEDGE / RULES
+// ============================================================
+
+model SourceDocument {
+  id             String    @id @default(uuid())
+  title          String
+  url            String
+  sourceType     String    @map("source_type") // SourceType
+  jurisdiction   String    // Jurisdiction
+  language       String    @default("TR")
+  effectiveDate  DateTime? @map("effective_date")
+  lastVerifiedAt DateTime? @map("last_verified_at")
+  rawExcerpt     String?   @map("raw_excerpt")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  rules          Rule[]
+  candidateRules CandidateRule[]
+
+  @@map("source_documents")
+}
+
+model CandidateRule {
+  id                  String    @id @default(uuid())
+  ruleCodeDraft       String    @map("rule_code_draft")
+  description         String
+  appliesToDocTypes   String[]  @map("applies_to_doc_types")
+  fieldChecks         String[]  @map("field_checks")
+  severity            String    // RuleSeverity
+  status              String    @default("DRAFT") @map("status") // CandidateRuleStatus
+  sourceDocumentId    String?   @map("source_document_id")
+  extractedRationale  String?   @map("extracted_rationale")
+  aiConfidence        Float?    @map("ai_confidence")
+  reviewedBy          String?   @map("reviewed_by")
+  reviewedAt          DateTime? @map("reviewed_at")
+  tenantId            String?   @map("tenant_id")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+  reviewer       User?           @relation(fields: [reviewedBy], references: [id])
+  tenant         Tenant?         @relation(fields: [tenantId], references: [id])
+
+  @@map("candidate_rules")
+}
+
+model Rule {
+  id                  String    @id @default(uuid())
+  ruleCode            String    @unique @map("rule_code")
+  name                String
+  description         String
+  appliesToDocTypes   String[]  @map("applies_to_doc_types")
+  fieldChecks         String[]  @map("field_checks")
+  severity            String    // RuleSeverity
+  explanationTemplate String    @map("explanation_template")
+  sourceDocumentId    String?   @map("source_document_id")
+  effectiveFrom       DateTime? @map("effective_from")
+  fixturePassRef      String?   @map("fixture_pass_ref")
+  fixtureFailRef      String?   @map("fixture_fail_ref")
+  lifecycleStatus     String    @default("ACTIVE") @map("lifecycle_status") // RuleLifecycle
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+  results        RuleResult[]
+
+  @@index([lifecycleStatus])
+  @@map("rules")
+}
+
+model RuleResult {
+  id           String   @id @default(uuid())
+  submissionId String   @map("submission_id")
+  tenantId     String   @map("tenant_id")
+  ruleCode     String   @map("rule_code")
+  severity     String   // RuleSeverity
+  result       String   // RuleResultOutcome
+  message      String
+  sourceRefsJson Json?  @map("source_refs_json")
+  ruleId       String?  @map("rule_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  submission Submission @relation(fields: [submissionId], references: [id])
+  rule       Rule?      @relation(fields: [ruleId], references: [id])
+  overrides  OverrideAction[]
+
+  @@index([submissionId])
+  @@index([tenantId])
+  @@map("rule_results")
+}
+
+model RiskReport {
+  id               String   @id @default(uuid())
+  submissionId     String   @map("submission_id")
+  tenantId         String   @map("tenant_id")
+  totalErrors      Int      @default(0) @map("total_errors")
+  totalWarnings    Int      @default(0) @map("total_warnings")
+  totalReviewNeeded Int     @default(0) @map("total_review_needed")
+  summaryText      String?  @map("summary_text")
+  snapshotJson     Json?    @map("snapshot_json")
+  generatedAt      DateTime @default(now()) @map("generated_at")
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  submission Submission @relation(fields: [submissionId], references: [id])
+
+  @@index([submissionId])
+  @@index([tenantId])
+  @@map("risk_reports")
+}
+
+model OverrideAction {
+  id             String   @id @default(uuid())
+  ruleResultId   String   @map("rule_result_id")
+  tenantId       String   @map("tenant_id")
+  overriddenBy   String   @map("overridden_by")
+  reason         String
+  originalResult String   @map("original_result")
+  newResult      String   @map("new_result")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  ruleResult RuleResult @relation(fields: [ruleResultId], references: [id])
+  user       User       @relation(fields: [overriddenBy], references: [id])
+
+  @@index([tenantId])
+  @@map("override_actions")
+}
+
+// ============================================================
+// OPS / AUDIT
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String?  @map("tenant_id")
+  userId     String?  @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  beforeJson Json?    @map("before_json")
+  afterJson  Json?    @map("after_json")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ProviderRun {
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  provider         String   // ProviderName
+  model            String?
+  operation        String
+  inputTokens      Int?     @map("input_tokens")
+  outputTokens     Int?     @map("output_tokens")
+  estimatedCostUsd Decimal? @map("estimated_cost_usd") @db.Decimal(10, 6)
+  durationMs       Int?     @map("duration_ms")
+  status           String   @default("OK") // 'OK' | 'ERROR'
+  errorMessage     String?  @map("error_message")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id])
+  extractions DocumentExtraction[]
+
+  @@index([tenantId])
+  @@index([provider, operation])
+  @@map("provider_runs")
+}
+
+model ProcessingJob {
+  id            String    @id @default(uuid())
+  submissionId  String    @map("submission_id")
+  tenantId      String    @map("tenant_id")
+  triggerJobId  String?   @map("trigger_job_id")
+  status        String    @default("PENDING") // SubmissionStatus
+  currentStep   String?   @map("current_step")
+  errorMessage  String?   @map("error_message")
+  startedAt     DateTime? @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  submission Submission @relation(fields: [submissionId], references: [id])
+
+  @@index([submissionId])
+  @@index([tenantId, status])
+  @@map("processing_jobs")
+}

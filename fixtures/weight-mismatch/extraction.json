@@ -1,0 +1,83 @@
+{
+  "_fixture": "weight-mismatch",
+  "_description": "Packing list gross weight 1250 kg, declaration gross weight 1340 kg — CROSS-002 should FAIL",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.95,
+      "data": {
+        "invoice_number": "INV-2024-00456",
+        "invoice_date": "2024-04-10",
+        "seller_name": "Steel Parts AG",
+        "seller_address": "Hauptstr. 12, 80331 München, Germany",
+        "buyer_name": "Çelik Endüstri Ltd.",
+        "buyer_address": "Ostim OSB, Ankara, Türkiye",
+        "consignee": "Çelik Endüstri Ltd.",
+        "currency": "EUR",
+        "total_amount": 18750.00,
+        "incoterm": "FOB",
+        "delivery_place": "Hamburg Limanı",
+        "items": [
+          {
+            "description": "Steel shaft components",
+            "hs_code": "73261900",
+            "quantity": 100,
+            "unit": "PCS",
+            "unit_price": 187.50,
+            "total_price": 18750.00
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.91,
+      "data": {
+        "package_count": 4,
+        "package_type": "Steel crates",
+        "gross_weight": 1250.00,
+        "net_weight": 1000.00,
+        "goods_description": "Steel shaft components",
+        "shipper": "Steel Parts AG",
+        "consignee": "Çelik Endüstri Ltd.",
+        "items": [
+          {
+            "description": "Steel shaft components",
+            "quantity": 100,
+            "net_weight": 1000.00,
+            "gross_weight": 1250.00
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24020000789012",
+    "declarationDate": "2024-04-15",
+    "regimeCode": "40",
+    "incoterm": "FOB",
+    "totalValue": 18750.00,
+    "currency": "EUR",
+    "totalNetWeight": 1000.00,
+    "totalGrossWeight": 1340.00,
+    "packageCount": 4,
+    "gtipCode": "73261900"
+  },
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "PRES-002": "PASS",
+    "INV-001": "PASS",
+    "INV-002": "PASS",
+    "INV-003": "PASS",
+    "INV-004": "PASS",
+    "INV-005": "PASS",
+    "INV-006": "PASS",
+    "PL-001": "PASS",
+    "PL-002": "PASS",
+    "GTIP-001": "PASS",
+    "CROSS-001": "PASS",
+    "CROSS-002": "FAIL",
+    "CROSS-003": null
+  }
+}

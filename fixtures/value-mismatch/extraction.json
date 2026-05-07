@@ -1,0 +1,83 @@
+{
+  "_fixture": "value-mismatch",
+  "_description": "Invoice total USD 42500, declaration total USD 39000 — CROSS-001 should FAIL",
+  "_tradeFlow": "EXPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.94,
+      "data": {
+        "invoice_number": "EXP-2024-00789",
+        "invoice_date": "2024-05-01",
+        "seller_name": "Türk Tekstil San. A.Ş.",
+        "seller_address": "Çorlu OSB, Tekirdağ, Türkiye",
+        "buyer_name": "European Fashion Group",
+        "buyer_address": "Via Roma 55, 20121 Milano, Italy",
+        "consignee": "European Fashion Group",
+        "currency": "USD",
+        "total_amount": 42500.00,
+        "incoterm": "FOB",
+        "delivery_place": "İstanbul Limanı",
+        "items": [
+          {
+            "description": "Cotton t-shirts, assorted sizes",
+            "hs_code": "61091000",
+            "quantity": 5000,
+            "unit": "PCS",
+            "unit_price": 8.50,
+            "total_price": 42500.00
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.90,
+      "data": {
+        "package_count": 20,
+        "package_type": "Cartons",
+        "gross_weight": 520.00,
+        "net_weight": 500.00,
+        "goods_description": "Cotton t-shirts",
+        "shipper": "Türk Tekstil San. A.Ş.",
+        "consignee": "European Fashion Group",
+        "items": [
+          {
+            "description": "Cotton t-shirts",
+            "quantity": 5000,
+            "net_weight": 500.00,
+            "gross_weight": 520.00
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24030000345678",
+    "declarationDate": "2024-05-05",
+    "regimeCode": "10",
+    "incoterm": "FOB",
+    "totalValue": 39000.00,
+    "currency": "USD",
+    "totalNetWeight": 500.00,
+    "totalGrossWeight": 520.00,
+    "packageCount": 20,
+    "gtipCode": "61091000"
+  },
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "PRES-002": null,
+    "INV-001": "PASS",
+    "INV-002": "PASS",
+    "INV-003": "PASS",
+    "INV-004": "PASS",
+    "INV-005": "PASS",
+    "INV-006": "PASS",
+    "PL-001": "PASS",
+    "PL-002": "PASS",
+    "GTIP-001": "PASS",
+    "CROSS-001": "FAIL",
+    "CROSS-002": "PASS",
+    "CROSS-003": null
+  }
+}

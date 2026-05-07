@@ -1,0 +1,119 @@
+{
+  "_fixture": "clean-import",
+  "_description": "Valid complete import package — no errors expected",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.95,
+      "data": {
+        "invoice_number": "INV-2024-00123",
+        "invoice_date": "2024-03-15",
+        "seller_name": "ACME Manufacturing GmbH",
+        "seller_address": "Industriestr. 45, 10117 Berlin, Germany",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "buyer_address": "Levent Mah. Büyükdere Cad. No:201, 34394 İstanbul, Türkiye",
+        "consignee": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 42500.00,
+        "incoterm": "CIF",
+        "delivery_place": "İstanbul Limanı",
+        "items": [
+          {
+            "description": "Industrial pump units, type A200",
+            "hs_code": "84137020",
+            "quantity": 50,
+            "unit": "PCS",
+            "unit_price": 850.00,
+            "total_price": 42500.00
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.92,
+      "data": {
+        "package_count": 10,
+        "package_type": "Wooden crates",
+        "gross_weight": 1250.00,
+        "net_weight": 1100.00,
+        "dimensions": "120x80x100 cm each",
+        "goods_description": "Industrial pump units",
+        "shipper": "ACME Manufacturing GmbH",
+        "consignee": "Türk İthalat A.Ş.",
+        "items": [
+          {
+            "description": "Industrial pump units, type A200",
+            "quantity": 50,
+            "net_weight": 1100.00,
+            "gross_weight": 1250.00
+          }
+        ]
+      }
+    },
+    {
+      "docType": "TRANSPORT_DOC",
+      "confidence": 0.90,
+      "data": {
+        "document_number": "CMR-2024-78654",
+        "document_type": "CMR",
+        "shipper": "ACME Manufacturing GmbH",
+        "consignee": "Türk İthalat A.Ş.",
+        "transport_mode": "ROAD",
+        "departure": "Berlin, Germany",
+        "destination": "İstanbul, Türkiye",
+        "goods_description": "Industrial pump units",
+        "gross_weight": 1250.00,
+        "package_count": 10,
+        "vehicle_plate_or_ref": "34 ABC 123"
+      }
+    },
+    {
+      "docType": "LOADING_INSTRUCTION",
+      "confidence": 0.88,
+      "data": {
+        "shipper": "ACME Manufacturing GmbH",
+        "consignee": "Türk İthalat A.Ş.",
+        "delivery_address": "İstanbul Limanı, Ambar 5, Türkiye",
+        "goods_description": "Industrial pump units",
+        "gross_weight": 1250.00,
+        "net_weight": 1100.00,
+        "package_count": 10,
+        "delivery_term": "CIF",
+        "incoterm": "CIF",
+        "loading_port": "Hamburg",
+        "discharge_port": "İstanbul"
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24010000123456",
+    "declarationDate": "2024-03-20",
+    "regimeCode": "40",
+    "incoterm": "CIF",
+    "totalValue": 42500.00,
+    "currency": "EUR",
+    "totalNetWeight": 1100.00,
+    "totalGrossWeight": 1250.00,
+    "packageCount": 10,
+    "gtipCode": "84137020"
+  },
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "PRES-002": "PASS",
+    "INV-001": "PASS",
+    "INV-002": "PASS",
+    "INV-003": "PASS",
+    "INV-004": "PASS",
+    "INV-005": "PASS",
+    "INV-006": "PASS",
+    "PL-001": "PASS",
+    "PL-002": "PASS",
+    "GTIP-001": "PASS",
+    "CROSS-001": "PASS",
+    "CROSS-002": "PASS",
+    "CROSS-003": "PASS",
+    "CROSS-005": "PASS"
+  }
+}
