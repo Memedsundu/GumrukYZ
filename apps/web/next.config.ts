@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next'
+import path from 'path'
 
 const nextConfig: NextConfig = {
+  // Point Next.js to the monorepo root so workers can trace all workspace packages
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   transpilePackages: [
     '@gumrukyz/db',
     '@gumrukyz/domain',
