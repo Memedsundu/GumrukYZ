@@ -1,5 +1,7 @@
 export { prisma } from './client.js'
 export { PrismaClient } from '@prisma/client'
+export { searchRegulations } from './vector-search.js'
+export type { RegulationCitation } from './vector-search.js'
 export type {
   Tenant,
   User,
@@ -18,4 +20,5 @@ export type {
   AuditLog,
   ProviderRun,
   ProcessingJob,
+  RegulationChunk,
 } from '@prisma/client'

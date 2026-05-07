@@ -1,11 +1,13 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DATABASE_URL_UNPOOLED")
+  extensions = [pgvector(map: "vector")]
 }
 
 // ============================================================
@@ -213,8 +215,9 @@ model SourceDocument {
   rawExcerpt     String?   @map("raw_excerpt")
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  rules          Rule[]
-  candidateRules CandidateRule[]
+  rules            Rule[]
+  candidateRules   CandidateRule[]
+  regulationChunks RegulationChunk[]
 
   @@map("source_documents")
 }
@@ -389,4 +392,26 @@ model ProcessingJob {
   @@index([submissionId])
   @@index([tenantId, status])
   @@map("processing_jobs")
+}
+
+// ============================================================
+// VECTOR / RAG
+// ============================================================
+
+/// A chunk of a SourceDocument that has been embedded into pgvector.
+/// Used for RAG-based rule explanation citations.
+model RegulationChunk {
+  id               String                        @id @default(uuid())
+  sourceDocumentId String                        @map("source_document_id")
+  chunkIndex       Int                           @map("chunk_index")
+  chunkText        String                        @map("chunk_text")
+  embedding        Unsupported("vector(1536)")?
+  tokenCount       Int?                          @map("token_count")
+  model            String                        @default("text-embedding-3-small")
+  createdAt        DateTime                      @default(now()) @map("created_at")
+
+  sourceDocument SourceDocument @relation(fields: [sourceDocumentId], references: [id])
+
+  @@index([sourceDocumentId])
+  @@map("regulation_chunks")
 }

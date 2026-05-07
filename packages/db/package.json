@@ -13,14 +13,16 @@
     "migrate:deploy": "prisma migrate deploy",
     "push": "prisma db push",
     "seed": "tsx src/seed.ts",
+    "embed-regulations": "tsx src/embed-regulations.ts",
     "studio": "prisma studio",
     "generate": "prisma generate",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^6.7.0",
     "@gumrukyz/domain": "workspace:*",
-    "@gumrukyz/shared": "workspace:*"
+    "@gumrukyz/shared": "workspace:*",
+    "@prisma/client": "^6.7.0",
+    "openai": "^6.36.0"
   },
   "devDependencies": {
     "prisma": "^6.7.0",
