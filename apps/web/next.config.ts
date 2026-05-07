@@ -12,13 +12,34 @@ const nextConfig: NextConfig = {
     '@gumrukyz/storage',
     '@gumrukyz/shared',
   ],
-  serverExternalPackages: ['prisma', '@prisma/client', 'pdfjs-dist'],
+  // Prisma + Neon packages must NOT be bundled — they're loaded from
+  // node_modules at runtime. serverExternalPackages alone isn't enough
+  // when the importer (@gumrukyz/db) is in transpilePackages; we also
+  // add an explicit webpack externals regex.
+  serverExternalPackages: [
+    'prisma',
+    '@prisma/client',
+    '@prisma/adapter-neon',
+    '@neondatabase/serverless',
+    '.prisma/client',
+    'pdfjs-dist',
+  ],
   typescript: {
     ignoreBuildErrors: false,
   },
-  // Resolve TypeScript-ESM .js → .ts extension aliases
-  // (workspace packages use .js imports per TS ESM convention)
-  webpack(config) {
+  webpack(config, { isServer }) {
+    if (isServer) {
+      // Regex externals prevent bundling even when the importer is in
+      // transpilePackages. The packages are traced + included in the
+      // Lambda via serverExternalPackages above.
+      const prismaRegex = /^(@prisma\/|\.prisma\/|@neondatabase\/)/
+      if (Array.isArray(config.externals)) {
+        config.externals.push(prismaRegex)
+      } else {
+        config.externals = [config.externals, prismaRegex].filter(Boolean)
+      }
+    }
+    // Resolve TypeScript-ESM .js → .ts extension aliases
     config.resolve.extensionAlias = {
       '.js': ['.ts', '.tsx', '.js', '.jsx'],
       '.jsx': ['.tsx', '.jsx'],
