@@ -20,6 +20,20 @@ function fail(
   }
 }
 
+function getOriginDocs(ctx: SubmissionContext) {
+  return ctx.documents.filter(
+    (d) => d.docType === DocumentType.ORIGIN_DOC || d.docType === DocumentType.CERTIFICATE_OF_ORIGIN,
+  )
+}
+
+function firstText(data: Record<string, unknown>, fields: string[]): string | null {
+  for (const field of fields) {
+    const value = data[field]
+    if (value != null && String(value).trim() !== '') return String(value).trim()
+  }
+  return null
+}
+
 /**
  * COO-001 – Country declared on the Certificate of Origin must match the
  * country_of_origin field on the invoice.
@@ -28,21 +42,21 @@ export const COO_001: RuleDefinition = {
   code: 'COO-001',
   name: 'Certificate of origin country must match invoice country of origin',
   severity: RuleSeverity.ERROR,
-  appliesToDocTypes: [DocumentType.CERTIFICATE_OF_ORIGIN, DocumentType.INVOICE],
+  appliesToDocTypes: [DocumentType.ORIGIN_DOC, DocumentType.INVOICE],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const coo = ctx.documents.find((d) => d.docType === DocumentType.CERTIFICATE_OF_ORIGIN)
+    const coo = getOriginDocs(ctx)[0]
     const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
 
     if (!coo || !invoice) return null
 
-    const cooCountry = coo.data['country_of_origin']
-    const invCountry = invoice.data['country_of_origin']
+    const cooCountry = firstText(coo.data, ['country_of_origin', 'origin_country'])
+    const invCountry = firstText(invoice.data, ['country_of_origin', 'origin_country'])
 
     if (!cooCountry || !invCountry) return null
 
-    const cooNorm = String(cooCountry).toUpperCase().trim()
-    const invNorm = String(invCountry).toUpperCase().trim()
+    const cooNorm = cooCountry.toUpperCase().trim()
+    const invNorm = invCountry.toUpperCase().trim()
 
     if (cooNorm === invNorm) {
       return pass(
@@ -57,7 +71,7 @@ export const COO_001: RuleDefinition = {
       this.severity,
       `Country of origin mismatch: certificate says "${cooNorm}" but invoice says "${invNorm}".`,
       [
-        { docType: DocumentType.CERTIFICATE_OF_ORIGIN, field: 'country_of_origin', value: cooNorm },
+        { docType: coo.docType, field: 'origin_country', value: cooNorm },
         { docType: DocumentType.INVOICE, field: 'country_of_origin', value: invNorm },
       ],
     )
@@ -72,10 +86,10 @@ export const COO_002: RuleDefinition = {
   code: 'COO-002',
   name: 'Certificate of origin date must not be after invoice date',
   severity: RuleSeverity.WARNING,
-  appliesToDocTypes: [DocumentType.CERTIFICATE_OF_ORIGIN, DocumentType.INVOICE],
+  appliesToDocTypes: [DocumentType.ORIGIN_DOC, DocumentType.INVOICE],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const coo = ctx.documents.find((d) => d.docType === DocumentType.CERTIFICATE_OF_ORIGIN)
+    const coo = getOriginDocs(ctx)[0]
     const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
 
     if (!coo || !invoice) return null
@@ -103,7 +117,7 @@ export const COO_002: RuleDefinition = {
       this.severity,
       `Certificate of origin issue date (${cooDateRaw}) is after the invoice date (${invDateRaw}), which may indicate a compliance issue.`,
       [
-        { docType: DocumentType.CERTIFICATE_OF_ORIGIN, field: 'issue_date', value: String(cooDateRaw) },
+        { docType: coo.docType, field: 'issue_date', value: String(cooDateRaw) },
         { docType: DocumentType.INVOICE, field: 'invoice_date', value: String(invDateRaw) },
       ],
     )
@@ -117,10 +131,10 @@ export const COO_003: RuleDefinition = {
   code: 'COO-003',
   name: 'Certificate of origin issuing authority must be present',
   severity: RuleSeverity.ERROR,
-  appliesToDocTypes: [DocumentType.CERTIFICATE_OF_ORIGIN],
+  appliesToDocTypes: [DocumentType.ORIGIN_DOC],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const coos = ctx.documents.filter((d) => d.docType === DocumentType.CERTIFICATE_OF_ORIGIN)
+    const coos = getOriginDocs(ctx)
     if (coos.length === 0) return null
 
     const missing = coos.filter(
@@ -136,7 +150,7 @@ export const COO_003: RuleDefinition = {
       this.code,
       this.severity,
       'Certificate of origin is missing the issuing authority. Field: issuing_authority.',
-      [{ docType: DocumentType.CERTIFICATE_OF_ORIGIN, field: 'issuing_authority' }],
+      [{ docType: coos[0]!.docType, field: 'issuing_authority' }],
     )
   },
 }

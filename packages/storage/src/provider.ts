@@ -2,7 +2,7 @@ export interface UploadResult {
   url: string
   pathname: string
   contentType: string
-  size: number
+  size?: number
 }
 
 export interface StorageProvider {

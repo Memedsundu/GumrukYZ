@@ -51,14 +51,24 @@ export async function POST(req: NextRequest, { params }: Params) {
       data: { status: 'CLASSIFYING' },
     })
 
-    // Run processing synchronously for MVP (no separate queue service yet).
-    // Trigger.dev will replace this in Sprint 2.
-    // For now: run in background via a non-blocking call.
-    processSubmission(submissionId, user.tenantId, job.id).catch((err) => {
-      console.error('Background processing error:', err)
+    // MVP stability: run inside the request so work is not abandoned after a 202.
+    // Trigger.dev should replace this once a durable task exists.
+    await processSubmission(submissionId, user.tenantId, job.id)
+
+    const finalJob = await prisma.processingJob.findUnique({
+      where: { id: job.id },
+      select: { id: true, status: true, currentStep: true, errorMessage: true },
     })
 
-    return NextResponse.json({ jobId: job.id, status: 'started' }, { status: 202 })
+    return NextResponse.json(
+      {
+        jobId: job.id,
+        status: finalJob?.status ?? 'UNKNOWN',
+        currentStep: finalJob?.currentStep ?? null,
+        errorMessage: finalJob?.errorMessage ?? null,
+      },
+      { status: finalJob?.status === 'FAILED' ? 500 : 200 },
+    )
   } catch (err) {
     console.error('POST /api/submissions/[id]/process error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

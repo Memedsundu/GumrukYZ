@@ -18,9 +18,11 @@ import {
   LoadingInstructionExtractionSchema,
   TransportDocExtractionSchema,
   DeclarationOutputExtractionSchema,
+  OriginDocExtractionSchema,
 } from '@gumrukyz/ai'
 import { logger } from '@gumrukyz/shared'
 import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
+import type { z } from 'zod'
 import { extractTextFromPdf } from './pdf-extractor'
 
 const LOW_CONFIDENCE_THRESHOLD = 0.5
@@ -66,6 +68,9 @@ export async function processSubmission(
     })
 
     if (!submission) throw new Error('Submission not found')
+    if (submission.tenantId !== tenantId) throw new Error('Submission tenant mismatch')
+
+    await clearGeneratedArtifacts(submissionId, tenantId, submission.documents)
 
     const ai = new OpenAIProvider()
     const extractionResults: ExtractionData[] = []
@@ -138,10 +143,9 @@ export async function processSubmission(
           try {
             const schema = getExtractionSchema(docType)
             if (schema) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const { result, meta } = await ai.extractStructured(
                 rawText,
-                schema as any,
+                schema,
                 `${docType.toLowerCase()}_extraction`,
                 docType,
               )
@@ -273,9 +277,17 @@ export async function processSubmission(
 
     // Also handle low-confidence documents by adding REVIEW_NEEDED results
     const lowConfidenceDocs = extractionResults.filter((e) => e.confidence < LOW_CONFIDENCE_THRESHOLD)
+    const ruleUsableDocs = extractionResults.filter((e) => e.confidence >= LOW_CONFIDENCE_THRESHOLD)
 
-    const evaluator = new RuleEvaluator(ALL_RULES)
-    const ruleResults = evaluator.evaluate(ctx)
+    const presenceRules = ALL_RULES.filter((rule) => rule.code.startsWith('PRES-'))
+    const contentRules = ALL_RULES.filter((rule) => !rule.code.startsWith('PRES-'))
+    const ruleResults = [
+      ...new RuleEvaluator(presenceRules).evaluate(ctx),
+      ...new RuleEvaluator(contentRules).evaluate({
+        ...ctx,
+        documents: ruleUsableDocs,
+      }),
+    ]
 
     // Fetch active rules for ID lookup
     const activeRules = await prisma.rule.findMany({
@@ -372,15 +384,53 @@ export async function processSubmission(
   }
 }
 
-function getExtractionSchema(docType: DocumentType) {
+function getExtractionSchema(docType: DocumentType): z.ZodType<unknown> | null {
   switch (docType) {
     case 'INVOICE': return InvoiceExtractionSchema
     case 'PACKING_LIST': return PackingListExtractionSchema
     case 'LOADING_INSTRUCTION': return LoadingInstructionExtractionSchema
     case 'TRANSPORT_DOC': return TransportDocExtractionSchema
     case 'DECLARATION_OUTPUT': return DeclarationOutputExtractionSchema
+    case 'ORIGIN_DOC': return OriginDocExtractionSchema
     default: return null
   }
+}
+
+async function clearGeneratedArtifacts(
+  submissionId: string,
+  tenantId: string,
+  documents: Array<{ latestVersionId: string | null }>,
+) {
+  const latestVersionIds = documents
+    .map((doc) => doc.latestVersionId)
+    .filter((id): id is string => Boolean(id))
+
+  await prisma.$transaction(async (tx) => {
+    await tx.overrideAction.deleteMany({
+      where: {
+        tenantId,
+        ruleResult: { submissionId, tenantId },
+      },
+    })
+    await tx.ruleResult.deleteMany({ where: { submissionId, tenantId } })
+    await tx.riskReport.deleteMany({ where: { submissionId, tenantId } })
+    await tx.declarationItem.deleteMany({
+      where: {
+        tenantId,
+        snapshot: { submissionId, tenantId },
+      },
+    })
+    await tx.declarationSnapshot.deleteMany({ where: { submissionId, tenantId } })
+
+    if (latestVersionIds.length > 0) {
+      await tx.documentExtraction.deleteMany({
+        where: {
+          tenantId,
+          documentVersionId: { in: latestVersionIds },
+        },
+      })
+    }
+  })
 }
 
 function stringOrNull(val: unknown): string | null {

@@ -31,8 +31,13 @@ function fail(
 type InvoiceItem = {
   quantity?: number | string
   unit_price?: number | string
+  total_price?: number | string
   line_total?: number | string
   description?: string
+}
+
+function getLineTotal(item: InvoiceItem): number {
+  return Number(item.total_price ?? item.line_total ?? 0)
 }
 
 /**
@@ -92,7 +97,7 @@ export const VAL_002: RuleDefinition = {
       items.forEach((item, idx) => {
         const qty = Number(item.quantity ?? 0)
         const price = Number(item.unit_price ?? 0)
-        const lineTotal = Number(item.line_total ?? 0)
+        const lineTotal = getLineTotal(item)
 
         if (qty === 0 || price === 0 || lineTotal === 0) return
 
@@ -106,8 +111,8 @@ export const VAL_002: RuleDefinition = {
         return fail(
           this.code,
           this.severity,
-          `Line total mismatch on line(s) ${mismatchLines.join(', ')}: line_total ≠ quantity × unit_price (tolerance 0.5%).`,
-          [{ docType: DocumentType.INVOICE, field: 'items[].line_total' }],
+          `Line total mismatch on line(s) ${mismatchLines.join(', ')}: total_price ≠ quantity × unit_price (tolerance 0.5%).`,
+          [{ docType: DocumentType.INVOICE, field: 'items[].total_price' }],
         )
       }
     }
@@ -137,7 +142,7 @@ export const VAL_003: RuleDefinition = {
       if (!items || items.length === 0) continue
 
       const lineSum = items.reduce((sum, item) => {
-        const lt = Number(item.line_total ?? 0)
+        const lt = getLineTotal(item)
         return sum + lt
       }, 0)
 
@@ -147,10 +152,10 @@ export const VAL_003: RuleDefinition = {
         return fail(
           this.code,
           this.severity,
-          `Invoice total (${invoiceTotal}) differs from sum of line totals (${lineSum.toFixed(2)}) by more than 0.5%. Fields: total_amount, items[].line_total.`,
+          `Invoice total (${invoiceTotal}) differs from sum of line totals (${lineSum.toFixed(2)}) by more than 0.5%. Fields: total_amount, items[].total_price.`,
           [
             { docType: DocumentType.INVOICE, field: 'total_amount', value: invoiceTotal },
-            { docType: DocumentType.INVOICE, field: 'items[].line_total', value: lineSum },
+            { docType: DocumentType.INVOICE, field: 'items[].total_price', value: lineSum },
           ],
         )
       }

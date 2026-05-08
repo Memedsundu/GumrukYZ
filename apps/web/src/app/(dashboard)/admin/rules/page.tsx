@@ -2,7 +2,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { formatDateTime } from '@/lib/utils'
-import { CheckCircle, Clock, XCircle, BookOpen } from 'lucide-react'
+import { CheckCircle, XCircle, BookOpen } from 'lucide-react'
 
 export default async function AdminRulesPage() {
   const user = await getAuthenticatedUser()
@@ -143,7 +143,7 @@ export default async function AdminRulesPage() {
               Aday Kurallar ({candidateRules.length})
             </h2>
             <p className="mt-1 text-xs text-yellow-700">
-              Bu kurallar aktif değildir. Kaynak bağlandıktan ve fixture'lar eklendikten sonra onaylanabilir.
+              Bu kurallar aktif değildir. Kaynak bağlandıktan ve fixture&apos;lar eklendikten sonra onaylanabilir.
             </p>
           </div>
           <div className="divide-y divide-yellow-100">

@@ -10,13 +10,13 @@ import { RuleEvaluator } from './evaluator.js'
 import { ALL_RULES } from './index.js'
 import type { SubmissionContext, ExtractionData } from './types.js'
 import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
-import { RuleResultOutcome } from '@gumrukyz/domain'
 
 interface FixtureFile {
   _fixture: string
   _description: string
   _tradeFlow: TradeFlow
   _expectedResults: Record<string, string | null>
+  _assertNoFailures?: boolean
   _notes?: string
   documents: Array<{
     docType: DocumentType
@@ -60,21 +60,40 @@ function buildContext(fixture: FixtureFile): SubmissionContext {
   }
 }
 
+function evaluateLikeProcessing(ctx: SubmissionContext): ReturnType<RuleEvaluator['evaluate']> {
+  const lowConfidenceDocs = ctx.documents.filter(
+    (doc) => doc.confidence < LOW_CONFIDENCE_THRESHOLD,
+  )
+  const ruleUsableDocs = ctx.documents.filter(
+    (doc) => doc.confidence >= LOW_CONFIDENCE_THRESHOLD,
+  )
+  const presenceRules = ALL_RULES.filter((rule) => rule.code.startsWith('PRES-'))
+  const contentRules = ALL_RULES.filter((rule) => !rule.code.startsWith('PRES-'))
+
+  return [
+    ...new RuleEvaluator(presenceRules).evaluate(ctx),
+    ...new RuleEvaluator(contentRules).evaluate({
+      ...ctx,
+      documents: ruleUsableDocs,
+    }),
+    ...lowConfidenceDocs.map((doc) => ({
+      ruleCode: 'OCR-001',
+      severity: 'WARNING' as const,
+      result: 'REVIEW_NEEDED' as const,
+      message: `Document type ${doc.docType} has low extraction confidence (${(doc.confidence * 100).toFixed(0)}%). Manual review recommended.`,
+      sourceRefs: [{ docType: doc.docType, field: 'confidence', value: doc.confidence }],
+    })),
+  ]
+}
+
 function runFixture(fixturePath: string): { passed: number; failed: number; errors: string[] } {
   const fixture = loadFixture(fixturePath)
-  const evaluator = new RuleEvaluator(ALL_RULES)
 
   console.log(`\n▶ Fixture: ${fixture._fixture}`)
   console.log(`  ${fixture._description}`)
 
   const ctx = buildContext(fixture)
-
-  // Filter out low-confidence documents from rule evaluation
-  const hasLowConfidence = fixture.documents.some(
-    (d) => d.confidence < LOW_CONFIDENCE_THRESHOLD,
-  )
-
-  const results = evaluator.evaluate(ctx)
+  const results = evaluateLikeProcessing(ctx)
   const resultMap = new Map(results.map((r) => [r.ruleCode, r.result]))
 
   const expected = fixture._expectedResults
@@ -93,15 +112,6 @@ function runFixture(fixturePath: string): { passed: number; failed: number; erro
       continue
     }
 
-    if (expectedResult === 'REVIEW_NEEDED_OR_PASS') {
-      // Special case: low-confidence fixtures may produce either PASS or not run critical checks
-      if (hasLowConfidence) {
-        console.log(`  ✓ ${ruleCode}: low-confidence fixture — skipping strict assertion`)
-        passed++
-        continue
-      }
-    }
-
     const actual = resultMap.get(ruleCode)
 
     if (actual === undefined) {
@@ -115,6 +125,19 @@ function runFixture(fixturePath: string): { passed: number; failed: number; erro
       errors.push(`${ruleCode}: expected ${expectedResult}, got ${actual}`)
       failed++
       console.log(`  ✗ ${ruleCode}: expected ${expectedResult}, got ${actual}`)
+    }
+  }
+
+  if (fixture._assertNoFailures) {
+    const failures = results.filter((r) => r.result === 'FAIL')
+    if (failures.length === 0) {
+      console.log('  ✓ no FAIL results')
+      passed++
+    } else {
+      const failureCodes = failures.map((r) => r.ruleCode).join(', ')
+      errors.push(`expected no FAIL results, got ${failureCodes}`)
+      failed++
+      console.log(`  ✗ expected no FAIL results, got ${failureCodes}`)
     }
   }
 

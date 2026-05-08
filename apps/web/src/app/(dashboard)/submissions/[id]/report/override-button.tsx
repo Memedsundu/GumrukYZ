@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation'
 
 interface Props {
   ruleResultId: string
-  currentResult: string
 }
 
-export default function OverrideButton({ ruleResultId, currentResult }: Props) {
+export default function OverrideButton({ ruleResultId }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')

@@ -18,8 +18,10 @@
     }
   ],
   "declarationSnapshot": null,
+  "_assertNoFailures": true,
   "_expectedResults": {
-    "PRES-001": "REVIEW_NEEDED_OR_PASS"
+    "PRES-001": "PASS",
+    "OCR-001": "REVIEW_NEEDED"
   },
   "_notes": "This fixture validates that low-confidence extractions (confidence < 0.5) produce REVIEW_NEEDED rather than triggering rule failures from bad OCR data."
 }

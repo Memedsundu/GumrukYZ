@@ -11,7 +11,7 @@
   "scripts": {
     "test:fixtures": "tsx src/fixture-runner.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/"
+    "lint": "pnpm --workspace-root exec eslint \"$PWD/src\""
   },
   "dependencies": {
     "@gumrukyz/domain": "workspace:*",

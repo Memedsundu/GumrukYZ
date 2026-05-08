@@ -15,7 +15,6 @@ export class VercelBlobProvider implements StorageProvider {
       url: blob.url,
       pathname: blob.pathname,
       contentType: blob.contentType,
-      size: blob.size,
     }
   }
 

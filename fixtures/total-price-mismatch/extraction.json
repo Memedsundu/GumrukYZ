@@ -1,0 +1,43 @@
+{
+  "_fixture": "total-price-mismatch",
+  "_description": "Invoice line total_price does not match quantity × unit_price and invoice total",
+  "_tradeFlow": "EXPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.96,
+      "data": {
+        "invoice_number": "EXP-2024-00999",
+        "invoice_date": "2024-06-01",
+        "seller_name": "Türk Makine A.Ş.",
+        "buyer_name": "Global Buyer Ltd",
+        "currency": "EUR",
+        "total_amount": 1000.0,
+        "incoterm": "FOB",
+        "items": [
+          {
+            "description": "Machine part",
+            "hs_code": "84839000",
+            "quantity": 10,
+            "unit": "PCS",
+            "unit_price": 100.0,
+            "total_price": 900.0
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "INV-001": "PASS",
+    "INV-002": "PASS",
+    "INV-003": "PASS",
+    "INV-004": "PASS",
+    "INV-005": "PASS",
+    "INV-006": "PASS",
+    "VAL-001": "PASS",
+    "VAL-002": "FAIL",
+    "VAL-003": "FAIL"
+  }
+}

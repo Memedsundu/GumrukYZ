@@ -21,7 +21,35 @@ function fail(
 }
 
 function getBLs(ctx: SubmissionContext) {
-  return ctx.documents.filter((d) => d.docType === DocumentType.BILL_OF_LADING)
+  return ctx.documents.filter((d) => {
+    if (d.docType === DocumentType.BILL_OF_LADING) return true
+    if (d.docType !== DocumentType.TRANSPORT_DOC) return false
+
+    const documentType = String(d.data['document_type'] ?? '').toUpperCase()
+    return (
+      documentType.includes('B/L') ||
+      documentType.includes('BILL OF LADING') ||
+      documentType.includes('KONŞIMENTO') ||
+      documentType.includes('KONSIMENTO')
+    )
+  })
+}
+
+function refDocType(docType: DocumentType): DocumentType {
+  return docType
+}
+
+function textField(
+  data: Record<string, unknown>,
+  fields: string[],
+): { field: string; value: string | null } {
+  for (const field of fields) {
+    const value = data[field]
+    if (value != null && String(value).trim() !== '') {
+      return { field, value: String(value).trim() }
+    }
+  }
+  return { field: fields[0]!, value: null }
 }
 
 /** BL-001 – Bill of lading number must be present. */
@@ -29,21 +57,19 @@ export const BL_001: RuleDefinition = {
   code: 'BL-001',
   name: 'Bill of lading number must be present',
   severity: RuleSeverity.ERROR,
-  appliesToDocTypes: [DocumentType.BILL_OF_LADING],
+  appliesToDocTypes: [DocumentType.TRANSPORT_DOC],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const bls = getBLs(ctx)
     if (bls.length === 0) return null
 
-    const allHave = bls.every(
-      (bl) => bl.data['bl_number'] && String(bl.data['bl_number']).trim() !== '',
-    )
+    const allHave = bls.every((bl) => textField(bl.data, ['bl_number', 'document_number']).value)
     if (allHave) return pass(this.code, this.severity, 'Bill of lading number is present.')
     return fail(
       this.code,
       this.severity,
-      'Bill of lading number is missing. Field: bl_number.',
-      [{ docType: DocumentType.BILL_OF_LADING, field: 'bl_number' }],
+      'Bill of lading number is missing. Field: document_number.',
+      [{ docType: refDocType(bls[0]!.docType), field: 'document_number' }],
     )
   },
 }
@@ -53,17 +79,17 @@ export const BL_002: RuleDefinition = {
   code: 'BL-002',
   name: 'Port of loading and discharge must be present',
   severity: RuleSeverity.ERROR,
-  appliesToDocTypes: [DocumentType.BILL_OF_LADING],
+  appliesToDocTypes: [DocumentType.TRANSPORT_DOC],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const bls = getBLs(ctx)
     if (bls.length === 0) return null
 
     const missingPOL = bls.filter(
-      (bl) => !bl.data['port_of_loading'] || String(bl.data['port_of_loading']).trim() === '',
+      (bl) => !textField(bl.data, ['port_of_loading', 'loading_port', 'departure']).value,
     )
     const missingPOD = bls.filter(
-      (bl) => !bl.data['port_of_discharge'] || String(bl.data['port_of_discharge']).trim() === '',
+      (bl) => !textField(bl.data, ['port_of_discharge', 'discharge_port', 'destination']).value,
     )
 
     if (missingPOL.length === 0 && missingPOD.length === 0) {
@@ -71,14 +97,14 @@ export const BL_002: RuleDefinition = {
     }
 
     const missing: string[] = []
-    if (missingPOL.length > 0) missing.push('port_of_loading')
-    if (missingPOD.length > 0) missing.push('port_of_discharge')
+    if (missingPOL.length > 0) missing.push('departure/loading_port')
+    if (missingPOD.length > 0) missing.push('destination/discharge_port')
 
     return fail(
       this.code,
       this.severity,
       `B/L is missing required port fields: ${missing.join(', ')}.`,
-      missing.map((f) => ({ docType: DocumentType.BILL_OF_LADING, field: f })),
+      missing.map((f) => ({ docType: refDocType(bls[0]!.docType), field: f })),
     )
   },
 }
@@ -88,7 +114,7 @@ export const BL_003: RuleDefinition = {
   code: 'BL-003',
   name: 'B/L consignee must be present and match invoice buyer',
   severity: RuleSeverity.WARNING,
-  appliesToDocTypes: [DocumentType.BILL_OF_LADING, DocumentType.INVOICE],
+  appliesToDocTypes: [DocumentType.TRANSPORT_DOC, DocumentType.INVOICE],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const bls = getBLs(ctx)
@@ -101,7 +127,7 @@ export const BL_003: RuleDefinition = {
         this.code,
         this.severity,
         'Consignee field is blank on the bill of lading. Field: consignee.',
-        [{ docType: DocumentType.BILL_OF_LADING, field: 'consignee' }],
+        [{ docType: refDocType(bl.docType), field: 'consignee' }],
       )
     }
 
@@ -121,7 +147,7 @@ export const BL_003: RuleDefinition = {
       this.severity,
       `B/L consignee "${consignee}" may not match invoice buyer "${invoice.data['buyer_name']}". Please verify.`,
       [
-        { docType: DocumentType.BILL_OF_LADING, field: 'consignee', value: consignee },
+        { docType: refDocType(bl.docType), field: 'consignee', value: consignee },
         { docType: DocumentType.INVOICE, field: 'buyer_name', value: invoice.data['buyer_name'] },
       ],
     )

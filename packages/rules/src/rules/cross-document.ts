@@ -1,4 +1,4 @@
-import { DocumentType, RuleSeverity, isValidIncoterm } from '@gumrukyz/domain'
+import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
 import type { RuleDefinition, SubmissionContext, RuleEvaluationResult } from '../types.js'
 
 const TOLERANCE = 0.01 // 1%

@@ -165,7 +165,7 @@ export default async function ReportPage({ params }: Props) {
                 </div>
 
                 {canOverride && result.result !== 'PASS' && !override && (
-                  <OverrideButton ruleResultId={result.id} currentResult={result.result} />
+                  <OverrideButton ruleResultId={result.id} />
                 )}
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import { DataClassification, TenantPlan, UserRole, SourceType, Jurisdiction } from '@gumrukyz/domain'
+import { DataClassification, TenantPlan, SourceType, Jurisdiction } from '@gumrukyz/domain'
 
 const prisma = new PrismaClient()
 
@@ -106,10 +106,6 @@ async function main() {
   const fiataSource = await prisma.sourceDocument.findFirst({
     where: { title: 'FIATA Bill of Lading Model Rules' },
   })
-  const wcoSource = await prisma.sourceDocument.findFirst({
-    where: { title: 'WCO HS Nomenclature 2022' },
-  })
-
   const initialRules = [
     // Document presence rules
     {

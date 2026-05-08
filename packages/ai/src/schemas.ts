@@ -14,6 +14,9 @@ export const InvoiceExtractionSchema = z.object({
   total_amount: z.number().nullable(),
   incoterm: z.string().nullable(),
   delivery_place: z.string().nullable(),
+  country_of_origin: z.string().nullable(),
+  gtip_code: z.string().nullable(),
+  net_weight: z.number().nullable(),
   items: z
     .array(
       z.object({
@@ -98,6 +101,9 @@ export const DeclarationOutputExtractionSchema = z.object({
   declaration_date: z.string().nullable(),
   exporter: z.string().nullable(),
   importer: z.string().nullable(),
+  exporter_tax_id: z.string().nullable(),
+  importer_tax_id: z.string().nullable(),
+  customs_office_code: z.string().nullable(),
   regime_code: z.string().nullable(),
   gtip_code: z.string().nullable(),
   goods_description: z.string().nullable(),
@@ -122,6 +128,7 @@ export const OriginDocExtractionSchema = z.object({
   consignee: z.string().nullable(),
   goods_description: z.string().nullable(),
   origin_country: z.string().nullable(),
+  country_of_origin: z.string().nullable(),
   issuing_authority: z.string().nullable(),
 })
 

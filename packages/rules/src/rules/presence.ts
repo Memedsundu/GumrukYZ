@@ -33,18 +33,20 @@ export const PRES_003: RuleDefinition = {
   code: 'PRES-003',
   name: 'Transport document required for maritime shipments',
   severity: RuleSeverity.WARNING,
-  appliesToDocTypes: [DocumentType.BILL_OF_LADING],
+  appliesToDocTypes: [DocumentType.TRANSPORT_DOC],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     if (ctx.tradeFlow !== TradeFlow.IMPORT) return null
 
-    const hasBL = ctx.documents.some((d) => d.docType === DocumentType.BILL_OF_LADING)
-    if (hasBL) {
+    const hasTransportDoc = ctx.documents.some(
+      (d) => d.docType === DocumentType.TRANSPORT_DOC || d.docType === DocumentType.BILL_OF_LADING || d.docType === DocumentType.AIRWAY_BILL,
+    )
+    if (hasTransportDoc) {
       return {
         ruleCode: this.code,
         severity: this.severity,
         result: 'PASS',
-        message: 'Transport document (bill of lading) found.',
+        message: 'Transport document found.',
         sourceRefs: [],
       }
     }
@@ -55,8 +57,8 @@ export const PRES_003: RuleDefinition = {
       severity: this.severity,
       result: 'WARN',
       message:
-        'No bill of lading found. A transport document (B/L or airway bill) is typically required for import transactions.',
-      sourceRefs: [{ field: 'doc_type', value: DocumentType.BILL_OF_LADING }],
+        'No transport document found. A transport document (CMR, B/L, airway bill, etc.) is typically required for import transactions.',
+      sourceRefs: [{ field: 'doc_type', value: DocumentType.TRANSPORT_DOC }],
     }
   },
 }
@@ -65,7 +67,7 @@ export const PRES_004: RuleDefinition = {
   code: 'PRES-004',
   name: 'Certificate of origin required if preferential tariff indicated',
   severity: RuleSeverity.WARNING,
-  appliesToDocTypes: [DocumentType.CERTIFICATE_OF_ORIGIN],
+  appliesToDocTypes: [DocumentType.ORIGIN_DOC],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const snap = ctx.declarationSnapshot
@@ -78,7 +80,9 @@ export const PRES_004: RuleDefinition = {
 
     if (!isPreferential) return null
 
-    const hasCOO = ctx.documents.some((d) => d.docType === DocumentType.CERTIFICATE_OF_ORIGIN)
+    const hasCOO = ctx.documents.some(
+      (d) => d.docType === DocumentType.ORIGIN_DOC || d.docType === DocumentType.CERTIFICATE_OF_ORIGIN,
+    )
     if (hasCOO) {
       return {
         ruleCode: this.code,
@@ -95,7 +99,7 @@ export const PRES_004: RuleDefinition = {
       result: 'WARN',
       message:
         'Preferential tariff appears to be claimed but no certificate of origin was found. Please attach the relevant certificate.',
-      sourceRefs: [{ field: 'doc_type', value: DocumentType.CERTIFICATE_OF_ORIGIN }],
+      sourceRefs: [{ field: 'doc_type', value: DocumentType.ORIGIN_DOC }],
     }
   },
 }

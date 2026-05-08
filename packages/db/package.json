@@ -16,7 +16,8 @@
     "embed-regulations": "tsx src/embed-regulations.ts",
     "studio": "prisma studio",
     "generate": "prisma generate",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "pnpm --workspace-root exec eslint \"$PWD/src\""
   },
   "dependencies": {
     "@gumrukyz/domain": "workspace:*",
