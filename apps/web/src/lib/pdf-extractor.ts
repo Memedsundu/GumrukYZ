@@ -6,6 +6,8 @@
  * - < 0.5 = low confidence → triggers OCR fallback or REVIEW_NEEDED flag
  */
 
+import { isPdfDocument } from './document-file-types'
+
 export interface TextExtractionResult {
   text: string
   confidence: number
@@ -13,20 +15,28 @@ export interface TextExtractionResult {
   method: 'TEXT_PDF' | 'EMPTY'
 }
 
-export async function extractTextFromPdf(fileUrl: string): Promise<TextExtractionResult> {
-  try {
-    // Dynamically import pdfjs-dist to avoid SSR issues
-    const pdfjsLib = await import('pdfjs-dist')
-
-    // Disable worker for Node.js environment
-    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
-
-    const response = await fetch(fileUrl)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch PDF: ${response.status}`)
+export async function extractTextFromPdf(
+  fileUrl: string,
+  filename = '',
+  mimeType?: string | null,
+): Promise<TextExtractionResult> {
+  if (filename && !isPdfDocument(filename, mimeType)) {
+    return {
+      text: '',
+      confidence: 0,
+      pageCount: 0,
+      method: 'EMPTY',
     }
+  }
 
-    const arrayBuffer = await response.arrayBuffer()
+  try {
+    // Dynamically import the legacy build; the default build expects browser worker setup.
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const { pathToFileURL } = await import('url')
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(await resolvePdfWorkerPath()).href
+
+    const arrayBuffer = await readFileArrayBuffer(fileUrl)
     const uint8Array = new Uint8Array(arrayBuffer)
 
     const loadingTask = pdfjsLib.getDocument({
@@ -67,6 +77,42 @@ export async function extractTextFromPdf(fileUrl: string): Promise<TextExtractio
       method: 'EMPTY',
     }
   }
+}
+
+export async function readFileArrayBuffer(fileUrl: string): Promise<ArrayBuffer> {
+  if (fileUrl.startsWith('file://')) {
+    const { readFile } = await import('fs/promises')
+    const buffer = await readFile(new URL(fileUrl))
+    const arrayBuffer = new ArrayBuffer(buffer.byteLength)
+    new Uint8Array(arrayBuffer).set(buffer)
+    return arrayBuffer
+  }
+
+  const response = await fetch(fileUrl)
+  if (response.ok) return response.arrayBuffer()
+
+  const { get } = await import('@vercel/blob')
+  const blob = await get(fileUrl, { access: 'private' })
+  if (!blob || blob.statusCode !== 200 || !blob.stream) {
+    throw new Error(`Failed to fetch PDF: ${response.status}`)
+  }
+
+  return new Response(blob.stream).arrayBuffer()
+}
+
+export const readPdfArrayBuffer = readFileArrayBuffer
+
+async function resolvePdfWorkerPath(): Promise<string> {
+  const { existsSync } = await import('fs')
+  const path = await import('path')
+  const workerPath = path.join('node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs')
+  const candidates = [
+    path.join(process.cwd(), workerPath),
+    path.join(process.cwd(), 'apps', 'web', workerPath),
+  ]
+  const resolved = candidates.find((candidate) => existsSync(candidate))
+  if (!resolved) throw new Error('PDF.js worker file not found')
+  return resolved
 }
 
 function computeConfidence(text: string): number {

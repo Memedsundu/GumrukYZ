@@ -4,6 +4,13 @@ import path from 'path'
 const nextConfig: NextConfig = {
   // Point Next.js to the monorepo root so workers can trace all workspace packages
   outputFileTracingRoot: path.join(__dirname, '../../'),
+  outputFileTracingIncludes: {
+    '/*': [
+      './node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-400-normal.woff',
+      './node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-700-normal.woff',
+      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+    ],
+  },
   transpilePackages: [
     '@gumrukyz/db',
     '@gumrukyz/domain',
@@ -12,10 +19,8 @@ const nextConfig: NextConfig = {
     '@gumrukyz/storage',
     '@gumrukyz/shared',
   ],
-  // Prisma + Neon packages must NOT be bundled — they're loaded from
-  // node_modules at runtime. serverExternalPackages alone isn't enough
-  // when the importer (@gumrukyz/db) is in transpilePackages; we also
-  // add an explicit webpack externals regex.
+  // Keep Prisma + Neon loaded from node_modules at runtime so Vercel can
+  // trace and package their generated/runtime files correctly.
   serverExternalPackages: [
     'prisma',
     '@prisma/client',
@@ -27,18 +32,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  webpack(config, { isServer }) {
-    if (isServer) {
-      // Regex externals prevent bundling even when the importer is in
-      // transpilePackages. The packages are traced + included in the
-      // Lambda via serverExternalPackages above.
-      const prismaRegex = /^(@prisma\/|\.prisma\/|@neondatabase\/)/
-      if (Array.isArray(config.externals)) {
-        config.externals.push(prismaRegex)
-      } else {
-        config.externals = [config.externals, prismaRegex].filter(Boolean)
-      }
-    }
+  webpack(config) {
     // Resolve TypeScript-ESM .js → .ts extension aliases
     config.resolve.extensionAlias = {
       '.js': ['.ts', '.tsx', '.js', '.jsx'],

@@ -3,6 +3,11 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, FileText, CheckCircle, XCircle, Loader2, Play } from 'lucide-react'
+import {
+  isSupportedUploadFile,
+  SUPPORTED_UPLOAD_ACCEPT,
+  SUPPORTED_UPLOAD_LABEL,
+} from '@/lib/document-file-types'
 
 const DOC_TYPES = [
   { value: 'INVOICE', label: 'Fatura (Invoice)', description: 'Ticari fatura veya e-fatura' },
@@ -42,6 +47,7 @@ export default function DocumentUploadClient({ submissionId, tradeFlow, existing
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedType, setSelectedType] = useState<string>('INVOICE')
   const [uploading, setUploading] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [documents, setDocuments] = useState<UploadedDoc[]>(
     existingDocuments.map((d) => ({
@@ -55,14 +61,16 @@ export default function DocumentUploadClient({ submissionId, tradeFlow, existing
   const [processing, setProcessing] = useState(false)
   const [processError, setProcessError] = useState<string | null>(null)
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  async function uploadFile(file: File) {
     setUploading(true)
     setUploadError(null)
 
     try {
+      if (!isSupportedUploadFile(file.name, file.type)) {
+        throw new Error('Desteklenmeyen dosya türü')
+      }
+      if (file.size > 20 * 1024 * 1024) throw new Error('File size must be under 20MB')
+
       const formData = new FormData()
       formData.append('file', file)
       formData.append('docType', selectedType)
@@ -86,6 +94,23 @@ export default function DocumentUploadClient({ submissionId, tradeFlow, existing
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await uploadFile(file)
+  }
+
+  async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragging(false)
+    if (uploading) return
+
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    await uploadFile(file)
   }
 
   async function handleProcess() {
@@ -142,8 +167,28 @@ export default function DocumentUploadClient({ submissionId, tradeFlow, existing
         </div>
 
         <div
-          className="flex cursor-pointer flex-col items-center rounded-lg border-2 border-dashed border-gray-300 px-6 py-8 transition-colors hover:border-blue-400 hover:bg-blue-50"
+          className={`flex cursor-pointer flex-col items-center rounded-lg border-2 border-dashed px-6 py-8 transition-colors ${
+            dragging
+              ? 'border-blue-500 bg-blue-50'
+              : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+          }`}
           onClick={() => !uploading && fileInputRef.current?.click()}
+          onDragEnter={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (!uploading) setDragging(true)
+          }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (!uploading) setDragging(true)
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setDragging(false)
+          }}
+          onDrop={handleDrop}
         >
           {uploading ? (
             <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
@@ -151,13 +196,13 @@ export default function DocumentUploadClient({ submissionId, tradeFlow, existing
             <Upload className="h-8 w-8 text-gray-400" />
           )}
           <p className="mt-2 text-sm font-medium text-gray-600">
-            {uploading ? 'Yükleniyor...' : 'PDF dosyasını buraya sürükleyin veya tıklayın'}
+            {uploading ? 'Yükleniyor...' : 'Belge dosyasını buraya sürükleyin veya tıklayın'}
           </p>
-          <p className="mt-1 text-xs text-gray-400">Sadece PDF dosyaları kabul edilir</p>
+          <p className="mt-1 text-xs text-gray-400">{SUPPORTED_UPLOAD_LABEL}</p>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,application/pdf"
+            accept={SUPPORTED_UPLOAD_ACCEPT}
             className="hidden"
             onChange={handleFileChange}
             disabled={uploading}

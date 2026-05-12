@@ -24,8 +24,16 @@ import { logger } from '@gumrukyz/shared'
 import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
 import type { z } from 'zod'
 import { extractTextFromPdf } from './pdf-extractor'
+import { runOcrFallback } from './ocr-client'
+import { formatRuleResultMessage } from './report-format'
+import {
+  type AzureDocumentIntelligenceResult,
+  isAzureDocumentIntelligenceEnabled,
+  runAzureLayoutExtraction,
+} from './azure-document-intelligence'
 
 const LOW_CONFIDENCE_THRESHOLD = 0.5
+type DocumentReaderMode = 'hybrid' | 'managed' | 'native'
 
 async function updateJobStatus(
   jobId: string,
@@ -90,10 +98,14 @@ export async function processSubmission(
       })
 
       try {
-        // Step 1: Extract raw text from PDF
-        const textResult = await extractTextFromPdf(doc.latestVersion.fileUrl)
-        const rawText = textResult.text
-        const textConfidence = textResult.confidence
+        // Step 1: Extract raw text from native PDF text, then managed layout/OCR fallbacks.
+        const filename = doc.latestVersion.originalFilename
+        const mimeType = doc.latestVersion.mimeType
+        const textResult = await extractTextFromPdf(doc.latestVersion.fileUrl, filename, mimeType)
+        let rawText = textResult.text
+        let extractionConfidence = textResult.confidence
+        let extractionMethod: string = textResult.method
+        let lastReaderProviderRunId: string | null = null
 
         // Step 2: Create extraction record
         const extraction = await prisma.documentExtraction.create({
@@ -101,33 +113,156 @@ export async function processSubmission(
             documentVersionId: doc.latestVersion.id,
             tenantId,
             extractionStatus: 'PENDING',
-            extractionMethod: 'TEXT_PDF',
+            extractionMethod,
             rawText,
-            confidence: textConfidence,
+            confidence: extractionConfidence,
           },
         })
 
-        if (textConfidence < LOW_CONFIDENCE_THRESHOLD) {
-          // Low confidence — flag for review, don't run AI extraction
-          await prisma.documentExtraction.update({
-            where: { id: extraction.id },
-            data: { extractionStatus: 'LOW_CONFIDENCE' },
+        const readerMode = getDocumentReaderMode()
+        if (
+          readerMode !== 'native' &&
+          isAzureDocumentIntelligenceEnabled() &&
+          (readerMode === 'managed' || extractionConfidence < LOW_CONFIDENCE_THRESHOLD)
+        ) {
+          const startedAt = Date.now()
+          const providerRun = await prisma.providerRun.create({
+            data: {
+              tenantId,
+              provider: 'azure_doc_intel',
+              model: process.env.AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID ?? 'prebuilt-layout',
+              operation: `layout_${docType.toLowerCase()}`,
+              status: 'OK',
+            },
           })
-          await prisma.document.update({
-            where: { id: doc.id },
-            data: { status: 'DONE' },
+
+          try {
+            const azureResult = await runAzureLayoutExtraction(
+              doc.latestVersion.fileUrl,
+              filename,
+              mimeType,
+            )
+
+            lastReaderProviderRunId = providerRun.id
+            await prisma.providerRun.update({
+              where: { id: providerRun.id },
+              data: {
+                model: azureResult.modelId,
+                estimatedCostUsd: azureResult.estimatedCostUsd,
+                durationMs: Date.now() - startedAt,
+              },
+            })
+
+            if (shouldUseAzureResult(readerMode, azureResult, rawText, extractionConfidence)) {
+              rawText = azureResult.text
+              extractionConfidence = azureResult.confidence
+              extractionMethod = azureResult.method
+
+              await prisma.documentExtraction.update({
+                where: { id: extraction.id },
+                data: {
+                  extractionMethod,
+                  rawText,
+                  confidence: extractionConfidence,
+                  providerRunId: providerRun.id,
+                },
+              })
+            }
+          } catch (azureErr) {
+            logger.warn('Azure Document Intelligence extraction failed, continuing with local readers', {
+              docType,
+              error: azureErr instanceof Error ? azureErr.message : String(azureErr),
+            })
+            await prisma.providerRun.update({
+              where: { id: providerRun.id },
+              data: {
+                status: 'ERROR',
+                errorMessage: azureErr instanceof Error
+                  ? azureErr.message
+                  : 'Azure Document Intelligence extraction failed',
+                durationMs: Date.now() - startedAt,
+              },
+            })
+          }
+        }
+
+        if (extractionConfidence < LOW_CONFIDENCE_THRESHOLD) {
+          const startedAt = Date.now()
+          const providerRun = await prisma.providerRun.create({
+            data: {
+              tenantId,
+              provider: 'ocr-service',
+              model: 'python-ocr-service',
+              operation: `ocr_${docType.toLowerCase()}`,
+              status: 'OK',
+            },
           })
-          extractionResults.push({
-            docType,
-            data: {},
-            confidence: textConfidence,
-          })
-          continue
+
+          try {
+            const ocrResult = await runOcrFallback(
+              doc.latestVersion.fileUrl,
+              doc.latestVersion.originalFilename,
+              doc.latestVersion.mimeType,
+            )
+
+            rawText = ocrResult.text
+            extractionConfidence = ocrResult.confidence
+            extractionMethod = ocrResult.method
+            lastReaderProviderRunId = providerRun.id
+
+            await prisma.providerRun.update({
+              where: { id: providerRun.id },
+              data: { durationMs: Date.now() - startedAt },
+            })
+
+            await prisma.documentExtraction.update({
+              where: { id: extraction.id },
+              data: {
+                extractionMethod,
+                rawText,
+                confidence: extractionConfidence,
+                providerRunId: providerRun.id,
+              },
+            })
+          } catch (ocrErr) {
+            logger.warn('OCR fallback failed, keeping low-confidence extraction', {
+              docType,
+              error: ocrErr instanceof Error ? ocrErr.message : String(ocrErr),
+            })
+            await prisma.providerRun.update({
+              where: { id: providerRun.id },
+              data: {
+                status: 'ERROR',
+                errorMessage: ocrErr instanceof Error ? ocrErr.message : 'OCR fallback failed',
+                durationMs: Date.now() - startedAt,
+              },
+            })
+          }
+
+          if (extractionConfidence < LOW_CONFIDENCE_THRESHOLD) {
+            await prisma.documentExtraction.update({
+              where: { id: extraction.id },
+              data: {
+                extractionStatus: 'LOW_CONFIDENCE',
+                providerRunId: lastReaderProviderRunId,
+              },
+            })
+            await prisma.document.update({
+              where: { id: doc.id },
+              data: { status: 'DONE' },
+            })
+            extractionResults.push({
+              docType,
+              data: {},
+              confidence: extractionConfidence,
+            })
+            continue
+          }
         }
 
         // Step 3: AI structured extraction (if OpenAI is configured)
         let structuredData: Record<string, unknown> = {}
-        let aiConfidence = textConfidence
+        let aiConfidence = extractionConfidence
 
         if (ai.isEnabled() && rawText.length > 50) {
           const providerRun = await prisma.providerRun.create({
@@ -149,7 +284,12 @@ export async function processSubmission(
                 `${docType.toLowerCase()}_extraction`,
                 docType,
               )
-              structuredData = result as Record<string, unknown>
+              structuredData = enhanceStructuredDataFromText(
+                docType,
+                result as Record<string, unknown>,
+                rawText,
+                submission.tradeFlow as TradeFlow,
+              )
               aiConfidence = 0.85
 
               await prisma.providerRun.update({
@@ -186,7 +326,7 @@ export async function processSubmission(
             })
             await prisma.documentExtraction.update({
               where: { id: extraction.id },
-              data: { extractionStatus: 'DONE', confidence: textConfidence * 0.7 },
+              data: { extractionStatus: 'DONE', confidence: extractionConfidence * 0.7 },
             })
           }
         } else {
@@ -315,7 +455,7 @@ export async function processSubmission(
         ruleCode: 'OCR-001',
         severity: 'WARNING',
         result: 'REVIEW_NEEDED',
-        message: `Document type ${lowDoc.docType} has low extraction confidence (${(lowDoc.confidence * 100).toFixed(0)}%). Manual review recommended.`,
+        message: `${lowDoc.docType} belgesinde veri çıkarma güven skoru düşük (${(lowDoc.confidence * 100).toFixed(0)}%). Manuel inceleme önerilir.`,
         sourceRefsJson: [{ docType: lowDoc.docType, field: 'confidence', value: lowDoc.confidence }] as Prisma.InputJsonValue,
         ruleId: null,
       })
@@ -337,7 +477,11 @@ export async function processSubmission(
       try {
         const findings = resultRows
           .filter((r) => r.result !== 'PASS' && r.result !== 'SKIP')
-          .map((r) => ({ ruleCode: r.ruleCode, severity: r.severity, message: r.message }))
+          .map((r) => ({
+            ruleCode: r.ruleCode,
+            severity: r.severity,
+            message: formatRuleResultMessage(r),
+          }))
 
         const { result } = await ai.generateRiskSummary(findings, submission.tradeFlow)
         summaryText = result.summary
@@ -396,6 +540,91 @@ function getExtractionSchema(docType: DocumentType): z.ZodType<unknown> | null {
   }
 }
 
+function getDocumentReaderMode(): DocumentReaderMode {
+  const configured = process.env.DOCUMENT_READER_MODE?.trim().toLowerCase()
+  if (configured === 'managed' || configured === 'azure') return 'managed'
+  if (configured === 'native' || configured === 'local') return 'native'
+  if (configured === 'hybrid') return 'hybrid'
+  return isAzureDocumentIntelligenceEnabled() ? 'managed' : 'hybrid'
+}
+
+function shouldUseAzureResult(
+  readerMode: DocumentReaderMode,
+  azureResult: AzureDocumentIntelligenceResult,
+  currentText: string,
+  currentConfidence: number,
+): boolean {
+  if (!azureResult.text.trim()) return false
+  if (readerMode === 'managed') return true
+  if (currentConfidence < LOW_CONFIDENCE_THRESHOLD) return true
+
+  const hasMoreUsefulText = azureResult.text.length > currentText.length * 1.2
+  const hasTables = azureResult.tableCount > 0
+  return hasMoreUsefulText || hasTables
+}
+
+function enhanceStructuredDataFromText(
+  docType: DocumentType,
+  data: Record<string, unknown>,
+  rawText: string,
+  tradeFlow: TradeFlow,
+): Record<string, unknown> {
+  const next = { ...data }
+
+  if (docType === 'INVOICE') {
+    const invoiceNumber = firstMatch(rawText, /Invoice Number:\s*([A-Z0-9]+)/i)
+    const invoiceDate = firstMatch(rawText, /Invoice Date:\s*([0-9]{1,2}[-./][0-9]{1,2}[-./][0-9]{4})/i)
+    if (invoiceNumber) next['invoice_number'] = invoiceNumber
+    if (invoiceDate) next['invoice_date'] = invoiceDate
+    if (/FREE OF CHARGE|BEDELS[İI]Z/i.test(rawText)) next['free_of_charge'] = true
+    if (
+      tradeFlow === 'EXPORT' &&
+      !next['country_of_origin'] &&
+      /(?:T[ÜU]RK[İI]YE|TURKEY)\s+TR/i.test(rawText)
+    ) {
+      next['country_of_origin'] = 'TR'
+    }
+  }
+
+  if (docType === 'PACKING_LIST') {
+    const totalLine = rawText.match(/(?:TOPLAM|TOTAL)[\s\S]{0,120}?\b(\d+)\s+([\d.,]+)/i)
+    if (totalLine) {
+      next['package_count'] = parseLocaleNumber(totalLine[1])
+      next['gross_weight'] = parseLocaleNumber(totalLine[2])
+    }
+  }
+
+  if (docType === 'DECLARATION_OUTPUT') {
+    const packageCount = firstMatch(rawText, /\b(\d+)\s*KAP\b/i)
+    const netGross = rawText.match(/Toplam Net\s*\/\s*Br[üu]t Kg:\s*([\d.,]+)\s*\/\s*([\d.,]+)/i)
+    const regimeCode =
+      firstMatch(rawText, /\b(1000|1040|3150|3151|3153|3171|2100)\b/) ??
+      firstMatch(rawText, /^\s*(\d{4})\s+[\d.,]+/m)
+
+    if (packageCount) next['package_count'] = parseLocaleNumber(packageCount)
+    if (netGross) {
+      next['net_weight'] = parseLocaleNumber(netGross[1])
+      next['gross_weight'] = parseLocaleNumber(netGross[2])
+    }
+    if (regimeCode && !/^\d{4}$/.test(String(next['regime_code'] ?? ''))) {
+      next['regime_code'] = regimeCode
+    }
+  }
+
+  return next
+}
+
+function firstMatch(text: string, pattern: RegExp): string | null {
+  const match = text.match(pattern)
+  return match?.[1]?.trim() ?? null
+}
+
+function parseLocaleNumber(value: string): number | null {
+  const normalized = value.replace(/\./g, '').replace(',', '.')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 async function clearGeneratedArtifacts(
   submissionId: string,
   tenantId: string,
@@ -452,6 +681,10 @@ function intOrNull(val: unknown): number | null {
 
 function dateOrNull(val: unknown): Date | null {
   if (val == null) return null
-  const d = new Date(String(val))
+  const value = String(val).trim()
+  const dmy = value.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/)
+  const d = dmy
+    ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
+    : new Date(value)
   return isNaN(d.getTime()) ? null : d
 }

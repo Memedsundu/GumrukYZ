@@ -11,12 +11,22 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+PREVIEW_BRANCH="${VERCEL_PREVIEW_GIT_BRANCH:-}"
+
 add_var() {
   local KEY=$1 VAL=$2
+  if [[ -z "$VAL" ]]; then
+    echo "Skipping $KEY (empty)"
+    return
+  fi
+
   for E in production development; do
     vercel env add "$KEY" "$E" --value "$VAL" --yes --force </dev/null 2>&1 \
       | grep -E "(Saved|Override|Error|Added)" || true
   done
+
+  vercel env add "$KEY" preview "$PREVIEW_BRANCH" --value "$VAL" --yes --force </dev/null 2>&1 \
+    | grep -E "(Saved|Override|Error|Added)" || true
 }
 
 echo "Reading $ENV_FILE…"
@@ -27,7 +37,12 @@ set -a
 source "$ENV_FILE"
 set +a
 
-echo "Pushing to Vercel production + development…"
+echo "Pushing to Vercel production + preview + development…"
+if [[ -n "$PREVIEW_BRANCH" ]]; then
+  echo "Preview variables will target branch: $PREVIEW_BRANCH"
+else
+  echo "Preview variables will target all Preview branches."
+fi
 
 add_var DATABASE_URL                         "${DATABASE_URL:-}"
 add_var DATABASE_URL_UNPOOLED                "${DATABASE_URL_UNPOOLED:-}"
@@ -40,6 +55,15 @@ add_var NEXT_PUBLIC_CLERK_SIGN_UP_URL        "${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-/
 add_var NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL  "${NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL:-/dashboard}"
 add_var NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL  "${NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL:-/dashboard}"
 add_var INTERNAL_TENANT_CLERK_ORG_ID         "${INTERNAL_TENANT_CLERK_ORG_ID:-internal_dev}"
+add_var DOCUMENT_READER_MODE                 "${DOCUMENT_READER_MODE:-managed}"
+add_var AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT "${AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT:-}"
+add_var AZURE_DOCUMENT_INTELLIGENCE_KEY      "${AZURE_DOCUMENT_INTELLIGENCE_KEY:-}"
+add_var AZURE_DOCUMENT_INTELLIGENCE_API_VERSION "${AZURE_DOCUMENT_INTELLIGENCE_API_VERSION:-2024-11-30}"
+add_var AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID "${AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID:-prebuilt-layout}"
+add_var AZURE_DOCUMENT_INTELLIGENCE_FEATURES "${AZURE_DOCUMENT_INTELLIGENCE_FEATURES:-keyValuePairs}"
+add_var AZURE_DOCUMENT_INTELLIGENCE_TIMEOUT_MS "${AZURE_DOCUMENT_INTELLIGENCE_TIMEOUT_MS:-90000}"
+add_var AZURE_DOCUMENT_INTELLIGENCE_POLL_INTERVAL_MS "${AZURE_DOCUMENT_INTELLIGENCE_POLL_INTERVAL_MS:-1000}"
+add_var AZURE_DOCUMENT_INTELLIGENCE_COST_PER_1000_PAGES "${AZURE_DOCUMENT_INTELLIGENCE_COST_PER_1000_PAGES:-10}"
 add_var OCR_SERVICE_SECRET                   "${OCR_SERVICE_SECRET:-change-me}"
 
 echo ""

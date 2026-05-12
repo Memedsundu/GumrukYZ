@@ -22,8 +22,20 @@ app = FastAPI(title="GümrükYZ OCR Service", version="0.1.0")
 
 OCR_SERVICE_SECRET = os.environ.get("OCR_SERVICE_SECRET", "")
 
-# Supported Tesseract languages (Turkish + English)
-TESSERACT_LANG = "tur+eng"
+def get_tesseract_lang() -> str:
+    try:
+        langs = set(pytesseract.get_languages(config=""))
+    except Exception:
+        return "eng"
+
+    if "tur" in langs and "eng" in langs:
+        return "tur+eng"
+    if "tur" in langs:
+        return "tur"
+    return "eng"
+
+
+TESSERACT_LANG = get_tesseract_lang()
 
 
 class OcrResult(BaseModel):
@@ -44,7 +56,7 @@ def verify_secret(x_ocr_secret: Optional[str]) -> None:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "ocr"}
+    return {"status": "ok", "service": "ocr", "language": TESSERACT_LANG}
 
 
 @app.post("/ocr", response_model=OcrResult)

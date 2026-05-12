@@ -1,0 +1,58 @@
+FARHYM OTOMOTİV SAN. TİC. LTD. ŞTİ
+ESENBOĞA YOLU 23.KM
+06750 AKYURT/ ANKARA / TÜRKİYE TR
+Tel: 03123980254 Fax: 03123980258
+Web Sitesi: www.farhym.com
+E-Posta: muhasebe@farhym.com
+Vergi Dairesi: ULUS
+VKN: 4650222259
+MERSISNO: 0465022225900018
+TICARETSICILNO: 245-AKYURT                                e-FATURA
+
+
+                                                                                                   Customization Number: TR1.2
+                                                                                                   Scenario:             IHRACAT
+                                                                                                   Type of Invoice:      ISTISNA
+SAYIN                                                                                              Invoice Number:       FI62026000000063
+MAN BUS SP Z.O.O.
+                                                                                                   Invoice Date:         13-03-2026
+ul. 1 Maja 12 No:01/07/2017
+22222 ul. 1 Maja 12/ ul. 1 Maja 12 / POLONYA PL                                                    Time Prepared:        14:33:00
+E-Posta: merve.bicel@farhym.com;                                                                   Order number:         FREE OF CHARGE
+utku.yalcin@farhym.com;                                                                            Order date:           13-03-2026
+serkan.sencer@farhym.com; manbus-pdf@man.eu                                                        Consignment Note      FIR2026000003097
+PARTYTYPE: EXPORT                                                                                  Number:
+VKN: : 5342082736                                                                                  Consignment Note      13-03-2026
+                                                                                                   Date:
+Delivery Address:
+27-200 Starachowice, ul. 1 Maja 12 Poland No:22222
+22222 Starachowice/ Starachowice / POLONYA PL
+ETTN:D0BB0FA9-A37E-48C7-8CB9-76F0AE710DB9
+
+  Line      Commodity    Customer Code Dealer Order No HS Code                         Type of Incoterm Quantity     Unit Unit Price Currency Total Price of Currency
+Number         Serviced                  Code                                          Delivery                                                  Goods
+          IC KAPAK                            FREE OF
+ 1       KOMPLESI 1485mm 34.77820-6006 308298 CHARGE 870829909000                      Karayolu   DAP            5 Adet       17,66 EUR                 88,30 EUR
+         TUR 22
+Toplam Miktar : 5 EA
+                                                                                                                                 Total Price of Goods        88,30 EUR
+                                                                                                                                             KDV(%0)           0,00 EUR
+                                                                                                                                   Tax Included Price        88,30 EUR
+                                                                                                                                     Payable Amount          88,30 EUR
+                                                                                                                             Total Price of Goods(TL)       4.500,02 TL
+                                                                                                                                   Total Discount(TL)            0,00 TL
+                                                                                                                             Calculated KDV(%0)(TL)              0,00 TL
+                                                                                                                              Tax Included Price(TL)        4.500,02 TL
+                                                                                                                                Payable Amount (TL)         4.500,02 TL
+
+Yalnız#SeksenSekiz%Otuz EUR#
+    Tax Exception Franchise Reason: 11/1-a Mal İhracatı
+    Quotation TRY Currency Rate: 50.9629 Currency Date : 2026-03-13
+    Payment TRY Currency Rate: 50.9629 Currency Date : 2026-03-13
+    Payment Day: 12-04-2026
+    Not: FREE OF CHARGE
+    Not: TÜRKİYE İŞ BANKASI (TL) IBAN( TR79 0006 4000 0014 3950 0337 01 )
+    Not: TÜRKİYE İŞ BANKASI (EURO) IBAN( TR03 0006 4000 0024 3950 0248 79 )
+    Not: İşletme Merkezi=Ankara
+    Not: TL Karşılıkları: Toplam:4,500.02 Kdv Toplamı:0.00 Kdv Dahil Toplam:4,500.02
+

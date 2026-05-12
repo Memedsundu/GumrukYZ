@@ -9,6 +9,29 @@ function withinTolerance(a: number, b: number): boolean {
   return Math.abs(a - b) / base <= TOLERANCE
 }
 
+function normalizedWords(value: unknown): Set<string> {
+  return new Set(
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[İIı]/g, 'i')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .split(/\s+/)
+      .filter((word) => word.length >= 5),
+  )
+}
+
+function hasMeaningfulOverlap(a: unknown, b: unknown): boolean {
+  const left = normalizedWords(a)
+  const right = normalizedWords(b)
+  let overlaps = 0
+  for (const word of left) {
+    if (right.has(word)) overlaps += 1
+  }
+  return overlaps >= 2
+}
+
 export const CROSS_001: RuleDefinition = {
   code: 'CROSS-001',
   name: 'Invoice total value must match declaration total value',
@@ -26,13 +49,16 @@ export const CROSS_001: RuleDefinition = {
     const declAmt = Number(snap.totalValue)
 
     const pass = withinTolerance(invAmt, declAmt)
+    const isFreeOfChargeExport = ctx.tradeFlow === 'EXPORT' && invoice.data['free_of_charge'] === true
 
     return {
       ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'FAIL',
+      severity: pass || !isFreeOfChargeExport ? this.severity : RuleSeverity.WARNING,
+      result: pass ? 'PASS' : isFreeOfChargeExport ? 'WARN' : 'FAIL',
       message: pass
         ? `Invoice value (${invAmt}) matches declaration value (${declAmt}) within tolerance.`
+        : isFreeOfChargeExport
+          ? `Free-of-charge export invoice value (${invAmt}) differs from declaration statistical/customs value (${declAmt}). Manual review recommended instead of hard failure.`
         : `Invoice total value (${invAmt}) differs from declaration total value (${declAmt}) by more than 1%. Fields: invoice.total_amount, declaration.total_value.`,
       sourceRefs: pass
         ? []
@@ -271,10 +297,14 @@ export const CROSS_005: RuleDefinition = {
     if (!invoice.data['seller_name'] || !loading.data['shipper']) return null
 
     const sellerName = String(invoice.data['seller_name']).toLowerCase().trim()
+    const sellerAddress = String(invoice.data['seller_address'] ?? '').toLowerCase().trim()
     const shipperName = String(loading.data['shipper']).toLowerCase().trim()
 
     // Fuzzy match: check if one contains the other (handles abbreviations)
-    const pass = sellerName.includes(shipperName) || shipperName.includes(sellerName)
+    const pass =
+      sellerName.includes(shipperName) ||
+      shipperName.includes(sellerName) ||
+      hasMeaningfulOverlap(sellerAddress, shipperName)
 
     return {
       ruleCode: this.code,

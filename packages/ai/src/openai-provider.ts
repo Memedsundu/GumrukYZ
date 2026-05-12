@@ -132,17 +132,18 @@ ${rawText.slice(0, 6000)}`,
     const { object, usage } = await generateObject({
       model: client(this.model),
       schema: RiskSummarySchema,
-      prompt: `You are a customs compliance assistant. Generate a plain-language risk report summary.
+      prompt: `Sen Türkiye'deki gümrük operasyon ekipleri ve gümrük müşavirleri için çalışan bir uygunluk asistanısın. Risk raporu özetini Türkçe üret.
 
-Trade flow: ${tradeFlow}
-Findings:
+Ticaret akışı: ${tradeFlow}
+Bulgular:
 ${findingsList}
 
-Rules:
-- Write in clear, non-technical language for a customs broker
-- Do not make legal determinations or guarantee customs clearance
-- Explain what each finding means in practice
-- Keep the overall summary to 2-3 sentences`,
+Kurallar:
+- Tüm alanları Türkçe yaz
+- Kısa, açık ve operasyon kullanıcısının anlayacağı bir dil kullan
+- Hukuki hüküm verme ve gümrük işleminin kesin geçeceğini söyleme
+- Bulguların pratikte ne anlama geldiğini açıkla
+- Genel özeti 2-3 cümleyle sınırla`,
     })
 
     return {

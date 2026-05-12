@@ -8,7 +8,7 @@ export class VercelBlobProvider implements StorageProvider {
     contentType: string,
   ): Promise<UploadResult> {
     const blob = await put(filename, data as Blob, {
-      access: 'public',
+      access: 'private',
       contentType,
     })
     return {
@@ -22,8 +22,8 @@ export class VercelBlobProvider implements StorageProvider {
     await del(url)
   }
 
-  // Vercel Blob doesn't require signed URLs for public blobs;
-  // return the URL as-is for now. Replace with private blobs + signed URLs in Phase 4.
+  // Private blobs are only read server-side in the MVP.
+  // Replace this with a signed download route before exposing document downloads.
   async getSignedUrl(url: string, _expiresInSeconds?: number): Promise<string> {
     return url
   }

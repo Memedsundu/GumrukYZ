@@ -5,6 +5,18 @@ function getInvoices(ctx: SubmissionContext) {
   return ctx.documents.filter((d) => d.docType === DocumentType.INVOICE)
 }
 
+function parseDocumentDate(raw: unknown): Date | null {
+  if (!raw) return null
+  const value = String(raw).trim()
+  const dmy = value.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/)
+  if (dmy) {
+    const date = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
+    return isNaN(date.getTime()) ? null : date
+  }
+  const parsed = new Date(value)
+  return isNaN(parsed.getTime()) ? null : parsed
+}
+
 function makeResult(
   code: string,
   severity: RuleSeverity,
@@ -56,10 +68,8 @@ export const INV_002: RuleDefinition = {
     if (invoices.length === 0) return null
 
     const allValid = invoices.every((inv) => {
-      const rawDate = inv.data['invoice_date']
-      if (!rawDate) return false
-      const parsed = new Date(String(rawDate))
-      if (isNaN(parsed.getTime())) return false
+      const parsed = parseDocumentDate(inv.data['invoice_date'])
+      if (!parsed) return false
       return parsed <= new Date()
     })
 

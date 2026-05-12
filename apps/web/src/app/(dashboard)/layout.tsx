@@ -1,4 +1,3 @@
-import { UserButton } from '@clerk/nextjs'
 import { auth } from '@clerk/nextjs/server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -42,7 +41,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </nav>
 
         <div className="flex items-center border-t border-gray-200 px-6 py-4">
-          <UserButton afterSignOutUrl="/sign-in" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
+            GY
+          </div>
           <span className="ml-3 text-sm text-gray-700">Hesabım</span>
         </div>
       </aside>

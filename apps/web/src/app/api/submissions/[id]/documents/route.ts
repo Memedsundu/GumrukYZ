@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@gumrukyz/db'
 import { put } from '@vercel/blob'
 import { createHash } from 'crypto'
+import { inferDocumentContentType, isSupportedUploadFile } from '@/lib/document-file-types'
 
 const ALLOWED_DOC_TYPES = [
   'INVOICE', 'PACKING_LIST', 'LOADING_INSTRUCTION', 'TRANSPORT_DOC',
@@ -36,8 +37,11 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!docType || !ALLOWED_DOC_TYPES.includes(docType)) {
       return NextResponse.json({ error: 'Invalid document type' }, { status: 400 })
     }
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Only PDF files are accepted' }, { status: 400 })
+    if (!isSupportedUploadFile(file.name, file.type)) {
+      return NextResponse.json(
+        { error: 'Unsupported file type. Upload PDF, image, Word, Excel, PowerPoint, or HTML.' },
+        { status: 400 },
+      )
     }
     if (file.size > 20 * 1024 * 1024) {
       return NextResponse.json({ error: 'File size must be under 20MB' }, { status: 400 })
@@ -45,11 +49,12 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const fileBuffer = await file.arrayBuffer()
     const checksum = createHash('sha256').update(Buffer.from(fileBuffer)).digest('hex')
+    const contentType = inferDocumentContentType(file.name, file.type)
 
     const safeFilename = `${user.tenantId}/${submissionId}/${docType}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
     const blob = await put(safeFilename, fileBuffer, {
-      access: 'public',
-      contentType: 'application/pdf',
+      access: 'private',
+      contentType,
     })
 
     // Create Document and DocumentVersion in a transaction
@@ -76,7 +81,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           versionNumber: 1,
           fileUrl: blob.url,
           originalFilename: file.name,
-          mimeType: 'application/pdf',
+          mimeType: contentType,
           fileSizeBytes: file.size,
           checksumSha256: checksum,
           isActive: true,

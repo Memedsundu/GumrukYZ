@@ -3,7 +3,8 @@ import { prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
-import { AlertCircle, CheckCircle, XCircle, Clock, ChevronLeft, Info } from 'lucide-react'
+import { AlertCircle, CheckCircle, XCircle, Clock, ChevronLeft, Info, Download } from 'lucide-react'
+import { formatRuleResultMessage, formatSourceRef, parseSourceRefs, resultLabel } from '@/lib/report-format'
 import OverrideButton from './override-button'
 
 interface Props {
@@ -63,7 +64,23 @@ export default async function ReportPage({ params }: Props) {
               Üretilme: {formatDateTime(report.generatedAt)}
             </p>
           </div>
-          <RiskBadge errors={report.totalErrors} warnings={report.totalWarnings} />
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/api/submissions/${id}/report/download?format=pdf`}
+              className="inline-flex items-center rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              PDF indir
+            </Link>
+            <Link
+              href={`/api/submissions/${id}/report/download?format=json`}
+              className="inline-flex items-center rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              JSON indir
+            </Link>
+            <RiskBadge errors={report.totalErrors} warnings={report.totalWarnings} />
+          </div>
         </div>
       </div>
 
@@ -115,7 +132,7 @@ export default async function ReportPage({ params }: Props) {
       <div className="space-y-3">
         {[...errors, ...warnings, ...reviewNeeded, ...passes].map((result) => {
           const override = result.overrides[0]
-          const sourceRefs = result.sourceRefsJson as Array<{ docType?: string; field?: string; value?: unknown }> | null
+          const sourceRefs = parseSourceRefs(result.sourceRefsJson)
 
           return (
             <div
@@ -133,7 +150,7 @@ export default async function ReportPage({ params }: Props) {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono text-gray-400">{result.ruleCode}</span>
-                      <SeverityBadge severity={result.severity} />
+                      <ResultBadge result={result.result} />
                     </div>
                     <p className={`mt-1 text-sm font-medium ${
                       result.result === 'FAIL' ? 'text-red-900' :
@@ -141,16 +158,14 @@ export default async function ReportPage({ params }: Props) {
                       result.result === 'PASS' ? 'text-green-900' :
                       'text-gray-900'
                     }`}>
-                      {result.message}
+                      {formatRuleResultMessage(result)}
                     </p>
 
-                    {sourceRefs && sourceRefs.length > 0 && result.result !== 'PASS' && (
+                    {sourceRefs.length > 0 && result.result !== 'PASS' && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {sourceRefs.map((ref, i) => (
                           <span key={i} className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                            {ref.docType && <span className="mr-1 font-medium">{ref.docType}</span>}
-                            {ref.field && <span className="text-gray-500">.{ref.field}</span>}
-                            {ref.value !== undefined && <span className="ml-1 text-gray-400">= {String(ref.value)}</span>}
+                            {formatSourceRef(ref)}
                           </span>
                         ))}
                       </div>
@@ -225,15 +240,16 @@ function ResultIcon({ result }: { result: string }) {
   return <CheckCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" />
 }
 
-function SeverityBadge({ severity }: { severity: string }) {
+function ResultBadge({ result }: { result: string }) {
   const map: Record<string, string> = {
-    ERROR: 'bg-red-100 text-red-600',
-    WARNING: 'bg-yellow-100 text-yellow-600',
-    INFO: 'bg-gray-100 text-gray-600',
+    FAIL: 'bg-red-100 text-red-600',
+    WARN: 'bg-yellow-100 text-yellow-700',
+    REVIEW_NEEDED: 'bg-blue-100 text-blue-700',
+    PASS: 'bg-green-100 text-green-700',
   }
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${map[severity] ?? 'bg-gray-100 text-gray-600'}`}>
-      {severity}
+    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${map[result] ?? 'bg-gray-100 text-gray-600'}`}>
+      {resultLabel(result)}
     </span>
   )
 }

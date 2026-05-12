@@ -11,6 +11,10 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
 ```
 
+The service uses Turkish + English OCR when both Tesseract language packs are
+available. If the Turkish pack is missing in a local dev environment, it falls
+back to English instead of failing the OCR request.
+
 ## API
 
 ### `POST /ocr`

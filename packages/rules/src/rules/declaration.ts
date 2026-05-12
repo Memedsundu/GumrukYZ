@@ -20,6 +20,18 @@ function fail(
   }
 }
 
+function parseDocumentDate(raw: unknown): Date | null {
+  if (!raw) return null
+  const value = String(raw).trim()
+  const dmy = value.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/)
+  if (dmy) {
+    const date = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
+    return isNaN(date.getTime()) ? null : date
+  }
+  const parsed = new Date(value)
+  return isNaN(parsed.getTime()) ? null : parsed
+}
+
 /** DECL-001 – Rejim kodu (regime code) must be a 4-digit numeric string. */
 export const DECL_001: RuleDefinition = {
   code: 'DECL-001',
@@ -90,19 +102,20 @@ export const DECL_003: RuleDefinition = {
     const declarations = ctx.documents.filter((d) => d.docType === DocumentType.DECLARATION_OUTPUT)
     if (declarations.length === 0) return null
 
+    const taxField = ctx.tradeFlow === 'EXPORT' ? 'exporter_tax_id' : 'importer_tax_id'
     const missing = declarations.filter(
       (d) =>
-        !d.data['importer_tax_id'] ||
-        String(d.data['importer_tax_id']).trim() === '',
+        !d.data[taxField] ||
+        String(d.data[taxField]).trim() === '',
     )
     if (missing.length === 0) {
-      return pass(this.code, this.severity, 'Importer tax ID is present on the declaration.')
+      return pass(this.code, this.severity, `${taxField} is present on the declaration.`)
     }
     return fail(
       this.code,
       this.severity,
-      'Importer/exporter tax identification number is missing on the declaration. Field: importer_tax_id.',
-      [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'importer_tax_id' }],
+      `Importer/exporter tax identification number is missing on the declaration. Field: ${taxField}.`,
+      [{ docType: DocumentType.DECLARATION_OUTPUT, field: taxField }],
     )
   },
 }
@@ -122,10 +135,8 @@ export const DECL_004: RuleDefinition = {
     if (declarations.length === 0) return null
 
     const futureDecls = declarations.filter((d) => {
-      const rawDate = d.data['declaration_date']
-      if (!rawDate) return false
-      const parsed = new Date(String(rawDate))
-      return !isNaN(parsed.getTime()) && parsed > new Date()
+      const parsed = parseDocumentDate(d.data['declaration_date'])
+      return parsed ? parsed > new Date() : false
     })
 
     if (futureDecls.length === 0) {
