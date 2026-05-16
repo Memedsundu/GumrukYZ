@@ -32,9 +32,10 @@ export async function extractTextFromPdf(
   try {
     // Dynamically import the legacy build; the default build expects browser worker setup.
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
-    const { pathToFileURL } = await import('url')
 
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(await resolvePdfWorkerPath()).href
+    // Disable the web worker — in Node.js/Vercel serverless we use pdfjs's built-in
+    // fake worker (synchronous mode). No worker file on disk is required.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
 
     const arrayBuffer = await readFileArrayBuffer(fileUrl)
     const uint8Array = new Uint8Array(arrayBuffer)
@@ -101,19 +102,6 @@ export async function readFileArrayBuffer(fileUrl: string): Promise<ArrayBuffer>
 }
 
 export const readPdfArrayBuffer = readFileArrayBuffer
-
-async function resolvePdfWorkerPath(): Promise<string> {
-  const { existsSync } = await import('fs')
-  const path = await import('path')
-  const workerPath = path.join('node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs')
-  const candidates = [
-    path.join(process.cwd(), workerPath),
-    path.join(process.cwd(), 'apps', 'web', workerPath),
-  ]
-  const resolved = candidates.find((candidate) => existsSync(candidate))
-  if (!resolved) throw new Error('PDF.js worker file not found')
-  return resolved
-}
 
 function computeConfidence(text: string): number {
   if (!text || text.trim().length === 0) return 0

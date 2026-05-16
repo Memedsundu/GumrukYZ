@@ -2,15 +2,9 @@ import type { NextConfig } from 'next'
 import path from 'path'
 
 const nextConfig: NextConfig = {
-  // Point Next.js to the monorepo root so workers can trace all workspace packages
+  // Point Next.js file-tracing at the monorepo root so workspace packages
+  // and their node_modules are discoverable.
   outputFileTracingRoot: path.join(__dirname, '../../'),
-  outputFileTracingIncludes: {
-    '/*': [
-      './node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-400-normal.woff',
-      './node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-700-normal.woff',
-      './node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
-    ],
-  },
   transpilePackages: [
     '@gumrukyz/db',
     '@gumrukyz/domain',
@@ -19,10 +13,8 @@ const nextConfig: NextConfig = {
     '@gumrukyz/storage',
     '@gumrukyz/shared',
   ],
-  // pdfjs-dist must remain external because its worker is loaded via a separate URL.
-  // All Prisma + Neon packages are pure-JS when using the Neon driver adapter, so
-  // they are bundled by webpack to avoid pnpm symlink issues on Vercel.
-  serverExternalPackages: ['pdfjs-dist'],
+  // All packages are bundled — no pnpm-symlinked externals that could break Vercel.
+  serverExternalPackages: [],
   typescript: {
     ignoreBuildErrors: false,
   },
