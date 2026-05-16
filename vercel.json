@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "installCommand": "cd ../../ && pnpm install --ignore-scripts && pnpm --filter @gumrukyz/db generate && pnpm --filter @gumrukyz/db migrate:deploy",
+  "installCommand": "cd ../../ && pnpm install --ignore-scripts && pnpm --filter @gumrukyz/db generate",
   "buildCommand": "cd ../../ && pnpm --filter @gumrukyz/web build",
   "outputDirectory": ".next"
 }
