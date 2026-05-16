@@ -1,7 +1,11 @@
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
-  binaryTargets   = ["native", "rhel-openssl-3.0.x"]
+  // driverAdapters: tells Prisma to generate a JS-only client that delegates
+  // all query execution to the provided adapter (PrismaNeon). No native binary
+  // engine is loaded — required for correct operation in Vercel serverless when
+  // @prisma/client is bundled by webpack.
+  previewFeatures = ["postgresqlExtensions", "driverAdapters"]
+  // binaryTargets removed: not needed when using a driver adapter.
 }
 
 datasource db {
