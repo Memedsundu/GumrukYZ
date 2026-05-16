@@ -122,6 +122,16 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 8,
   },
+  legalRef: {
+    marginTop: 5,
+    padding: 6,
+    backgroundColor: '#f8fafc',
+    color: '#334155',
+    fontSize: 8,
+  },
+  legalTitle: {
+    fontWeight: 700,
+  },
 })
 
 export async function renderReportPdf(payload: ReportPayload): Promise<Buffer> {
@@ -178,6 +188,17 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
                 <Text style={styles.sourceRef}>
                   Kaynak: {result.sourceRefsDisplay.join(' | ')}
                 </Text>
+              )}
+              {result.legalCitations.length > 0 && result.result !== 'PASS' && (
+                <View style={styles.legalRef}>
+                  <Text style={styles.legalTitle}>Mevzuat dayanağı</Text>
+                  {result.legalCitations.map((citation) => (
+                    <Text key={citation.id}>
+                      {citation.sourceTitle}
+                      {citation.articleLabel ? ` - ${citation.articleLabel}` : ''}: {citation.excerpt}
+                    </Text>
+                  ))}
+                </View>
               )}
               {result.overrides.length > 0 && (
                 <Text style={styles.sourceRef}>

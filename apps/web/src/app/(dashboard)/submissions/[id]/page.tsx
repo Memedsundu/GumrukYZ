@@ -22,6 +22,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
       },
       riskReports: { orderBy: { generatedAt: 'desc' }, take: 1 },
       processingJobs: { orderBy: { updatedAt: 'desc' }, take: 1 },
+      brokerClient: true,
     },
   })
 
@@ -43,7 +44,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{submission.title}</h1>
             <p className="mt-1 text-sm text-gray-500">
-              {submission.tradeFlow === 'IMPORT' ? 'İthalat' : 'İhracat'} •{' '}
+              {tradeFlowLabel(submission.tradeFlow)} •{' '}
               {formatDateTime(submission.createdAt)}
             </p>
           </div>
@@ -103,8 +104,16 @@ export default async function SubmissionDetailPage({ params }: Props) {
                       <p className="text-sm font-medium text-gray-900">{doc.label}</p>
                       <p className="text-xs text-gray-500">
                         {doc.latestVersion?.originalFilename ?? 'No file'} •{' '}
-                        {doc.docType}
+                        {doc.isIgnored ? 'Yoksayıldı' : doc.docType}
                       </p>
+                      {doc.suggestedDocType && !doc.classificationValidatedAt && (
+                        <p className="text-xs text-blue-600">
+                          Öneri: {doc.suggestedDocType}
+                          {doc.suggestedDocTypeConfidence != null
+                            ? ` (%${Math.round(doc.suggestedDocTypeConfidence * 100)})`
+                            : ''}
+                        </p>
+                      )}
                     </div>
                     <DocStatusIcon status={doc.status} />
                   </li>
@@ -164,9 +173,19 @@ export default async function SubmissionDetailPage({ params }: Props) {
               <div className="flex justify-between">
                 <dt className="text-gray-500">Tür</dt>
                 <dd className="font-medium text-gray-900">
-                  {submission.tradeFlow === 'IMPORT' ? 'İthalat' : 'İhracat'}
+                  {tradeFlowLabel(submission.tradeFlow)}
                 </dd>
               </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Sınıflandırma</dt>
+                <dd className="font-medium text-gray-900">{submission.classificationStatus}</dd>
+              </div>
+              {submission.brokerClient && (
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Müşteri</dt>
+                  <dd className="font-medium text-gray-900">{submission.brokerClient.displayName}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-gray-500">Veri Sınıfı</dt>
                 <dd className="font-medium text-gray-900">{submission.dataClassification}</dd>
@@ -191,6 +210,7 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
   const steps = [
     { key: 'UPLOADED', label: 'Belgeler Yüklendi' },
     { key: 'CLASSIFYING', label: 'Belge Türü Belirleniyor' },
+    { key: 'AWAITING_VALIDATION', label: 'Kullanıcı Doğrulaması' },
     { key: 'EXTRACTING', label: 'Veri Çıkarılıyor' },
     { key: 'NORMALIZING', label: 'Normalleştiriliyor' },
     { key: 'RUNNING_RULES', label: 'Kurallar Çalışıyor' },
@@ -199,7 +219,7 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
   ]
 
   const statusOrder = [
-    'PENDING', 'UPLOADED', 'CLASSIFYING', 'EXTRACTING', 'NORMALIZING',
+    'PENDING', 'UPLOADED', 'CLASSIFYING', 'AWAITING_VALIDATION', 'EXTRACTING', 'NORMALIZING',
     'RUNNING_RULES', 'GENERATING_REPORT', 'COMPLETED',
   ]
 
@@ -251,4 +271,10 @@ function DocStatusIcon({ status }: { status: string }) {
   if (status === 'DONE') return <CheckCircle className="h-4 w-4 text-green-500" />
   if (status === 'FAILED') return <XCircle className="h-4 w-4 text-red-500" />
   return <Clock className="h-4 w-4 text-gray-400" />
+}
+
+function tradeFlowLabel(tradeFlow: string) {
+  if (tradeFlow === 'IMPORT') return 'İthalat'
+  if (tradeFlow === 'EXPORT') return 'İhracat'
+  return 'Henüz doğrulanmadı'
 }

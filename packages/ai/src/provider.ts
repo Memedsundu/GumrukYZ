@@ -1,10 +1,23 @@
 import { z } from 'zod'
-import type { DocumentType } from '@gumrukyz/domain'
+import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
 
 export interface DocumentClassificationResult {
   detectedType: DocumentType
   confidence: number
   reasoning: string
+  detectedTradeFlow?: TradeFlow
+  tradeFlowConfidence?: number
+  sourceRefs?: Array<{
+    field: string
+    value: string
+  }>
+  parties?: Array<{
+    role: string
+    name: string | null
+    taxId?: string | null
+    address?: string | null
+    country?: string | null
+  }>
 }
 
 export interface ExtractionResult {
@@ -46,7 +59,10 @@ export interface LlmProvider {
   generateRiskSummary(
     findings: Array<{ ruleCode: string; severity: string; message: string }>,
     tradeFlow: string,
+    regulationContext?: Array<{ title: string; excerpt: string }>,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }>
+
+  embedText?(text: string): Promise<number[]>
 
   isEnabled(): boolean
 }

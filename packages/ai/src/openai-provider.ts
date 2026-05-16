@@ -3,7 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
 import type { LlmProvider, DocumentClassificationResult, ExplanationResult, ProviderRunMetadata } from './provider.js'
 import type { DocumentType } from '@gumrukyz/domain'
-import { DocumentType as DocTypeEnum } from '@gumrukyz/domain'
+import { DocumentType as DocTypeEnum, TradeFlow } from '@gumrukyz/domain'
 import { ProviderError } from '@gumrukyz/shared'
 
 const DocumentClassificationSchema = z.object({
@@ -19,6 +19,23 @@ const DocumentClassificationSchema = z.object({
   ]),
   confidence: z.number().min(0).max(1),
   reasoning: z.string(),
+  detectedTradeFlow: z.enum([TradeFlow.UNKNOWN, TradeFlow.IMPORT, TradeFlow.EXPORT]),
+  tradeFlowConfidence: z.number().min(0).max(1),
+  sourceRefs: z.array(
+    z.object({
+      field: z.string(),
+      value: z.string(),
+    }),
+  ),
+  parties: z.array(
+    z.object({
+      role: z.string(),
+      name: z.string().nullable(),
+      taxId: z.string().nullable(),
+      address: z.string().nullable(),
+      country: z.string().nullable(),
+    }),
+  ),
 })
 
 const RiskSummarySchema = z.object({
@@ -62,12 +79,19 @@ export class OpenAIProvider implements LlmProvider {
 Classify the following document into one of these types:
 INVOICE, PACKING_LIST, LOADING_INSTRUCTION, TRANSPORT_DOC, DECLARATION_OUTPUT, ORIGIN_DOC, PERMIT_DOC, OTHER
 
+Also infer whether the package appears to be IMPORT, EXPORT, or UNKNOWN from directional evidence:
+- export/exporter/ihracatçı, loading from Turkey, Turkish seller to foreign buyer => EXPORT
+- import/importer/ithalatçı, foreign seller to Turkish buyer, arrival into Turkey => IMPORT
+- if evidence is weak, use UNKNOWN.
+
+Extract visible business parties for client matching: importer, exporter, buyer, seller, consignee, shipper. Preserve tax IDs, names, addresses, and countries when visible.
+
 Filename: ${filename}
 
 Document text (first 3000 characters):
 ${rawText.slice(0, 3000)}
 
-Return the detected document type, your confidence (0-1), and brief reasoning.`,
+Return detected document type, document confidence, detected trade flow, trade-flow confidence, sourceRefs used for classification, parties, and brief reasoning.`,
     })
 
     return {
@@ -118,9 +142,20 @@ ${rawText.slice(0, 6000)}`,
     }
   }
 
+  async embedText(text: string): Promise<number[]> {
+    const apiKey = process.env['OPENAI_API_KEY']
+    if (!apiKey) throw new ProviderError('openai', 'OPENAI_API_KEY is not set')
+    const openai = createOpenAI({ apiKey })
+    const { embeddings } = await openai.embedding('text-embedding-3-small').doEmbed({
+      values: [text.slice(0, 8000)],
+    })
+    return Array.from(embeddings[0]!)
+  }
+
   async generateRiskSummary(
     findings: Array<{ ruleCode: string; severity: string; message: string }>,
     tradeFlow: string,
+    regulationContext?: Array<{ title: string; excerpt: string }>,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }> {
     const client = this.getClient()
     const start = Date.now()
@@ -129,6 +164,10 @@ ${rawText.slice(0, 6000)}`,
       .map((f) => `[${f.severity}] ${f.ruleCode}: ${f.message}`)
       .join('\n')
 
+    const regulationSection = regulationContext && regulationContext.length > 0
+      ? `\nİlgili mevzuat bağlamı:\n${regulationContext.map((r) => `• ${r.title}: "${r.excerpt}"`).join('\n')}`
+      : ''
+
     const { object, usage } = await generateObject({
       model: client(this.model),
       schema: RiskSummarySchema,
@@ -136,13 +175,14 @@ ${rawText.slice(0, 6000)}`,
 
 Ticaret akışı: ${tradeFlow}
 Bulgular:
-${findingsList}
+${findingsList}${regulationSection}
 
 Kurallar:
 - Tüm alanları Türkçe yaz
 - Kısa, açık ve operasyon kullanıcısının anlayacağı bir dil kullan
 - Hukuki hüküm verme ve gümrük işleminin kesin geçeceğini söyleme
 - Bulguların pratikte ne anlama geldiğini açıkla
+- Mevzuat bağlamı verilmişse ilgili maddelere Türkçe atıf yap; kaynak uydurmama
 - Genel özeti 2-3 cümleyle sınırla`,
     })
 

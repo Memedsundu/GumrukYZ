@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     completed: submissions.filter((s) => s.status === 'COMPLETED').length,
     failed: submissions.filter((s) => s.status === 'FAILED').length,
     pending: submissions.filter((s) =>
-      ['PENDING', 'UPLOADED', 'CLASSIFYING', 'EXTRACTING', 'NORMALIZING', 'RUNNING_RULES', 'GENERATING_REPORT'].includes(s.status),
+      ['PENDING', 'UPLOADED', 'CLASSIFYING', 'AWAITING_VALIDATION', 'EXTRACTING', 'NORMALIZING', 'RUNNING_RULES', 'GENERATING_REPORT'].includes(s.status),
     ).length,
   }
 
@@ -138,8 +138,14 @@ export default async function DashboardPage() {
                       </Link>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${sub.tradeFlow === 'IMPORT' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
-                        {sub.tradeFlow === 'IMPORT' ? 'İthalat' : 'İhracat'}
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        sub.tradeFlow === 'IMPORT'
+                          ? 'bg-purple-100 text-purple-700'
+                          : sub.tradeFlow === 'EXPORT'
+                            ? 'bg-orange-100 text-orange-700'
+                            : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {sub.tradeFlow === 'IMPORT' ? 'İthalat' : sub.tradeFlow === 'EXPORT' ? 'İhracat' : 'Doğrulanmadı'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
@@ -184,6 +190,7 @@ function StatusBadge({ status }: { status: string }) {
     PENDING: { label: 'Bekliyor', className: 'bg-gray-100 text-gray-600' },
     UPLOADED: { label: 'Yüklendi', className: 'bg-blue-100 text-blue-600' },
     CLASSIFYING: { label: 'Sınıflandırılıyor', className: 'bg-blue-100 text-blue-600' },
+    AWAITING_VALIDATION: { label: 'Doğrulama Bekliyor', className: 'bg-slate-100 text-slate-700' },
     EXTRACTING: { label: 'Çıkarılıyor', className: 'bg-blue-100 text-blue-600' },
     NORMALIZING: { label: 'Normalleştiriliyor', className: 'bg-blue-100 text-blue-600' },
     RUNNING_RULES: { label: 'Kural Çalışıyor', className: 'bg-yellow-100 text-yellow-600' },

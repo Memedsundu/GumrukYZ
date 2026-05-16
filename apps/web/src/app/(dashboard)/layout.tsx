@@ -1,7 +1,16 @@
 import { auth } from '@clerk/nextjs/server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { FileText, LayoutDashboard, Settings, ShieldCheck } from 'lucide-react'
+import {
+  LayoutDashboard,
+  FileText,
+  Settings,
+  ShieldCheck,
+  Globe,
+  Users,
+  Activity,
+  ScrollText,
+} from 'lucide-react'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth()
@@ -16,7 +25,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <span className="text-lg font-bold text-gray-900">GümrükYZ</span>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-4">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           <Link
             href="/dashboard"
             className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
@@ -31,13 +40,48 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <FileText className="mr-3 h-4 w-4" />
             Yeni Dosya
           </Link>
-          <Link
-            href="/admin/rules"
-            className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-          >
-            <Settings className="mr-3 h-4 w-4" />
-            Kural Yönetimi
-          </Link>
+
+          {/* Admin section */}
+          <div className="pt-3">
+            <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Yönetim
+            </p>
+            <Link
+              href="/admin/rules"
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+            >
+              <Settings className="mr-3 h-4 w-4" />
+              Kural Yönetimi
+            </Link>
+            <Link
+              href="/admin/sources"
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+            >
+              <Globe className="mr-3 h-4 w-4" />
+              Mevzuat Kaynakları
+            </Link>
+            <Link
+              href="/admin/clients"
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+            >
+              <Users className="mr-3 h-4 w-4" />
+              Müşteri Kaydı
+            </Link>
+            <Link
+              href="/admin/observability"
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+            >
+              <Activity className="mr-3 h-4 w-4" />
+              Sağlayıcı Takibi
+            </Link>
+            <Link
+              href="/admin/audit"
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+            >
+              <ScrollText className="mr-3 h-4 w-4" />
+              Denetim Günlüğü
+            </Link>
+          </div>
         </nav>
 
         <div className="flex items-center border-t border-gray-200 px-6 py-4">

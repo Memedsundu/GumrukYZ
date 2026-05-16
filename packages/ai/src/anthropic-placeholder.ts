@@ -31,6 +31,7 @@ export class AnthropicPlaceholder implements LlmProvider {
   async generateRiskSummary(
     _findings: Array<{ ruleCode: string; severity: string; message: string }>,
     _tradeFlow: string,
+    _regulationContext?: Array<{ title: string; excerpt: string }>,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }> {
     throw new Error('AnthropicPlaceholder: not implemented.')
   }

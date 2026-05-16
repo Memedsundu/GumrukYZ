@@ -7,6 +7,14 @@ interface Params {
   params: Promise<{ id: string }>
 }
 
+/**
+ * True when Trigger.dev is configured — triggers durable background job.
+ * False (MVP/local) — runs synchronously inside the request.
+ */
+function isTriggerEnabled(): boolean {
+  return Boolean(process.env['TRIGGER_SECRET_KEY'])
+}
+
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { id: submissionId } = await params
@@ -28,6 +36,24 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     if (submission.documents.length === 0) {
       return NextResponse.json({ error: 'No documents uploaded yet' }, { status: 400 })
+    }
+    if (submission.tradeFlow !== 'IMPORT' && submission.tradeFlow !== 'EXPORT') {
+      return NextResponse.json(
+        { error: 'Import/export direction must be validated before processing' },
+        { status: 409 },
+      )
+    }
+
+    const unvalidatedDocuments = submission.documents.filter(
+      (document) =>
+        !document.isIgnored &&
+        (document.docType === 'UNCLASSIFIED' || !document.classificationValidatedAt),
+    )
+    if (unvalidatedDocuments.length > 0 || submission.classificationStatus !== 'VALIDATED') {
+      return NextResponse.json(
+        { error: 'Document classification must be validated before processing' },
+        { status: 409 },
+      )
     }
 
     const blockedStatuses = ['CLASSIFYING', 'EXTRACTING', 'NORMALIZING', 'RUNNING_RULES', 'GENERATING_REPORT']
@@ -51,8 +77,24 @@ export async function POST(req: NextRequest, { params }: Params) {
       data: { status: 'CLASSIFYING' },
     })
 
-    // MVP stability: run inside the request so work is not abandoned after a 202.
-    // Trigger.dev should replace this once a durable task exists.
+    if (isTriggerEnabled()) {
+      // Durable background execution via Trigger.dev — survives Vercel timeouts.
+      // Dynamic import ensures the SDK is only loaded when TRIGGER_SECRET_KEY is set.
+      const { tasks } = await import('@trigger.dev/sdk/v3')
+      const handle = await tasks.trigger('process-submission', {
+        submissionId,
+        tenantId: user.tenantId,
+        jobId: job.id,
+      })
+
+      return NextResponse.json(
+        { jobId: job.id, triggerRunId: handle.id, async: true },
+        { status: 202 },
+      )
+    }
+
+    // MVP fallback: synchronous in-process execution.
+    // Replace with Trigger.dev once TRIGGER_SECRET_KEY is configured.
     await processSubmission(submissionId, user.tenantId, job.id)
 
     const finalJob = await prisma.processingJob.findUnique({

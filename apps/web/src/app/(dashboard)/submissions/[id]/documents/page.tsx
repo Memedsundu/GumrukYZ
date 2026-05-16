@@ -36,17 +36,26 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">{submission.title}</h1>
         <p className="mt-1 text-sm text-gray-500">
-          {submission.tradeFlow === 'IMPORT' ? 'İthalat' : 'İhracat'} dosyası — belgeleri yükleyin
+          {submission.tradeFlow === 'UNKNOWN'
+            ? 'İşlem yönü otomatik önerilecek'
+            : submission.tradeFlow === 'IMPORT'
+              ? 'İthalat'
+              : 'İhracat'} dosyası - belgeleri yükleyin
         </p>
       </div>
 
       <DocumentUploadClient
         submissionId={submission.id}
         tradeFlow={submission.tradeFlow}
+        classificationStatus={submission.classificationStatus}
         existingDocuments={submission.documents.map((d) => ({
           id: d.id,
           docType: d.docType,
-          label: d.label,
+          suggestedDocType: d.suggestedDocType,
+          suggestedDocTypeConfidence: d.suggestedDocTypeConfidence,
+          classificationReasoning: d.classificationReasoning,
+          classificationValidatedAt: d.classificationValidatedAt?.toISOString() ?? null,
+          isIgnored: d.isIgnored,
           status: d.status,
           filename: d.latestVersion?.originalFilename ?? null,
         }))}

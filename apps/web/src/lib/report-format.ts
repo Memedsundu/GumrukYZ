@@ -13,6 +13,7 @@ export type RuleResultDisplayInput = {
 }
 
 const DOC_TYPE_LABELS: Record<string, string> = {
+  UNCLASSIFIED: 'Sınıflandırılmamış belge',
   INVOICE: 'Fatura',
   PACKING_LIST: 'Çeki listesi',
   LOADING_INSTRUCTION: 'Yükleme talimatı',

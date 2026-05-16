@@ -6,6 +6,7 @@ import { createHash } from 'crypto'
 import { inferDocumentContentType, isSupportedUploadFile } from '@/lib/document-file-types'
 
 const ALLOWED_DOC_TYPES = [
+  'UNCLASSIFIED',
   'INVOICE', 'PACKING_LIST', 'LOADING_INSTRUCTION', 'TRANSPORT_DOC',
   'DECLARATION_OUTPUT', 'ORIGIN_DOC', 'PERMIT_DOC', 'OTHER',
 ]
@@ -30,11 +31,11 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const formData = await req.formData()
     const file = formData.get('file') as File | null
-    const docType = formData.get('docType') as string | null
+    const docType = (formData.get('docType') as string | null) ?? 'UNCLASSIFIED'
     const label = formData.get('label') as string | null
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-    if (!docType || !ALLOWED_DOC_TYPES.includes(docType)) {
+    if (!ALLOWED_DOC_TYPES.includes(docType)) {
       return NextResponse.json({ error: 'Invalid document type' }, { status: 400 })
     }
     if (!isSupportedUploadFile(file.name, file.type)) {
@@ -69,8 +70,10 @@ export async function POST(req: NextRequest, { params }: Params) {
           submissionId,
           tenantId: user.tenantId,
           docType,
-          label: label ?? docType,
+          label: label ?? (docType === 'UNCLASSIFIED' ? 'Sınıflandırılmamış belge' : docType),
           status: 'PENDING',
+          classificationValidatedAt: docType === 'UNCLASSIFIED' ? null : new Date(),
+          classificationValidatedBy: docType === 'UNCLASSIFIED' ? null : user.id,
         },
       })
 
@@ -108,11 +111,16 @@ export async function POST(req: NextRequest, { params }: Params) {
       return [{ ...doc, latestVersionId: version.id, filename: file.name }, existingDocs] as const
     })
 
-    // Update submission status to UPLOADED
-    if (submission.status === 'PENDING') {
+    // Update submission status/classification state after a new upload.
+    if (submission.status === 'PENDING' || docType === 'UNCLASSIFIED') {
       await prisma.submission.update({
         where: { id: submissionId },
-        data: { status: 'UPLOADED' },
+        data: {
+          status: submission.status === 'PENDING' ? 'UPLOADED' : submission.status,
+          classificationStatus: docType === 'UNCLASSIFIED' ? 'PENDING' : submission.classificationStatus,
+          classificationValidatedAt: docType === 'UNCLASSIFIED' ? null : submission.classificationValidatedAt,
+          classificationValidatedBy: docType === 'UNCLASSIFIED' ? null : submission.classificationValidatedBy,
+        },
       })
     }
 

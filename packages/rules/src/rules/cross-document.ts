@@ -144,25 +144,43 @@ export const CROSS_003: RuleDefinition = {
 
 export const CROSS_004: RuleDefinition = {
   code: 'CROSS-004',
-  name: 'Invoice quantity must match declaration quantity',
+  name: 'Invoice total item quantity must match packing list total item quantity',
   severity: RuleSeverity.ERROR,
-  appliesToDocTypes: [DocumentType.INVOICE, DocumentType.DECLARATION_OUTPUT],
+  appliesToDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
-    const snap = ctx.declarationSnapshot
+    const pl = ctx.documents.find((d) => d.docType === DocumentType.PACKING_LIST)
 
-    if (!invoice || !snap) return null
+    if (!invoice || !pl) return null
 
-    // Sum invoice item quantities
-    const items = invoice.data['items'] as Array<{ quantity?: number }> | undefined
-    if (!items || items.length === 0) return null
+    const invoiceItems = invoice.data['items'] as Array<{ quantity?: number | null }> | null | undefined
+    const plItems = pl.data['items'] as Array<{ quantity?: number | null }> | null | undefined
 
-    const invTotalQty = items.reduce((sum, item) => sum + (item.quantity ?? 0), 0)
-    if (invTotalQty === 0) return null
+    if (!invoiceItems || invoiceItems.length === 0) return null
+    if (!plItems || plItems.length === 0) return null
 
-    // Declaration items quantity - skip if not available
-    return null // Cross-document quantity check requires declaration items, implemented in Phase 2
+    const invTotal = invoiceItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+    const plTotal = plItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+
+    if (invTotal === 0 || plTotal === 0) return null
+
+    const pass = withinTolerance(invTotal, plTotal)
+
+    return {
+      ruleCode: this.code,
+      severity: this.severity,
+      result: pass ? 'PASS' : 'FAIL',
+      message: pass
+        ? `Invoice total quantity (${invTotal}) matches packing list total quantity (${plTotal}).`
+        : `Quantity mismatch: invoice totals ${invTotal} units but packing list totals ${plTotal} units. Difference exceeds 1%.`,
+      sourceRefs: pass
+        ? []
+        : [
+            { docType: DocumentType.INVOICE, field: 'items[].quantity', value: invTotal },
+            { docType: DocumentType.PACKING_LIST, field: 'items[].quantity', value: plTotal },
+          ],
+    }
   },
 }
 

@@ -21,7 +21,16 @@ export default async function ReportPage({ params }: Props) {
       riskReports: { orderBy: { generatedAt: 'desc' }, take: 1 },
       ruleResults: {
         orderBy: [{ severity: 'asc' }, { ruleCode: 'asc' }],
-        include: { overrides: { orderBy: { createdAt: 'desc' }, take: 1 } },
+        include: {
+          overrides: { orderBy: { createdAt: 'desc' }, take: 1 },
+          citations: {
+            include: {
+              ruleLegalCitation: {
+                include: { sourceDocument: true },
+              },
+            },
+          },
+        },
       },
     },
   })
@@ -168,6 +177,29 @@ export default async function ReportPage({ params }: Props) {
                             {formatSourceRef(ref)}
                           </span>
                         ))}
+                      </div>
+                    )}
+
+                    {result.citations.length > 0 && result.result !== 'PASS' && (
+                      <div className="mt-3 space-y-2 rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                        <p className="font-medium text-slate-900">Mevzuat dayanağı</p>
+                        {result.citations.map((citation) => {
+                          const legal = citation.ruleLegalCitation
+                          return (
+                            <div key={citation.id}>
+                              <a
+                                href={legal.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-blue-700 hover:text-blue-800"
+                              >
+                                {legal.sourceDocument.title}
+                                {legal.articleLabel ? ` - ${legal.articleLabel}` : ''}
+                              </a>
+                              <p className="mt-0.5 text-slate-600">{legal.excerpt}</p>
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
 

@@ -20,7 +20,16 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       },
       ruleResults: {
         orderBy: [{ severity: 'asc' }, { ruleCode: 'asc' }],
-        include: { overrides: { orderBy: { createdAt: 'desc' } } },
+        include: {
+          overrides: { orderBy: { createdAt: 'desc' } },
+          citations: {
+            include: {
+              ruleLegalCitation: {
+                include: { sourceDocument: true },
+              },
+            },
+          },
+        },
       },
     },
   })
@@ -77,6 +86,19 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
         displayMessage: formatRuleResultMessage(result),
         sourceRefs,
         sourceRefsDisplay: sourceRefs.map(formatSourceRef),
+        legalCitations: result.citations.map((citation) => ({
+          id: citation.ruleLegalCitation.id,
+          sourceTitle: citation.ruleLegalCitation.sourceDocument.title,
+          sourceType: citation.ruleLegalCitation.sourceDocument.sourceType,
+          jurisdiction: citation.ruleLegalCitation.sourceDocument.jurisdiction,
+          articleLabel: citation.ruleLegalCitation.articleLabel,
+          excerpt: citation.ruleLegalCitation.excerpt,
+          url: citation.ruleLegalCitation.url,
+          verifiedAt: citation.ruleLegalCitation.verifiedAt?.toISOString()
+            ?? citation.ruleLegalCitation.sourceDocument.lastVerifiedAt?.toISOString()
+            ?? citation.ruleLegalCitation.sourceDocument.snapshotFetchedAt?.toISOString()
+            ?? null,
+        })),
         createdAt: result.createdAt.toISOString(),
         overrides: result.overrides.map((override) => ({
           id: override.id,

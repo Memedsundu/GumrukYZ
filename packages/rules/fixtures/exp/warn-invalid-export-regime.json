@@ -1,0 +1,25 @@
+{
+  "_description": "EXP-003 WARN: Declaration has import regime code on export flow",
+  "_expectation": { "ruleCode": "EXP-003", "result": "WARN" },
+  "submissionId": "fixture-exp-regime-warn",
+  "tenantId": "fixture-tenant",
+  "tradeFlow": "EXPORT",
+  "documents": [
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.90,
+      "data": {
+        "declaration_number": "24TR000000001",
+        "regime_code": "40",
+        "total_value": 5000,
+        "currency": "USD"
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "regimeCode": "40",
+    "declarationNumber": "24TR000000001",
+    "totalValue": 5000,
+    "currency": "USD"
+  }
+}

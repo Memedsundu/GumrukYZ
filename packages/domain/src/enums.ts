@@ -1,5 +1,6 @@
 // Document types supported by the system
 export const DocumentType = {
+  UNCLASSIFIED: 'UNCLASSIFIED',
   INVOICE: 'INVOICE',
   PACKING_LIST: 'PACKING_LIST',
   LOADING_INSTRUCTION: 'LOADING_INSTRUCTION',
@@ -21,6 +22,7 @@ export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType]
 
 // Trade flow direction
 export const TradeFlow = {
+  UNKNOWN: 'UNKNOWN',
   IMPORT: 'IMPORT',
   EXPORT: 'EXPORT',
 } as const
@@ -32,6 +34,7 @@ export const SubmissionStatus = {
   PENDING: 'PENDING',
   UPLOADED: 'UPLOADED',
   CLASSIFYING: 'CLASSIFYING',
+  AWAITING_VALIDATION: 'AWAITING_VALIDATION',
   EXTRACTING: 'EXTRACTING',
   NORMALIZING: 'NORMALIZING',
   RUNNING_RULES: 'RUNNING_RULES',

@@ -21,4 +21,8 @@ export type {
   ProviderRun,
   ProcessingJob,
   RegulationChunk,
+  BrokerClient,
+  DocumentClassificationSuggestion,
+  RuleLegalCitation,
+  RuleResultCitation,
 } from '@prisma/client'

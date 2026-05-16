@@ -33,6 +33,13 @@ function toVectorLiteral(embedding: number[]): string {
   return `[${embedding.join(',')}]`
 }
 
+function extractArticleLabel(text: string): string | null {
+  const madde = text.match(/\bMadde\s+([0-9]+(?:-[0-9]+)?)/i)
+  if (madde) return `Madde ${madde[1]}`
+  const section = text.match(/\b(Fasıl\s+[0-9]+(?:-[0-9]+)?|GRI-[0-9][a-z]?|Incoterms\s+2020)\b/i)
+  return section?.[1] ?? null
+}
+
 async function main() {
   if (!process.env['OPENAI_API_KEY']) {
     console.error('OPENAI_API_KEY is not set. Please set it before running this script.')
@@ -68,10 +75,11 @@ async function main() {
       // Prisma doesn't support Unsupported type writes, use raw SQL
       await prisma.$executeRaw`
         INSERT INTO regulation_chunks
-          (id, source_document_id, chunk_index, chunk_text, embedding, token_count, model, created_at)
+          (id, source_document_id, chunk_index, chunk_text, article_label, source_url, embedding, token_count, model, verified_at, created_at)
         VALUES
           (gen_random_uuid(), ${sourceDoc.id}, ${i}, ${chunk},
-           ${vector}::vector, ${Math.ceil(chunk.length / 4)}, ${EMBEDDING_MODEL}, now())
+           ${extractArticleLabel(chunk)}, ${entry.sourceDocumentUrl},
+           ${vector}::vector, ${Math.ceil(chunk.length / 4)}, ${EMBEDDING_MODEL}, now(), now())
       `
 
       console.log('✓')

@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 const CreateSubmissionSchema = z.object({
   title: z.string().min(1).max(200),
-  tradeFlow: z.enum(['IMPORT', 'EXPORT']),
+  tradeFlow: z.enum(['UNKNOWN', 'IMPORT', 'EXPORT']).default('UNKNOWN'),
   dataClassification: z.enum(['SYNTHETIC', 'REDACTED', 'REAL']).default('SYNTHETIC'),
 })
 
@@ -43,6 +43,9 @@ export async function POST(req: NextRequest) {
         tradeFlow: parsed.data.tradeFlow,
         dataClassification: parsed.data.dataClassification,
         status: 'PENDING',
+        classificationStatus: parsed.data.tradeFlow === 'UNKNOWN' ? 'PENDING' : 'VALIDATED',
+        classificationValidatedAt: parsed.data.tradeFlow === 'UNKNOWN' ? null : new Date(),
+        classificationValidatedBy: parsed.data.tradeFlow === 'UNKNOWN' ? null : user.id,
       },
     })
 

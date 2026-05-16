@@ -43,6 +43,9 @@ export { COO_001, COO_002, COO_003 } from './rules/certificate-of-origin.js'
 // ── Value / arithmetic rules ──────────────────────────────────────────────────
 export { VAL_001, VAL_002, VAL_003 } from './rules/value.js'
 
+// ── Export-specific rules ─────────────────────────────────────────────────────
+export { EXP_001, EXP_002, EXP_003, EXP_004, EXP_005 } from './rules/export.js'
+
 // ── Compiled registry (all 36 ACTIVE rules) ───────────────────────────────────
 import type { RuleDefinition } from './types.js'
 
@@ -64,6 +67,7 @@ import { DECL_001, DECL_002, DECL_003, DECL_004, DECL_005 } from './rules/declar
 import { BL_001, BL_002, BL_003 } from './rules/bill-of-lading.js'
 import { COO_001, COO_002, COO_003 } from './rules/certificate-of-origin.js'
 import { VAL_001, VAL_002, VAL_003 } from './rules/value.js'
+import { EXP_001, EXP_002, EXP_003, EXP_004, EXP_005 } from './rules/export.js'
 
 export const ALL_RULES: RuleDefinition[] = [
   // Presence (5)
@@ -113,4 +117,10 @@ export const ALL_RULES: RuleDefinition[] = [
   VAL_001,
   VAL_002,
   VAL_003,
+  // Export-specific (5)
+  EXP_001,
+  EXP_002,
+  EXP_003,
+  EXP_004,
+  EXP_005,
 ]

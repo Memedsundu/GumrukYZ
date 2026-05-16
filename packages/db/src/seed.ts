@@ -596,7 +596,127 @@ async function main() {
     console.log('Rule:', rule.ruleCode)
   }
 
+  await seedRuleLegalCitations()
+
   console.log('Seed complete.')
+}
+
+async function seedRuleLegalCitations() {
+  const rules = await prisma.rule.findMany({
+    where: { lifecycleStatus: 'ACTIVE' },
+    select: { id: true, ruleCode: true },
+  })
+  const sources = await prisma.sourceDocument.findMany()
+  const sourceByTitle = new Map(sources.map((source) => [source.title, source]))
+
+  await prisma.ruleLegalCitation.deleteMany({
+    where: { ruleId: { in: rules.map((rule) => rule.id) } },
+  })
+
+  for (const rule of rules) {
+    const spec = citationSpecForRule(rule.ruleCode)
+    if (!spec) continue
+    const source = sourceByTitle.get(spec.sourceTitle)
+    if (!source) {
+      console.warn(`Citation source missing for ${rule.ruleCode}: ${spec.sourceTitle}`)
+      continue
+    }
+    await prisma.ruleLegalCitation.create({
+      data: {
+        ruleId: rule.id,
+        sourceDocumentId: source.id,
+        articleLabel: spec.articleLabel,
+        excerpt: spec.excerpt,
+        url: source.url,
+        verifiedAt: source.lastVerifiedAt ?? new Date(),
+      },
+    })
+    console.log('Citation:', rule.ruleCode, spec.articleLabel)
+  }
+}
+
+function citationSpecForRule(ruleCode: string): {
+  sourceTitle: string
+  articleLabel: string
+  excerpt: string
+} | null {
+  if (ruleCode === 'PRES-003' || ruleCode.startsWith('BL-')) {
+    return {
+      sourceTitle: ruleCode.startsWith('BL-') ? 'FIATA Bill of Lading Model Rules' : 'Gümrük Yönetmeliği',
+      articleLabel: ruleCode.startsWith('BL-') ? 'FIATA FBL zorunlu alanlar' : 'Madde 200',
+      excerpt: ruleCode.startsWith('BL-')
+        ? 'Konşimento ve taşıma belgelerinde gönderici, alıcı, yükleme/boşaltma yeri ve eşya bilgileri kontrol edilmelidir.'
+        : 'Taşıma belgesi, gümrük beyannamesi ekinde tevsik belgesi olarak aranabilir.',
+    }
+  }
+
+  if (ruleCode.startsWith('GTIP-')) {
+    return {
+      sourceTitle: 'Türk Gümrük Tarife Cetveli',
+      articleLabel: 'GTİP / TGTC',
+      excerpt: 'GTİP, Türk Gümrük Tarife Cetvelindeki sekiz haneli tarife pozisyonudur ve eşyanın doğru sınıflandırılması için kullanılır.',
+    }
+  }
+
+  if (ruleCode === 'INV-006' || ruleCode === 'CROSS-003' || ruleCode === 'CROSS-007') {
+    return {
+      sourceTitle: 'ICC Incoterms 2020',
+      articleLabel: 'Incoterms 2020',
+      excerpt: 'Incoterms 2020 teslim şekilleri tarafların teslim, masraf ve risk sorumluluklarını belirler.',
+    }
+  }
+
+  if (ruleCode.startsWith('INV-') || ruleCode.startsWith('VAL-')) {
+    return {
+      sourceTitle: 'Gümrük Yönetmeliği',
+      articleLabel: 'Madde 114',
+      excerpt: 'Faturada satıcı/alıcı, fatura numarası, düzenlenme tarihi, eşyanın tanımı, birim fiyat, toplam tutar, teslim şekli ve para birimi bulunmalıdır.',
+    }
+  }
+
+  if (ruleCode.startsWith('PL-') || ruleCode === 'CROSS-002' || ruleCode === 'CROSS-006' || ruleCode === 'CROSS-008') {
+    return {
+      sourceTitle: 'Gümrük Yönetmeliği',
+      articleLabel: 'Madde 180-183',
+      excerpt: 'Çeki listesinde ağırlık, paket sayısı, kap işareti ve ambalaj türü belirtilmeli; toplam brüt/net ağırlıklar diğer belgelerle tutarlı olmalıdır.',
+    }
+  }
+
+  if (ruleCode.startsWith('COO-') || ruleCode === 'PRES-004') {
+    return {
+      sourceTitle: '4458 Sayılı Gümrük Kanunu',
+      articleLabel: 'Madde 241',
+      excerpt: 'Menşe ispat belgesi olmaksızın tercihli tarife talebinde bulunulamaz; menşe/dolaşım belgeleri fatura ile uyumlu olmalıdır.',
+    }
+  }
+
+  if (ruleCode.startsWith('DECL-')) {
+    return {
+      sourceTitle: ruleCode === 'DECL-005' ? 'Gümrük Yönetmeliği' : '4458 Sayılı Gümrük Kanunu',
+      articleLabel: ruleCode === 'DECL-005' ? 'Madde 305' : 'Madde 14-15',
+      excerpt: ruleCode === 'DECL-005'
+        ? 'Beyanname yetkili gümrük idaresine hitaben düzenlenmeli ve gümrük idaresi bilgisi açıkça yer almalıdır.'
+        : 'Eşyanın gümrük bölgesine girişinde veya çıkışında beyanname verilmesi ve doğru beyan sunulması zorunludur.',
+    }
+  }
+
+  if (ruleCode.startsWith('CROSS-')) {
+    return {
+      sourceTitle: '4458 Sayılı Gümrük Kanunu',
+      articleLabel: 'Madde 63 ve 76-80',
+      excerpt: 'Beyan kabul edildiğinde beyanın doğruluğu, belge bütünlüğü ve eşyanın kıymeti kontrol edilir.',
+    }
+  }
+
+  if (ruleCode.startsWith('PRES-')) {
+    return {
+      sourceTitle: '4458 Sayılı Gümrük Kanunu',
+      articleLabel: 'Madde 60-62',
+      excerpt: 'Gümrük beyannamesine ilişkin fatura, çeki listesi, menşe ve taşıma belgeleri beyanın tevsiki için sunulur.',
+    }
+  }
+
+  return null
 }
 
 main()

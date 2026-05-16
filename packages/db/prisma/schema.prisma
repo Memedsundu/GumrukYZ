@@ -38,6 +38,8 @@ model Tenant {
   providerRuns       ProviderRun[]
   processingJobs     ProcessingJob[]
   candidateRules     CandidateRule[]
+  brokerClients      BrokerClient[]
+  classificationSuggestions DocumentClassificationSuggestion[]
 
   @@map("tenants")
 }
@@ -68,12 +70,20 @@ model Submission {
   title              String
   status             String   @default("PENDING") // SubmissionStatus
   dataClassification String   @default("SYNTHETIC") @map("data_classification") // DataClassification
+  brokerClientId     String?  @map("broker_client_id")
+  classificationStatus String @default("PENDING") @map("classification_status")
+  suggestedTradeFlow String?  @map("suggested_trade_flow")
+  suggestedTradeFlowConfidence Float? @map("suggested_trade_flow_confidence")
+  classificationValidatedAt DateTime? @map("classification_validated_at")
+  classificationValidatedBy String? @map("classification_validated_by")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   tenant              Tenant               @relation(fields: [tenantId], references: [id])
   creator             User                 @relation(fields: [createdBy], references: [id])
+  brokerClient        BrokerClient?        @relation(fields: [brokerClientId], references: [id])
   documents           Document[]
+  classificationSuggestions DocumentClassificationSuggestion[]
   declarationSnaps    DeclarationSnapshot[]
   ruleResults         RuleResult[]
   riskReports         RiskReport[]
@@ -81,7 +91,29 @@ model Submission {
 
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tenantId, classificationStatus])
+  @@index([brokerClientId])
   @@map("submissions")
+}
+
+model BrokerClient {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  displayName        String   @map("display_name")
+  normalizedName     String   @map("normalized_name")
+  taxId              String?  @map("tax_id")
+  address            String?
+  country            String?
+  sourceSubmissionId String?  @map("source_submission_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  submissions Submission[]
+
+  @@unique([tenantId, taxId])
+  @@index([tenantId, normalizedName])
+  @@map("broker_clients")
 }
 
 model Document {
@@ -91,6 +123,13 @@ model Document {
   docType         String   @map("doc_type") // DocumentType
   label           String
   isRequiredGuess Boolean  @default(false) @map("is_required_guess")
+  suggestedDocType String? @map("suggested_doc_type")
+  suggestedDocTypeConfidence Float? @map("suggested_doc_type_confidence")
+  classificationReasoning String? @map("classification_reasoning")
+  classificationSourceRefsJson Json? @map("classification_source_refs_json")
+  classificationValidatedAt DateTime? @map("classification_validated_at")
+  classificationValidatedBy String? @map("classification_validated_by")
+  isIgnored       Boolean  @default(false) @map("is_ignored")
   latestVersionId String?  @map("latest_version_id")
   status          String   @default("PENDING") // DocumentStatus
   createdAt       DateTime @default(now()) @map("created_at")
@@ -99,10 +138,38 @@ model Document {
   submission    Submission        @relation(fields: [submissionId], references: [id])
   versions      DocumentVersion[]
   latestVersion DocumentVersion?  @relation("LatestVersion", fields: [latestVersionId], references: [id])
+  classificationSuggestions DocumentClassificationSuggestion[]
 
   @@index([submissionId])
   @@index([tenantId])
   @@map("documents")
+}
+
+model DocumentClassificationSuggestion {
+  id                         String   @id @default(uuid())
+  submissionId               String   @map("submission_id")
+  documentId                 String   @map("document_id")
+  tenantId                   String   @map("tenant_id")
+  providerRunId              String?  @map("provider_run_id")
+  suggestedDocType           String   @map("suggested_doc_type")
+  docTypeConfidence          Float    @map("doc_type_confidence")
+  suggestedTradeFlow         String?  @map("suggested_trade_flow")
+  tradeFlowConfidence        Float?   @map("trade_flow_confidence")
+  reasoning                  String?
+  sourceRefsJson             Json?    @map("source_refs_json")
+  extractedPartiesJson       Json?    @map("extracted_parties_json")
+  clientMatchJson            Json?    @map("client_match_json")
+  createdAt                  DateTime @default(now()) @map("created_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  submission   Submission   @relation(fields: [submissionId], references: [id])
+  document     Document     @relation(fields: [documentId], references: [id])
+  providerRun  ProviderRun? @relation(fields: [providerRunId], references: [id])
+
+  @@index([submissionId])
+  @@index([documentId])
+  @@index([tenantId])
+  @@map("document_classification_suggestions")
 }
 
 model DocumentVersion {
@@ -214,11 +281,16 @@ model SourceDocument {
   effectiveDate  DateTime? @map("effective_date")
   lastVerifiedAt DateTime? @map("last_verified_at")
   rawExcerpt     String?   @map("raw_excerpt")
+  snapshotBlobUrl String?  @map("snapshot_blob_url")
+  snapshotSha256 String?   @map("snapshot_sha256")
+  snapshotFetchedAt DateTime? @map("snapshot_fetched_at")
+  verificationStatus String @default("SEEDED_EXCERPT") @map("verification_status")
   createdAt      DateTime  @default(now()) @map("created_at")
 
   rules            Rule[]
   candidateRules   CandidateRule[]
   regulationChunks RegulationChunk[]
+  ruleLegalCitations RuleLegalCitation[]
 
   @@map("source_documents")
 }
@@ -265,9 +337,32 @@ model Rule {
 
   sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
   results        RuleResult[]
+  legalCitations RuleLegalCitation[]
 
   @@index([lifecycleStatus])
   @@map("rules")
+}
+
+model RuleLegalCitation {
+  id                 String    @id @default(uuid())
+  ruleId             String    @map("rule_id")
+  sourceDocumentId   String    @map("source_document_id")
+  regulationChunkId  String?   @map("regulation_chunk_id")
+  articleLabel       String?   @map("article_label")
+  excerpt            String
+  url                String
+  verifiedAt         DateTime? @map("verified_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  rule             Rule             @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  sourceDocument   SourceDocument   @relation(fields: [sourceDocumentId], references: [id])
+  regulationChunk  RegulationChunk? @relation(fields: [regulationChunkId], references: [id])
+  resultCitations  RuleResultCitation[]
+
+  @@unique([ruleId, articleLabel, url])
+  @@index([ruleId])
+  @@index([sourceDocumentId])
+  @@map("rule_legal_citations")
 }
 
 model RuleResult {
@@ -286,10 +381,25 @@ model RuleResult {
   submission Submission @relation(fields: [submissionId], references: [id])
   rule       Rule?      @relation(fields: [ruleId], references: [id])
   overrides  OverrideAction[]
+  citations RuleResultCitation[]
 
   @@index([submissionId])
   @@index([tenantId])
   @@map("rule_results")
+}
+
+model RuleResultCitation {
+  id                  String   @id @default(uuid())
+  ruleResultId        String   @map("rule_result_id")
+  ruleLegalCitationId String   @map("rule_legal_citation_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  ruleResult        RuleResult        @relation(fields: [ruleResultId], references: [id], onDelete: Cascade)
+  ruleLegalCitation RuleLegalCitation @relation(fields: [ruleLegalCitationId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleResultId, ruleLegalCitationId])
+  @@index([ruleResultId])
+  @@map("rule_result_citations")
 }
 
 model RiskReport {
@@ -369,6 +479,7 @@ model ProviderRun {
 
   tenant      Tenant               @relation(fields: [tenantId], references: [id])
   extractions DocumentExtraction[]
+  classificationSuggestions DocumentClassificationSuggestion[]
 
   @@index([tenantId])
   @@index([provider, operation])
@@ -406,12 +517,16 @@ model RegulationChunk {
   sourceDocumentId String                        @map("source_document_id")
   chunkIndex       Int                           @map("chunk_index")
   chunkText        String                        @map("chunk_text")
+  articleLabel     String?                       @map("article_label")
+  sourceUrl        String?                       @map("source_url")
   embedding        Unsupported("vector(1536)")?
   tokenCount       Int?                          @map("token_count")
   model            String                        @default("text-embedding-3-small")
+  verifiedAt       DateTime?                     @map("verified_at")
   createdAt        DateTime                      @default(now()) @map("created_at")
 
   sourceDocument SourceDocument @relation(fields: [sourceDocumentId], references: [id])
+  ruleLegalCitations RuleLegalCitation[]
 
   @@index([sourceDocumentId])
   @@map("regulation_chunks")

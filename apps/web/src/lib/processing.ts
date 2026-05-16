@@ -7,7 +7,7 @@
  * Pipeline steps:
  * CLASSIFYING → EXTRACTING → NORMALIZING → RUNNING_RULES → GENERATING_REPORT → COMPLETED
  */
-import { prisma } from '@gumrukyz/db'
+import { prisma, searchRegulations } from '@gumrukyz/db'
 import { Prisma } from '@gumrukyz/db'
 import { RuleEvaluator, ALL_RULES } from '@gumrukyz/rules'
 import type { SubmissionContext, ExtractionData } from '@gumrukyz/rules'
@@ -31,6 +31,11 @@ import {
   isAzureDocumentIntelligenceEnabled,
   runAzureLayoutExtraction,
 } from './azure-document-intelligence'
+import {
+  getOpenAIDocumentReaderMinimumConfidence,
+  runOpenAIDocumentReader,
+  shouldRunOpenAIDocumentReader,
+} from './openai-document-reader'
 
 const LOW_CONFIDENCE_THRESHOLD = 0.5
 type DocumentReaderMode = 'hybrid' | 'managed' | 'native'
@@ -87,7 +92,7 @@ export async function processSubmission(
     await updateJobStatus(jobId, submissionId, 'EXTRACTING', 'EXTRACTING')
 
     for (const doc of submission.documents) {
-      if (!doc.latestVersion) continue
+      if (!doc.latestVersion || doc.isIgnored || doc.docType === 'UNCLASSIFIED') continue
 
       const docType = doc.docType as DocumentType
 
@@ -102,10 +107,15 @@ export async function processSubmission(
         const filename = doc.latestVersion.originalFilename
         const mimeType = doc.latestVersion.mimeType
         const textResult = await extractTextFromPdf(doc.latestVersion.fileUrl, filename, mimeType)
+        const extractionSchema = getExtractionSchema(docType)
         let rawText = textResult.text
         let extractionConfidence = textResult.confidence
         let extractionMethod: string = textResult.method
         let lastReaderProviderRunId: string | null = null
+        let structuredData: Record<string, unknown> = {}
+        let structuredDataAlreadyExtracted = false
+        let openAIDocumentReaderNeedsOcr = false
+        let managedReaderFallbackNeeded = false
 
         // Step 2: Create extraction record
         const extraction = await prisma.documentExtraction.create({
@@ -144,6 +154,10 @@ export async function processSubmission(
             )
 
             lastReaderProviderRunId = providerRun.id
+            managedReaderFallbackNeeded =
+              azureResult.confidence < getOpenAIDocumentReaderMinimumConfidence() ||
+              azureResult.text.trim().length < 50
+
             await prisma.providerRun.update({
               where: { id: providerRun.id },
               data: {
@@ -173,6 +187,7 @@ export async function processSubmission(
               docType,
               error: azureErr instanceof Error ? azureErr.message : String(azureErr),
             })
+            managedReaderFallbackNeeded = true
             await prisma.providerRun.update({
               where: { id: providerRun.id },
               data: {
@@ -186,7 +201,87 @@ export async function processSubmission(
           }
         }
 
-        if (extractionConfidence < LOW_CONFIDENCE_THRESHOLD) {
+        if (
+          extractionSchema &&
+          shouldRunOpenAIDocumentReader(extractionConfidence, rawText, {
+            force: managedReaderFallbackNeeded,
+          })
+        ) {
+          const startedAt = Date.now()
+          const providerRun = await prisma.providerRun.create({
+            data: {
+              tenantId,
+              provider: 'openai',
+              model: process.env.OPENAI_DOCUMENT_READER_MODEL ?? 'gpt-5.4-mini',
+              operation: `document_read_${docType.toLowerCase()}`,
+              status: 'OK',
+            },
+          })
+
+          try {
+            const readerResult = await runOpenAIDocumentReader({
+              fileUrl: doc.latestVersion.fileUrl,
+              filename,
+              mimeType,
+              docType,
+              tradeFlow: submission.tradeFlow as TradeFlow,
+            })
+
+            rawText = readerResult.extractedText || rawText
+            extractionConfidence = readerResult.confidence
+            extractionMethod = readerResult.method
+            lastReaderProviderRunId = providerRun.id
+            openAIDocumentReaderNeedsOcr =
+              readerResult.confidence < getOpenAIDocumentReaderMinimumConfidence()
+
+            structuredData = enhanceStructuredDataFromText(
+              docType,
+              readerResult.structuredData,
+              rawText,
+              submission.tradeFlow as TradeFlow,
+            )
+            structuredDataAlreadyExtracted = !openAIDocumentReaderNeedsOcr
+
+            await prisma.providerRun.update({
+              where: { id: providerRun.id },
+              data: {
+                model: readerResult.model,
+                inputTokens: readerResult.inputTokens,
+                outputTokens: readerResult.outputTokens,
+                estimatedCostUsd: readerResult.estimatedCostUsd,
+                durationMs: Date.now() - startedAt,
+              },
+            })
+
+            await prisma.documentExtraction.update({
+              where: { id: extraction.id },
+              data: {
+                extractionMethod,
+                rawText,
+                structuredJson: structuredData as Prisma.InputJsonValue,
+                confidence: extractionConfidence,
+                providerRunId: providerRun.id,
+              },
+            })
+          } catch (openAIErr) {
+            logger.warn('OpenAI document reader failed, continuing with OCR fallback', {
+              docType,
+              error: openAIErr instanceof Error ? openAIErr.message : String(openAIErr),
+            })
+            await prisma.providerRun.update({
+              where: { id: providerRun.id },
+              data: {
+                status: 'ERROR',
+                errorMessage: openAIErr instanceof Error
+                  ? openAIErr.message
+                  : 'OpenAI document reader failed',
+                durationMs: Date.now() - startedAt,
+              },
+            })
+          }
+        }
+
+        if (extractionConfidence < LOW_CONFIDENCE_THRESHOLD || openAIDocumentReaderNeedsOcr) {
           const startedAt = Date.now()
           const providerRun = await prisma.providerRun.create({
             data: {
@@ -261,10 +356,18 @@ export async function processSubmission(
         }
 
         // Step 3: AI structured extraction (if OpenAI is configured)
-        let structuredData: Record<string, unknown> = {}
         let aiConfidence = extractionConfidence
 
-        if (ai.isEnabled() && rawText.length > 50) {
+        if (structuredDataAlreadyExtracted) {
+          await prisma.documentExtraction.update({
+            where: { id: extraction.id },
+            data: {
+              extractionStatus: 'DONE',
+              structuredJson: structuredData as Prisma.InputJsonValue,
+              confidence: aiConfidence,
+            },
+          })
+        } else if (extractionSchema && ai.isEnabled() && rawText.length > 50) {
           const providerRun = await prisma.providerRun.create({
             data: {
               tenantId,
@@ -276,42 +379,39 @@ export async function processSubmission(
           })
 
           try {
-            const schema = getExtractionSchema(docType)
-            if (schema) {
-              const { result, meta } = await ai.extractStructured(
-                rawText,
-                schema,
-                `${docType.toLowerCase()}_extraction`,
-                docType,
-              )
-              structuredData = enhanceStructuredDataFromText(
-                docType,
-                result as Record<string, unknown>,
-                rawText,
-                submission.tradeFlow as TradeFlow,
-              )
-              aiConfidence = 0.85
+            const { result, meta } = await ai.extractStructured(
+              rawText,
+              extractionSchema,
+              `${docType.toLowerCase()}_extraction`,
+              docType,
+            )
+            structuredData = enhanceStructuredDataFromText(
+              docType,
+              result as Record<string, unknown>,
+              rawText,
+              submission.tradeFlow as TradeFlow,
+            )
+            aiConfidence = 0.85
 
-              await prisma.providerRun.update({
-                where: { id: providerRun.id },
-                data: {
-                  inputTokens: meta.inputTokens,
-                  outputTokens: meta.outputTokens,
-                  estimatedCostUsd: meta.estimatedCostUsd,
-                  durationMs: meta.durationMs,
-                },
-              })
+            await prisma.providerRun.update({
+              where: { id: providerRun.id },
+              data: {
+                inputTokens: meta.inputTokens,
+                outputTokens: meta.outputTokens,
+                estimatedCostUsd: meta.estimatedCostUsd,
+                durationMs: meta.durationMs,
+              },
+            })
 
-              await prisma.documentExtraction.update({
-                where: { id: extraction.id },
-                data: {
-                  extractionStatus: 'DONE',
-                  structuredJson: structuredData as Prisma.InputJsonValue,
-                  confidence: aiConfidence,
-                  providerRunId: providerRun.id,
-                },
-              })
-            }
+            await prisma.documentExtraction.update({
+              where: { id: extraction.id },
+              data: {
+                extractionStatus: 'DONE',
+                structuredJson: structuredData as Prisma.InputJsonValue,
+                confidence: aiConfidence,
+                providerRunId: providerRun.id,
+              },
+            })
           } catch (aiErr) {
             logger.warn('AI extraction failed, using text-only', {
               docType,
@@ -432,9 +532,30 @@ export async function processSubmission(
     // Fetch active rules for ID lookup
     const activeRules = await prisma.rule.findMany({
       where: { lifecycleStatus: 'ACTIVE' },
-      select: { id: true, ruleCode: true },
+      select: {
+        id: true,
+        ruleCode: true,
+        legalCitations: {
+          select: {
+            id: true,
+            articleLabel: true,
+            sourceDocument: { select: { title: true } },
+          },
+        },
+      },
     })
     const ruleIdMap = new Map(activeRules.map((r) => [r.ruleCode, r.id]))
+    const ruleCitationIdsMap = new Map(
+      activeRules.map((r) => [r.ruleCode, r.legalCitations.map((citation) => citation.id)]),
+    )
+    const ruleCitationLabelsMap = new Map(
+      activeRules.map((r) => [
+        r.ruleCode,
+        r.legalCitations
+          .map((citation) => `${citation.sourceDocument.title}${citation.articleLabel ? ` ${citation.articleLabel}` : ''}`)
+          .join('; '),
+      ]),
+    )
 
     const resultRows = ruleResults.map((r) => ({
       submissionId,
@@ -462,7 +583,21 @@ export async function processSubmission(
     }
 
     if (resultRows.length > 0) {
-      await prisma.ruleResult.createMany({ data: resultRows })
+      await prisma.$transaction(async (tx) => {
+        for (const row of resultRows) {
+          const created = await tx.ruleResult.create({ data: row })
+          const citationIds = ruleCitationIdsMap.get(row.ruleCode) ?? []
+          if (citationIds.length > 0) {
+            await tx.ruleResultCitation.createMany({
+              data: citationIds.map((citationId) => ({
+                ruleResultId: created.id,
+                ruleLegalCitationId: citationId,
+              })),
+              skipDuplicates: true,
+            })
+          }
+        }
+      })
     }
 
     // ─── GENERATING_REPORT ─────────────────────────────────────────────────────
@@ -480,10 +615,35 @@ export async function processSubmission(
           .map((r) => ({
             ruleCode: r.ruleCode,
             severity: r.severity,
-            message: formatRuleResultMessage(r),
+            message: [
+              formatRuleResultMessage(r),
+              ruleCitationLabelsMap.get(r.ruleCode)
+                ? `Mevzuat kaynağı: ${ruleCitationLabelsMap.get(r.ruleCode)}`
+                : null,
+            ].filter(Boolean).join(' '),
           }))
 
-        const { result } = await ai.generateRiskSummary(findings, submission.tradeFlow)
+        // RAG: retrieve relevant regulation chunks to enrich the AI summary
+        let regulationContext: Array<{ title: string; excerpt: string }> | undefined
+        if (ai.embedText && findings.length > 0) {
+          try {
+            const queryText = findings.map((f) => f.message).join(' ').slice(0, 4000)
+            const embedding = await ai.embedText(queryText)
+            const chunks = await searchRegulations(prisma, embedding, 3, 0.55)
+            if (chunks.length > 0) {
+              regulationContext = chunks.map((c) => ({
+                title: c.sourceDocumentTitle,
+                excerpt: c.chunkText.slice(0, 300),
+              }))
+            }
+          } catch (ragErr) {
+            logger.warn('RAG regulation search failed, proceeding without context', {
+              error: ragErr instanceof Error ? ragErr.message : String(ragErr),
+            })
+          }
+        }
+
+        const { result } = await ai.generateRiskSummary(findings, submission.tradeFlow, regulationContext)
         summaryText = result.summary
       } catch (err) {
         logger.warn('Risk summary generation failed', {
