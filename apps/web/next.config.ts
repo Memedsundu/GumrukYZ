@@ -19,16 +19,10 @@ const nextConfig: NextConfig = {
     '@gumrukyz/storage',
     '@gumrukyz/shared',
   ],
-  // Keep Prisma + Neon loaded from node_modules at runtime so Vercel can
-  // trace and package their generated/runtime files correctly.
-  serverExternalPackages: [
-    'prisma',
-    '@prisma/client',
-    '@prisma/adapter-neon',
-    '@neondatabase/serverless',
-    '.prisma/client',
-    'pdfjs-dist',
-  ],
+  // pdfjs-dist must remain external because its worker is loaded via a separate URL.
+  // All Prisma + Neon packages are pure-JS when using the Neon driver adapter, so
+  // they are bundled by webpack to avoid pnpm symlink issues on Vercel.
+  serverExternalPackages: ['pdfjs-dist'],
   typescript: {
     ignoreBuildErrors: false,
   },
