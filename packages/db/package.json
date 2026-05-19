@@ -13,6 +13,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "push": "prisma db push",
     "seed": "tsx src/seed.ts",
+    "bootstrap-regulations": "tsx src/bootstrap-regulations.ts",
     "ingest-regulations": "tsx src/ingest-regulations.ts",
     "embed-regulations": "tsx src/embed-regulations.ts",
     "studio": "prisma studio",

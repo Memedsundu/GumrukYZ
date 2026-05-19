@@ -1,3 +1,16 @@
-# The OCR service is deployed separately on Railway.
-# Exclude it so Vercel doesn't try to build it as a Python service.
+# OCR service deploys separately on Railway
 apps/ocr-service
+
+# Dependencies and build artifacts (Vercel installs fresh)
+node_modules
+.git
+**/.next
+**/.turbo
+
+# Not needed for web build
+fixtures
+.cursor
+agent-transcripts
+terminals
+evaluation_report*.md
+outline_*.md

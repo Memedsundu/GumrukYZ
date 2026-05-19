@@ -32,13 +32,13 @@ export default function OverrideButton({ ruleResultId }: Props) {
 
       if (!res.ok) {
         const data = await res.json() as { error?: string }
-        throw new Error(data.error ?? 'Override failed')
+        throw new Error(data.error ?? 'Geçersiz kılma kaydedilemedi')
       }
 
       setOpen(false)
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Override failed')
+      setError(err instanceof Error ? err.message : 'Geçersiz kılma kaydedilemedi')
     } finally {
       setLoading(false)
     }

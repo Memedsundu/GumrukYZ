@@ -10,14 +10,13 @@
  *   - OPENAI_API_KEY (environment variable or .env.local)
  */
 import OpenAI from 'openai'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from './client.js'
 import { REGULATION_CORPUS } from './regulation-corpus.js'
 
 const EMBEDDING_MODEL = 'text-embedding-3-small'
 const DIMENSIONS = 1536
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] })
-const prisma = new PrismaClient()
 
 async function embedText(text: string): Promise<number[]> {
   const res = await openai.embeddings.create({

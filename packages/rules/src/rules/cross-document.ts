@@ -32,9 +32,49 @@ function hasMeaningfulOverlap(a: unknown, b: unknown): boolean {
   return overlaps >= 2
 }
 
+function normalizeTokenText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[İIı]/g, 'i')
+    .toLowerCase()
+}
+
+function containsTurkey(value: unknown): boolean {
+  return /\b(turkiye|turkey|tr|istanbul|ankara|izmir|bursa|kocaeli|gebze)\b/.test(normalizeTokenText(value))
+}
+
+function containsForeignCountry(value: unknown): boolean {
+  return /\b(polonya|poland|germany|almanya|france|fransa|italy|italya|romania|romanya|bulgaria|bulgaristan|netherlands|hollanda|spain|ispanya)\b/.test(normalizeTokenText(value))
+}
+
+function normalizeUnit(value: unknown): string {
+  return normalizeTokenText(value).replace(/[^a-z0-9]+/g, '')
+}
+
+function isPackageUnit(value: unknown): boolean {
+  return /^(package|packages|pkg|koli|koliler|carton|ctn|pallet|palet|kap|case|box)$/.test(normalizeUnit(value))
+}
+
+function isPieceUnit(value: unknown): boolean {
+  return /^(pcs|pc|piece|pieces|adet|unit|units|ea)$/.test(normalizeUnit(value))
+}
+
+function hasAmbiguousQuantityUnits(
+  invoiceItems: Array<{ unit?: unknown }>,
+  packingList: Record<string, unknown>,
+): boolean {
+  const invoiceUnits = invoiceItems.map((item) => item.unit).filter(Boolean)
+  const packingUnit = packingList['package_type']
+  if (invoiceUnits.length === 0 && !packingUnit) return true
+  const invoiceLooksPieceBased = invoiceUnits.some(isPieceUnit)
+  const packingLooksPackageBased = isPackageUnit(packingUnit)
+  return invoiceLooksPieceBased && packingLooksPackageBased
+}
+
 export const CROSS_001: RuleDefinition = {
   code: 'CROSS-001',
-  name: 'Invoice total value must match declaration total value',
+  name: 'Fatura toplam tutarı beyanname toplam tutarıyla eşleşmeli',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE, DocumentType.DECLARATION_OUTPUT],
 
@@ -56,10 +96,10 @@ export const CROSS_001: RuleDefinition = {
       severity: pass || !isFreeOfChargeExport ? this.severity : RuleSeverity.WARNING,
       result: pass ? 'PASS' : isFreeOfChargeExport ? 'WARN' : 'FAIL',
       message: pass
-        ? `Invoice value (${invAmt}) matches declaration value (${declAmt}) within tolerance.`
+        ? `Fatura tutarı (${invAmt}) beyanname tutarıyla (${declAmt}) tolerans dahilinde eşleşiyor.`
         : isFreeOfChargeExport
-          ? `Free-of-charge export invoice value (${invAmt}) differs from declaration statistical/customs value (${declAmt}). Manual review recommended instead of hard failure.`
-        : `Invoice total value (${invAmt}) differs from declaration total value (${declAmt}) by more than 1%. Fields: invoice.total_amount, declaration.total_value.`,
+          ? `Bedelsiz ihracat faturası (${invAmt}) beyanname istatistiki/gümrük kıymetinden (${declAmt}) farklı. Manuel inceleme önerilir.`
+        : `Fatura toplam tutarı (${invAmt}) beyanname toplam tutarıyla (${declAmt}) ±%1'den fazla farklı. Alanlar: invoice.total_amount, declaration.total_value.`,
       sourceRefs: pass
         ? []
         : [
@@ -72,7 +112,7 @@ export const CROSS_001: RuleDefinition = {
 
 export const CROSS_002: RuleDefinition = {
   code: 'CROSS-002',
-  name: 'Packing list gross weight must match declaration gross weight',
+  name: 'Çeki listesi brüt ağırlığı beyanname brüt ağırlığıyla eşleşmeli',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.PACKING_LIST, DocumentType.DECLARATION_OUTPUT],
 
@@ -93,8 +133,8 @@ export const CROSS_002: RuleDefinition = {
       severity: this.severity,
       result: pass ? 'PASS' : 'FAIL',
       message: pass
-        ? `Packing list gross weight (${plWeight} kg) matches declaration gross weight (${declWeight} kg).`
-        : `Packing list gross weight (${plWeight} kg) differs from declaration gross weight (${declWeight} kg) by more than 1%.`,
+        ? `Çeki listesi brüt ağırlığı (${plWeight} kg) beyanname brüt ağırlığıyla (${declWeight} kg) eşleşiyor.`
+        : `Çeki listesi brüt ağırlığı (${plWeight} kg) beyanname brüt ağırlığından (${declWeight} kg) ±%1'den fazla farklı.`,
       sourceRefs: pass
         ? []
         : [
@@ -107,7 +147,7 @@ export const CROSS_002: RuleDefinition = {
 
 export const CROSS_003: RuleDefinition = {
   code: 'CROSS-003',
-  name: 'Invoice incoterm must match loading instruction delivery term',
+  name: 'Fatura Incoterm değeri yükleme talimatıyla eşleşmeli',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.INVOICE, DocumentType.LOADING_INSTRUCTION],
 
@@ -130,8 +170,8 @@ export const CROSS_003: RuleDefinition = {
       severity: this.severity,
       result: pass ? 'PASS' : 'WARN',
       message: pass
-        ? `Incoterm matches between invoice (${invInco}) and loading instruction (${loadInco}).`
-        : `Incoterm mismatch: invoice says "${invInco}" but loading instruction says "${loadInco}".`,
+        ? `Incoterm fatura (${invInco}) ile yükleme talimatı (${loadInco}) arasında eşleşiyor.`
+        : `Incoterm uyuşmazlığı: fatura "${invInco}" ↔ yükleme talimatı "${loadInco}".`,
       sourceRefs: pass
         ? []
         : [
@@ -144,7 +184,7 @@ export const CROSS_003: RuleDefinition = {
 
 export const CROSS_004: RuleDefinition = {
   code: 'CROSS-004',
-  name: 'Invoice total item quantity must match packing list total item quantity',
+  name: 'Fatura toplam miktarı çeki listesi toplam miktarıyla eşleşmeli',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST],
 
@@ -154,7 +194,7 @@ export const CROSS_004: RuleDefinition = {
 
     if (!invoice || !pl) return null
 
-    const invoiceItems = invoice.data['items'] as Array<{ quantity?: number | null }> | null | undefined
+    const invoiceItems = invoice.data['items'] as Array<{ quantity?: number | null; unit?: string | null }> | null | undefined
     const plItems = pl.data['items'] as Array<{ quantity?: number | null }> | null | undefined
 
     if (!invoiceItems || invoiceItems.length === 0) return null
@@ -166,14 +206,17 @@ export const CROSS_004: RuleDefinition = {
     if (invTotal === 0 || plTotal === 0) return null
 
     const pass = withinTolerance(invTotal, plTotal)
+    const ambiguousUnits = !pass && hasAmbiguousQuantityUnits(invoiceItems, pl.data)
 
     return {
       ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'FAIL',
+      severity: ambiguousUnits ? RuleSeverity.WARNING : this.severity,
+      result: pass ? 'PASS' : ambiguousUnits ? 'REVIEW_NEEDED' : 'FAIL',
       message: pass
-        ? `Invoice total quantity (${invTotal}) matches packing list total quantity (${plTotal}).`
-        : `Quantity mismatch: invoice totals ${invTotal} units but packing list totals ${plTotal} units. Difference exceeds 1%.`,
+        ? `Fatura toplam miktarı (${invTotal}) çeki listesi toplam miktarıyla (${plTotal}) eşleşiyor.`
+        : ambiguousUnits
+          ? `Miktar değerleri farklı (${invTotal} ↔ ${plTotal}) ancak birimler (adet vs koli) belirsiz. Hard fail yerine manuel inceleme önerilir.`
+        : `Miktar uyuşmazlığı: fatura ${invTotal} birim, çeki listesi ${plTotal} birim. Fark %1'i aşıyor.`,
       sourceRefs: pass
         ? []
         : [
@@ -184,9 +227,61 @@ export const CROSS_004: RuleDefinition = {
   },
 }
 
+export const CROSS_009: RuleDefinition = {
+  code: 'CROSS-009',
+  name: 'Doğrulanan ticaret akışı taraf ve güzergah verisiyle örtüşmeli',
+  severity: RuleSeverity.WARNING,
+  appliesToDocTypes: [DocumentType.INVOICE, DocumentType.DECLARATION_OUTPUT, DocumentType.LOADING_INSTRUCTION, DocumentType.TRANSPORT_DOC],
+
+  evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
+    if (ctx.tradeFlow !== 'IMPORT' && ctx.tradeFlow !== 'EXPORT') return null
+    const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
+    const declaration = ctx.documents.find((d) => d.docType === DocumentType.DECLARATION_OUTPUT)
+    const loading = ctx.documents.find((d) => d.docType === DocumentType.LOADING_INSTRUCTION)
+    const transport = ctx.documents.find((d) => d.docType === DocumentType.TRANSPORT_DOC)
+
+    const sellerEvidence = `${invoice?.data['seller_name'] ?? ''} ${invoice?.data['seller_address'] ?? ''} ${declaration?.data['exporter'] ?? ''} ${loading?.data['shipper'] ?? ''} ${transport?.data['shipper'] ?? ''}`
+    const buyerEvidence = `${invoice?.data['buyer_name'] ?? ''} ${invoice?.data['buyer_address'] ?? ''} ${invoice?.data['consignee'] ?? ''} ${declaration?.data['importer'] ?? ''} ${loading?.data['consignee'] ?? ''} ${loading?.data['delivery_address'] ?? ''} ${transport?.data['consignee'] ?? ''} ${transport?.data['destination'] ?? ''}`
+
+    const sellerTurkey = containsTurkey(sellerEvidence)
+    const buyerTurkey = containsTurkey(buyerEvidence)
+    const sellerForeign = containsForeignCountry(sellerEvidence)
+    const buyerForeign = containsForeignCountry(buyerEvidence)
+
+    const exportPass = ctx.tradeFlow === 'EXPORT' && sellerTurkey && buyerForeign && !buyerTurkey
+    const importPass = ctx.tradeFlow === 'IMPORT' && buyerTurkey && sellerForeign && !sellerTurkey
+
+    if (exportPass || importPass) {
+      return {
+        ruleCode: this.code,
+        severity: this.severity,
+        result: 'PASS',
+        message: `Ticaret akışı ${ctx.tradeFlow} taraf/güzergah verisiyle desteklenmiş.`,
+        sourceRefs: [],
+      }
+    }
+
+    const contradictory =
+      (ctx.tradeFlow === 'EXPORT' && buyerTurkey && !sellerTurkey) ||
+      (ctx.tradeFlow === 'IMPORT' && sellerTurkey && !buyerTurkey)
+
+    return {
+      ruleCode: this.code,
+      severity: this.severity,
+      result: contradictory ? 'WARN' : 'REVIEW_NEEDED',
+      message: contradictory
+        ? `Ticaret akışı ${ctx.tradeFlow} taraf verileriyle çelişiyor olabilir. Satıcı/alıcı ülkelerini kontrol edin.`
+        : `Ticaret akışı ${ctx.tradeFlow} çıkarılan taraf veya güzergah verisi tarafından kuvvetli şekilde desteklenmiyor. Manuel doğrulama önerilir.`,
+      sourceRefs: [
+        { docType: DocumentType.INVOICE, field: 'seller/buyer evidence', value: `${sellerEvidence} | ${buyerEvidence}`.slice(0, 240) },
+      ],
+    }
+  },
+}
+
 export const CROSS_006: RuleDefinition = {
   code: 'CROSS-006',
-  name: 'Invoice net weight must match packing list net weight',
+  name: 'Fatura net ağırlığı çeki listesi net ağırlığıyla eşleşmeli',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST],
 
@@ -209,8 +304,8 @@ export const CROSS_006: RuleDefinition = {
       severity: this.severity,
       result: pass ? 'PASS' : 'FAIL',
       message: pass
-        ? `Net weight matches: invoice (${invWeight} kg) ≈ packing list (${plWeight} kg).`
-        : `Net weight mismatch: invoice (${invWeight} kg) differs from packing list (${plWeight} kg) by more than 1%.`,
+        ? `Net ağırlık eşleşiyor: fatura (${invWeight} kg) ≈ çeki listesi (${plWeight} kg).`
+        : `Net ağırlık uyuşmazlığı: fatura (${invWeight} kg) ↔ çeki listesi (${plWeight} kg), fark %1'i aşıyor.`,
       sourceRefs: pass
         ? []
         : [
@@ -223,7 +318,7 @@ export const CROSS_006: RuleDefinition = {
 
 export const CROSS_007: RuleDefinition = {
   code: 'CROSS-007',
-  name: 'Currency must match across invoice and declaration',
+  name: 'Para birimi fatura ile beyannamede eşleşmeli',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE, DocumentType.DECLARATION_OUTPUT],
 
@@ -242,7 +337,7 @@ export const CROSS_007: RuleDefinition = {
         ruleCode: this.code,
         severity: this.severity,
         result: 'PASS',
-        message: `Currency matches: invoice and declaration both use ${invCcy}.`,
+        message: `Para birimi eşleşiyor: fatura ve beyanname ${invCcy} kullanıyor.`,
         sourceRefs: [],
       }
     }
@@ -251,7 +346,7 @@ export const CROSS_007: RuleDefinition = {
       ruleCode: this.code,
       severity: this.severity,
       result: 'FAIL',
-      message: `Currency mismatch: invoice uses "${invCcy}" but declaration uses "${declCcy}".`,
+      message: `Para birimi uyuşmazlığı: fatura "${invCcy}" ↔ beyanname "${declCcy}".`,
       sourceRefs: [
         { docType: DocumentType.INVOICE, field: 'currency', value: invCcy },
         { docType: DocumentType.DECLARATION_OUTPUT, field: 'currency', value: declCcy },
@@ -262,7 +357,7 @@ export const CROSS_007: RuleDefinition = {
 
 export const CROSS_008: RuleDefinition = {
   code: 'CROSS-008',
-  name: 'Package count in packing list must match declaration',
+  name: 'Çeki listesi paket sayısı beyannameyle eşleşmeli',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.PACKING_LIST, DocumentType.DECLARATION_OUTPUT],
 
@@ -283,7 +378,7 @@ export const CROSS_008: RuleDefinition = {
         ruleCode: this.code,
         severity: this.severity,
         result: 'PASS',
-        message: `Package count matches: packing list and declaration both have ${plCount} packages.`,
+        message: `Paket sayısı eşleşiyor: çeki listesi ve beyannamede ${plCount} paket.`,
         sourceRefs: [],
       }
     }
@@ -292,7 +387,7 @@ export const CROSS_008: RuleDefinition = {
       ruleCode: this.code,
       severity: this.severity,
       result: 'FAIL',
-      message: `Package count mismatch: packing list has ${plCount} packages but declaration has ${declCount}.`,
+      message: `Paket sayısı uyuşmazlığı: çeki listesinde ${plCount}, beyannamede ${declCount} paket.`,
       sourceRefs: [
         { docType: DocumentType.PACKING_LIST, field: 'package_count', value: plCount },
         { docType: DocumentType.DECLARATION_OUTPUT, field: 'package_count', value: declCount },
@@ -303,7 +398,7 @@ export const CROSS_008: RuleDefinition = {
 
 export const CROSS_005: RuleDefinition = {
   code: 'CROSS-005',
-  name: 'Seller in invoice must match shipper in loading instruction',
+  name: 'Faturadaki satıcı yükleme talimatındaki gönderici ile eşleşmeli',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.INVOICE, DocumentType.LOADING_INSTRUCTION],
 
@@ -329,8 +424,8 @@ export const CROSS_005: RuleDefinition = {
       severity: this.severity,
       result: pass ? 'PASS' : 'WARN',
       message: pass
-        ? 'Invoice seller matches loading instruction shipper.'
-        : `Invoice seller "${invoice.data['seller_name']}" may not match loading instruction shipper "${loading.data['shipper']}".`,
+        ? 'Fatura satıcısı yükleme talimatı göndericisiyle eşleşiyor.'
+        : `Fatura satıcısı "${invoice.data['seller_name']}" yükleme talimatı göndericisi "${loading.data['shipper']}" ile eşleşmeyebilir.`,
       sourceRefs: pass
         ? []
         : [

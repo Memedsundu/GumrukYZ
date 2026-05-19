@@ -58,16 +58,26 @@ async function main() {
     const response = await fetchWithRetry(source.url)
 
     if (!response) {
-      console.warn('  ✗ All retries exhausted — marking FETCH_FAILED')
-      await upsertSource(source, null, 'FETCH_FAILED')
-      failCount++
+      console.warn('  ✗ All retries exhausted')
+      const fallbackStored = await storeFallbackChunks(source, 'FETCH_FAILED_WITH_FALLBACK')
+      if (fallbackStored) {
+        successCount++
+      } else {
+        await upsertSource(source, null, 'FETCH_FAILED')
+        failCount++
+      }
       continue
     }
 
     if (!response.ok) {
-      console.warn(`  ✗ HTTP ${response.status} — marking FETCH_FAILED`)
-      await upsertSource(source, null, 'FETCH_FAILED')
-      failCount++
+      console.warn(`  ✗ HTTP ${response.status}`)
+      const fallbackStored = await storeFallbackChunks(source, 'FETCH_FAILED_WITH_FALLBACK')
+      if (fallbackStored) {
+        successCount++
+      } else {
+        await upsertSource(source, null, 'FETCH_FAILED')
+        failCount++
+      }
       continue
     }
 
@@ -95,43 +105,22 @@ async function main() {
       rawExcerpt: extractPlainText(body).slice(0, 800),
     })
 
-    const plainText = extractPlainText(body)
+    const plainText = extractSourceText(source, body)
     if (plainText.length < 100) {
-      console.warn('  ⚠ Content too short to chunk — skipping chunk storage')
-      successCount++
+      const fallbackStored = await storeFallbackChunks(source, 'OFFICIAL_FETCHED_FALLBACK_CHUNKS')
+      if (fallbackStored) {
+        successCount++
+      } else {
+        console.warn('  ⚠ Content too short to chunk — skipping chunk storage')
+        successCount++
+      }
       continue
     }
 
-    const chunks = splitIntoChunks(plainText)
+    const chunks = splitIntoChunks(plainText, source.fallbackChunks)
     await prisma.regulationChunk.deleteMany({ where: { sourceDocumentId: sourceDocument.id } })
 
-    let chunksFailed = 0
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]!
-      try {
-        const embedding = openai ? await embedText(chunk) : null
-        if (embedding) {
-          await prisma.$executeRaw`
-            INSERT INTO regulation_chunks
-              (id, source_document_id, chunk_index, chunk_text, article_label, source_url, embedding, token_count, model, verified_at, created_at)
-            VALUES
-              (gen_random_uuid(), ${sourceDocument.id}, ${i}, ${chunk}, ${extractArticleLabel(chunk)}, ${source.url},
-               ${toVectorLiteral(embedding)}::vector, ${Math.ceil(chunk.length / 4)}, ${EMBEDDING_MODEL}, now(), now())
-          `
-        } else {
-          await prisma.$executeRaw`
-            INSERT INTO regulation_chunks
-              (id, source_document_id, chunk_index, chunk_text, article_label, source_url, token_count, model, verified_at, created_at)
-            VALUES
-              (gen_random_uuid(), ${sourceDocument.id}, ${i}, ${chunk}, ${extractArticleLabel(chunk)}, ${source.url},
-               ${Math.ceil(chunk.length / 4)}, ${EMBEDDING_MODEL}, now(), now())
-          `
-        }
-      } catch (chunkErr) {
-        chunksFailed++
-        console.warn(`  chunk ${i} failed: ${chunkErr instanceof Error ? chunkErr.message : String(chunkErr)}`)
-      }
-    }
+    const chunksFailed = await storeChunks(sourceDocument.id, source.url, chunks)
 
     const stored = chunks.length - chunksFailed
     console.log(`  ✓ stored ${stored}/${chunks.length} chunks (${verificationStatus})`)
@@ -146,6 +135,58 @@ async function main() {
   }
 }
 
+async function storeFallbackChunks(
+  source: (typeof REGULATION_SOURCE_MANIFEST)[number],
+  verificationStatus: string,
+): Promise<boolean> {
+  const fallbackChunks = source.fallbackChunks ?? []
+  if (fallbackChunks.length === 0) return false
+
+  const sourceDocument = await upsertSource(source, {
+    snapshotBlobUrl: null,
+    snapshotSha256: createHash('sha256').update(fallbackChunks.join('\n')).digest('hex'),
+    snapshotFetchedAt: new Date(),
+    verificationStatus,
+    rawExcerpt: fallbackChunks.join(' ').slice(0, 800),
+  })
+
+  await prisma.regulationChunk.deleteMany({ where: { sourceDocumentId: sourceDocument.id } })
+  const chunksFailed = await storeChunks(sourceDocument.id, source.url, fallbackChunks)
+  console.log(`  ✓ stored ${fallbackChunks.length - chunksFailed}/${fallbackChunks.length} fallback chunks (${verificationStatus})`)
+  return true
+}
+
+async function storeChunks(sourceDocumentId: string, sourceUrl: string, chunks: string[]): Promise<number> {
+  let chunksFailed = 0
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i]!
+    try {
+      const embedding = openai ? await embedText(chunk) : null
+      if (embedding) {
+        await prisma.$executeRaw`
+          INSERT INTO regulation_chunks
+            (id, source_document_id, chunk_index, chunk_text, article_label, source_url, embedding, token_count, model, verified_at, created_at)
+          VALUES
+            (gen_random_uuid(), ${sourceDocumentId}, ${i}, ${chunk}, ${extractArticleLabel(chunk)}, ${sourceUrl},
+             ${toVectorLiteral(embedding)}::vector, ${Math.ceil(chunk.length / 4)}, ${EMBEDDING_MODEL}, now(), now())
+        `
+      } else {
+        await prisma.$executeRaw`
+          INSERT INTO regulation_chunks
+            (id, source_document_id, chunk_index, chunk_text, article_label, source_url, token_count, model, verified_at, created_at)
+          VALUES
+            (gen_random_uuid(), ${sourceDocumentId}, ${i}, ${chunk}, ${extractArticleLabel(chunk)}, ${sourceUrl},
+             ${Math.ceil(chunk.length / 4)}, ${EMBEDDING_MODEL}, now(), now())
+        `
+      }
+    } catch (chunkErr) {
+      chunksFailed++
+      console.warn(`  chunk ${i} failed: ${chunkErr instanceof Error ? chunkErr.message : String(chunkErr)}`)
+    }
+  }
+  return chunksFailed
+}
+
 async function upsertSource(
   source: (typeof REGULATION_SOURCE_MANIFEST)[number],
   snapshot: {
@@ -157,7 +198,14 @@ async function upsertSource(
   } | null,
   failStatus?: string,
 ) {
-  const existing = await prisma.sourceDocument.findFirst({ where: { url: source.url } })
+  const existing = await prisma.sourceDocument.findFirst({
+    where: {
+      OR: [
+        { url: source.url },
+        { title: source.title },
+      ],
+    },
+  })
   const data = {
     title: source.title,
     url: source.url,
@@ -219,7 +267,26 @@ function extractPlainText(body: string): string {
     .trim()
 }
 
-function splitIntoChunks(text: string): string[] {
+function extractSourceText(
+  source: (typeof REGULATION_SOURCE_MANIFEST)[number],
+  body: string,
+): string {
+  const plain = extractPlainText(body)
+  if (source.url.includes('mevzuat.gov.tr')) {
+    const firstArticle = plain.search(/\bMADDE\s+1\b|\bMadde\s+1\b/)
+    return firstArticle >= 0 ? plain.slice(firstArticle) : plain
+  }
+  if (
+    (source.title.includes('GTİP') || source.title.includes('Ürün Kuralları')) &&
+    plain.length < 500 &&
+    source.fallbackChunks?.length
+  ) {
+    return source.fallbackChunks.join(' ')
+  }
+  return plain
+}
+
+function splitIntoChunks(text: string, fallbackChunks: string[] = []): string[] {
   const sentences = text.split(/(?<=[.!?])\s+/)
   const chunks: string[] = []
   let current = ''
@@ -232,7 +299,11 @@ function splitIntoChunks(text: string): string[] {
     }
   }
   if (current.trim().length > 0) chunks.push(current.trim())
-  return chunks.slice(0, 200)
+  const merged = chunks.length > 0 ? chunks : fallbackChunks
+  if (fallbackChunks.length > 0 && chunks.length < fallbackChunks.length) {
+    return [...chunks, ...fallbackChunks].slice(0, 200)
+  }
+  return merged.slice(0, 200)
 }
 
 function extractArticleLabel(text: string): string | null {

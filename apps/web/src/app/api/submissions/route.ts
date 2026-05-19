@@ -1,36 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@gumrukyz/db'
+import { DataClassification } from '@gumrukyz/domain'
 import { z } from 'zod'
+import { requireApiUser } from '@/lib/auth'
+import { PILOT_DEFAULT_DATA_CLASSIFICATION } from '@/lib/pilot'
 
 const CreateSubmissionSchema = z.object({
   title: z.string().min(1).max(200),
-  tradeFlow: z.enum(['UNKNOWN', 'IMPORT', 'EXPORT']).default('UNKNOWN'),
-  dataClassification: z.enum(['SYNTHETIC', 'REDACTED', 'REAL']).default('SYNTHETIC'),
-})
+  dataClassification: z
+    .enum([
+      DataClassification.SYNTHETIC,
+      DataClassification.REDACTED,
+      DataClassification.REAL,
+    ])
+    .optional(),
+}).strict()
+
+const DEFAULT_TRADE_FLOW = 'UNKNOWN'
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const user = await prisma.user.findUnique({
-      where: { clerkUserId: userId },
-      include: { tenant: true },
-    })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
     const body = await req.json() as unknown
     const parsed = CreateSubmissionSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+      return NextResponse.json({ error: 'Geçerli bir referans adı girin' }, { status: 400 })
     }
 
-    if (!user.tenant.dataClassificationAllowed.includes(parsed.data.dataClassification)) {
+    const dataClassification =
+      parsed.data.dataClassification ?? PILOT_DEFAULT_DATA_CLASSIFICATION
+
+    if (!user.tenant.dataClassificationAllowed.includes(dataClassification)) {
       return NextResponse.json(
-        {
-          error: `Data classification ${parsed.data.dataClassification} is not allowed for this tenant`,
-        },
+        { error: 'Bu veri sınıflandırması bu organizasyon için izinli değil' },
         { status: 403 },
       )
     }
@@ -40,12 +45,12 @@ export async function POST(req: NextRequest) {
         tenantId: user.tenantId,
         createdBy: user.id,
         title: parsed.data.title,
-        tradeFlow: parsed.data.tradeFlow,
-        dataClassification: parsed.data.dataClassification,
+        tradeFlow: DEFAULT_TRADE_FLOW,
+        dataClassification,
         status: 'PENDING',
-        classificationStatus: parsed.data.tradeFlow === 'UNKNOWN' ? 'PENDING' : 'VALIDATED',
-        classificationValidatedAt: parsed.data.tradeFlow === 'UNKNOWN' ? null : new Date(),
-        classificationValidatedBy: parsed.data.tradeFlow === 'UNKNOWN' ? null : user.id,
+        classificationStatus: 'PENDING',
+        classificationValidatedAt: null,
+        classificationValidatedBy: null,
       },
     })
 
@@ -56,24 +61,26 @@ export async function POST(req: NextRequest) {
         action: 'submission.created',
         entityType: 'Submission',
         entityId: submission.id,
-        afterJson: { title: submission.title, tradeFlow: submission.tradeFlow },
+        afterJson: {
+          title: submission.title,
+          tradeFlow: submission.tradeFlow,
+          dataClassification: submission.dataClassification,
+        },
       },
     })
 
     return NextResponse.json(submission, { status: 201 })
   } catch (err) {
     console.error('POST /api/submissions error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }
 
 export async function GET() {
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const user = await prisma.user.findUnique({ where: { clerkUserId: userId } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
     const submissions = await prisma.submission.findMany({
       where: { tenantId: user.tenantId },
@@ -87,6 +94,6 @@ export async function GET() {
     return NextResponse.json(submissions)
   } catch (err) {
     console.error('GET /api/submissions error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }

@@ -1,0 +1,26 @@
+{
+  "_fixture": "medium-confidence-missing-field",
+  "_description": "Medium-confidence (0.60) invoice missing invoice_number — should be REVIEW_NEEDED, not FAIL",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.6,
+      "data": {
+        "invoice_number": null,
+        "invoice_date": "2026-04-15",
+        "seller_name": "Acme Exports GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 12500
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "INV-001": "REVIEW_NEEDED",
+    "INV-005": "PASS"
+  },
+  "_notes": "Document confidence is 0.60 (above LOW_CONFIDENCE=0.5 but below MEDIUM=0.7), so missing invoice_number should produce REVIEW_NEEDED via failOrReview helper, not a hard FAIL."
+}

@@ -132,6 +132,17 @@ const styles = StyleSheet.create({
   legalTitle: {
     fontWeight: 700,
   },
+  expertRow: {
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  expertMeta: {
+    color: '#4f46e5',
+    fontSize: 8,
+    fontWeight: 700,
+    marginBottom: 3,
+  },
 })
 
 export async function renderReportPdf(payload: ReportPayload): Promise<Buffer> {
@@ -153,7 +164,7 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
         <Text style={styles.title}>GümrükYZ Risk Raporu</Text>
         <Text style={styles.muted}>{payload.submission.title}</Text>
         <Text style={styles.muted}>
-          Üretilme: {formatDate(payload.report.generatedAt)} | Akış: {payload.submission.tradeFlow}
+          Üretilme: {formatDate(payload.report.generatedAt)} | Akış: {tradeFlowLabel(payload.submission.tradeFlow)}
         </Text>
 
         <View style={styles.statsRow}>
@@ -165,7 +176,7 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
 
         {payload.report.summaryText && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>AI Özeti</Text>
+            <Text style={styles.sectionTitle}>Yapay zeka özeti</Text>
             <View style={styles.summaryBox}>
               <Text>{payload.report.summaryText}</Text>
               <Text style={styles.sourceRef}>
@@ -175,15 +186,68 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
           </View>
         )}
 
+        {payload.actionSummary.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Aksiyon Özeti</Text>
+            {payload.actionSummary.map((item) => (
+              <View key={`${item.ruleCode}-${item.result}`} style={styles.ruleRow} wrap={false}>
+                <Text style={styles.ruleCode}>{item.ruleCode} | {item.title} | {ruleResultLabel(item.result)}</Text>
+                <Text>{item.description}</Text>
+                <Text style={styles.sourceRef}>Ne yapmalı? {item.action}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {payload.expertReview && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Yapay zeka uzman incelemesi</Text>
+            {payload.expertReview.summary && (
+              <View style={styles.summaryBox}>
+                <Text>{payload.expertReview.summary}</Text>
+                <Text style={styles.sourceRef}>
+                  Genel risk: {riskLevelLabel(payload.expertReview.overallRisk)} | Durum: {legalContextStatusLabel(payload.expertReview.legalContextStatus)}
+                </Text>
+              </View>
+            )}
+            {payload.expertReview.findings.map((finding) => (
+              <View key={finding.id} style={styles.expertRow} wrap={false}>
+                <Text style={styles.expertMeta}>
+                  {expertAreaLabel(finding.area)} | {ruleResultLabel(finding.severity)} | Güven %{Math.round(finding.confidence * 100)}
+                </Text>
+                <Text style={styles.legalTitle}>{finding.title}</Text>
+                <Text>{finding.explanation}</Text>
+                <Text style={styles.sourceRef}>Öneri: {finding.recommendation}</Text>
+                {finding.citations.length > 0 && (
+                  <View style={styles.legalRef}>
+                    <Text style={styles.legalTitle}>Mevzuat dayanağı</Text>
+                    {finding.citations.map((citation) => (
+                      <Text key={citation.id}>
+                        {citation.sourceTitle}
+                        {citation.articleLabel ? ` - ${citation.articleLabel}` : ''}: {citation.excerpt}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Kontrol Sonuçları</Text>
           {orderedResults.map((result) => (
             <View key={result.id} style={styles.ruleRow} wrap={false}>
               <View style={styles.ruleHeader}>
-                <Text style={styles.ruleCode}>{result.ruleCode}</Text>
+                <Text style={styles.ruleCode}>
+                  {result.ruleCode} | {result.metadata.category}
+                </Text>
                 <Text style={styles.result}>{result.resultLabel}</Text>
               </View>
+              <Text style={styles.legalTitle}>{result.metadata.turkishTitle}</Text>
+              <Text style={styles.sourceRef}>{result.metadata.operationalExplanation}</Text>
               <Text>{result.displayMessage}</Text>
+              <Text style={styles.sourceRef}>Ne yapmalı? {result.recommendedAction}</Text>
               {result.sourceRefsDisplay.length > 0 && result.result !== 'PASS' && (
                 <Text style={styles.sourceRef}>
                   Kaynak: {result.sourceRefsDisplay.join(' | ')}
@@ -196,6 +260,16 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
                     <Text key={citation.id}>
                       {citation.sourceTitle}
                       {citation.articleLabel ? ` - ${citation.articleLabel}` : ''}: {citation.excerpt}
+                    </Text>
+                  ))}
+                </View>
+              )}
+              {result.aiValidations.length > 0 && (
+                <View style={styles.legalRef}>
+                  <Text style={styles.legalTitle}>Yapay zeka kural kontrolü</Text>
+                  {result.aiValidations.map((validation) => (
+                    <Text key={validation.id}>
+                      {aiRuleValidationLabel(validation.status)} (%{Math.round(validation.confidence * 100)}): {validation.explanation} Öneri: {validation.recommendation}
                     </Text>
                   ))}
                 </View>
@@ -227,4 +301,65 @@ function formatDate(value: string) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+function aiRuleValidationLabel(status: string): string {
+  const map: Record<string, string> = {
+    LIKELY_CORRECT: 'Sonuç makul',
+    POTENTIAL_FALSE_POSITIVE: 'Yanlış pozitif olabilir',
+    POTENTIAL_FALSE_NEGATIVE: 'Kaçan risk olabilir',
+    NEEDS_HUMAN_REVIEW: 'Manuel inceleme gerekir',
+  }
+  return map[status] ?? status
+}
+
+function tradeFlowLabel(tradeFlow: string): string {
+  if (tradeFlow === 'IMPORT') return 'İthalat'
+  if (tradeFlow === 'EXPORT') return 'İhracat'
+  return 'Henüz doğrulanmadı'
+}
+
+function ruleResultLabel(result: string): string {
+  const map: Record<string, string> = {
+    FAIL: 'Hata',
+    WARN: 'Uyarı',
+    REVIEW_NEEDED: 'İnceleme gerekli',
+    PASS: 'Geçti',
+    SKIP: 'Atlandı',
+  }
+  return map[result] ?? result
+}
+
+function riskLevelLabel(risk: string | null | undefined): string {
+  const map: Record<string, string> = {
+    LOW: 'Düşük',
+    MEDIUM: 'Orta',
+    HIGH: 'Yüksek',
+    CRITICAL: 'Kritik',
+  }
+  return risk ? map[risk] ?? risk : 'Bilinmiyor'
+}
+
+function legalContextStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    READY: 'Hazır',
+    MISSING_REQUIRED_SOURCE: 'Zorunlu kaynak eksik',
+    EMPTY_CONTEXT: 'Mevzuat bağlamı boş',
+    DISABLED: 'Devre dışı',
+  }
+  return map[status] ?? status
+}
+
+function expertAreaLabel(area: string): string {
+  const map: Record<string, string> = {
+    GTIP_PLAUSIBILITY: 'GTİP yorumu',
+    PERMIT_PRODUCT_CONTROL: 'İzin / ürün kontrolü',
+    REGIME_CHOICE: 'Rejim seçimi',
+    VALUATION: 'Kıymet',
+    ORIGIN_PREFERENTIAL: 'Menşe / tercihli rejim',
+    INCOTERM: 'Incoterms',
+    DOCUMENT_CONSISTENCY: 'Belge tutarlılığı',
+    LEGAL_CONTEXT: 'Mevzuat kapsamı',
+  }
+  return map[area] ?? area
 }

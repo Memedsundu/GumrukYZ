@@ -1,0 +1,29 @@
+{
+  "_fixture": "qual-empty-extraction",
+  "_description": "Invoice uploaded but extractor returned all-null fields — QUAL-001 should fire as REVIEW_NEEDED, no hard FAIL",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.82,
+      "data": {
+        "invoice_number": null,
+        "invoice_date": null,
+        "seller_name": "",
+        "buyer_name": null,
+        "currency": null,
+        "total_amount": null,
+        "incoterm": null,
+        "items": []
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_assertNoFailures": false,
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "QUAL-001": "REVIEW_NEEDED",
+    "INV-001": "FAIL"
+  },
+  "_notes": "QUAL-001 surfaces the extraction issue. INV-001 still fires because the doc claims high confidence (0.82) but is empty — this is a legit data-entry / OCR issue, not noise."
+}

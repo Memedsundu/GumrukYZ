@@ -1,13 +1,20 @@
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
-import type { RuleDefinition, SubmissionContext, RuleEvaluationResult } from '../types.js'
+import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
+import {
+  failOrReview,
+  findDocs,
+  hasValue,
+  passResult,
+  toFiniteNumber,
+} from '../helpers.js'
 
 function getPackingLists(ctx: SubmissionContext) {
-  return ctx.documents.filter((d) => d.docType === DocumentType.PACKING_LIST)
+  return findDocs(ctx, DocumentType.PACKING_LIST)
 }
 
 export const PL_001: RuleDefinition = {
   code: 'PL-001',
-  name: 'Package count must be a positive integer',
+  name: 'Koli/paket sayısı pozitif tam sayı olmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.PACKING_LIST],
 
@@ -15,26 +22,29 @@ export const PL_001: RuleDefinition = {
     const pls = getPackingLists(ctx)
     if (pls.length === 0) return null
 
-    const allValid = pls.every((pl) => {
-      const count = pl.data['package_count']
-      return count != null && Number.isInteger(Number(count)) && Number(count) > 0
+    const offenders = pls.filter((pl) => {
+      const count = toFiniteNumber(pl.data['package_count'])
+      return count == null || !Number.isInteger(count) || count <= 0
     })
 
-    return {
-      ruleCode: this.code,
-      severity: this.severity,
-      result: allValid ? 'PASS' : 'FAIL',
-      message: allValid
-        ? 'Package count is present and valid.'
-        : 'Package count is missing or not a positive integer. Field: package_count.',
-      sourceRefs: allValid ? [] : [{ docType: DocumentType.PACKING_LIST, field: 'package_count' }],
+    if (offenders.length === 0) {
+      return passResult(this.code, this.severity, 'Paket sayısı geçerli.')
     }
+
+    return failOrReview(
+      this.code,
+      this.severity,
+      offenders,
+      'Çeki listesinde paket sayısı eksik veya pozitif tam sayı değil. Alan: package_count.',
+      'Çeki listesinden paket sayısı güvenle okunamadı. Manuel kontrol gerekli.',
+      [{ docType: DocumentType.PACKING_LIST, field: 'package_count' }],
+    )
   },
 }
 
 export const PL_002: RuleDefinition = {
   code: 'PL-002',
-  name: 'Gross weight must be present',
+  name: 'Brüt ağırlık bulunmalı',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.PACKING_LIST],
 
@@ -42,19 +52,22 @@ export const PL_002: RuleDefinition = {
     const pls = getPackingLists(ctx)
     if (pls.length === 0) return null
 
-    const allValid = pls.every((pl) => {
-      const weight = pl.data['gross_weight']
-      return weight != null && Number(weight) > 0
+    const offenders = pls.filter((pl) => {
+      const weight = toFiniteNumber(pl.data['gross_weight'])
+      return weight == null || weight <= 0 || !hasValue(pl.data['gross_weight'])
     })
 
-    return {
-      ruleCode: this.code,
-      severity: this.severity,
-      result: allValid ? 'PASS' : 'WARN',
-      message: allValid
-        ? 'Gross weight is present.'
-        : 'Gross weight is missing or not a positive number. Field: gross_weight.',
-      sourceRefs: allValid ? [] : [{ docType: DocumentType.PACKING_LIST, field: 'gross_weight' }],
+    if (offenders.length === 0) {
+      return passResult(this.code, this.severity, 'Brüt ağırlık mevcut.')
     }
+
+    return failOrReview(
+      this.code,
+      this.severity,
+      offenders,
+      'Çeki listesinde brüt ağırlık eksik veya pozitif değil. Alan: gross_weight.',
+      'Çeki listesinden brüt ağırlık güvenle okunamadı. Manuel kontrol gerekli.',
+      [{ docType: DocumentType.PACKING_LIST, field: 'gross_weight' }],
+    )
   },
 }

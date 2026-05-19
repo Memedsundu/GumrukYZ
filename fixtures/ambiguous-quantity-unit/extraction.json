@@ -1,0 +1,53 @@
+{
+  "_fixture": "ambiguous-quantity-unit",
+  "_description": "Item quantity vs package quantity mismatch should require review, not hard fail",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "CROSS-004": "REVIEW_NEEDED"
+  },
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.95,
+      "data": {
+        "invoice_number": "EXP-3",
+        "invoice_date": "2026-05-01",
+        "seller_name": "Turkish Exporter A.S.",
+        "seller_address": "Istanbul Turkiye",
+        "buyer_name": "Poland Buyer",
+        "buyer_address": "Warsaw Poland",
+        "currency": "EUR",
+        "total_amount": 5000,
+        "country_of_origin": "TR",
+        "items": [
+          {
+            "description": "Automotive part",
+            "quantity": 5,
+            "unit": "PCS",
+            "unit_price": 1000,
+            "total_price": 5000
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.95,
+      "data": {
+        "package_count": 9,
+        "package_type": "PALET",
+        "gross_weight": 100,
+        "net_weight": 90,
+        "items": [
+          {
+            "description": "Automotive part packed on pallets",
+            "quantity": 9,
+            "net_weight": 90,
+            "gross_weight": 100
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

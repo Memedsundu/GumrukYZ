@@ -1,11 +1,10 @@
 generator client {
   provider        = "prisma-client-js"
-  // driverAdapters: tells Prisma to generate a JS-only client that delegates
-  // all query execution to the provided adapter (PrismaNeon). No native binary
-  // engine is loaded — required for correct operation in Vercel serverless when
-  // @prisma/client is bundled by webpack.
-  previewFeatures = ["postgresqlExtensions", "driverAdapters"]
-  // binaryTargets removed: not needed when using a driver adapter.
+  // Generate a JS-only Prisma client that delegates query execution to the
+  // provided PrismaNeon adapter. This avoids shipping native query engines in
+  // Vercel serverless bundles.
+  engineType      = "client"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
@@ -36,6 +35,7 @@ model Tenant {
   declarationSnaps   DeclarationSnapshot[]
   declarationItems   DeclarationItem[]
   ruleResults        RuleResult[]
+  aiRuleValidations  AiRuleValidation[]
   riskReports        RiskReport[]
   overrideActions    OverrideAction[]
   auditLogs          AuditLog[]
@@ -43,26 +43,30 @@ model Tenant {
   processingJobs     ProcessingJob[]
   candidateRules     CandidateRule[]
   brokerClients      BrokerClient[]
+  expertReviews      ExpertReview[]
+  expertReviewFindings ExpertReviewFinding[]
   classificationSuggestions DocumentClassificationSuggestion[]
 
   @@map("tenants")
 }
 
 model User {
-  id          String   @id @default(uuid())
-  tenantId    String   @map("tenant_id")
-  clerkUserId String   @unique @map("clerk_user_id")
-  email       String
-  role        String   // UserRole
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")
+  clerkUserId    String    @map("clerk_user_id")
+  email          String
+  role           String    // UserRole
+  pilotConsentAt DateTime? @map("pilot_consent_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  tenant          Tenant           @relation(fields: [tenantId], references: [id])
-  submissions     Submission[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  submissions      Submission[]
   uploadedVersions DocumentVersion[]
-  overrides       OverrideAction[]
-  reviewedRules   CandidateRule[]
+  overrides        OverrideAction[]
+  reviewedRules    CandidateRule[]
 
+  @@unique([clerkUserId, tenantId])
   @@map("users")
 }
 
@@ -90,8 +94,10 @@ model Submission {
   classificationSuggestions DocumentClassificationSuggestion[]
   declarationSnaps    DeclarationSnapshot[]
   ruleResults         RuleResult[]
+  aiRuleValidations   AiRuleValidation[]
   riskReports         RiskReport[]
   processingJobs      ProcessingJob[]
+  expertReviews       ExpertReview[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -386,10 +392,36 @@ model RuleResult {
   rule       Rule?      @relation(fields: [ruleId], references: [id])
   overrides  OverrideAction[]
   citations RuleResultCitation[]
+  aiValidations AiRuleValidation[]
 
   @@index([submissionId])
   @@index([tenantId])
   @@map("rule_results")
+}
+
+model AiRuleValidation {
+  id             String   @id @default(uuid())
+  ruleResultId   String   @map("rule_result_id")
+  submissionId   String   @map("submission_id")
+  tenantId       String   @map("tenant_id")
+  providerRunId  String?  @map("provider_run_id")
+  status         String
+  confidence     Float
+  explanation    String
+  recommendation String
+  evidenceRefsJson Json?  @map("evidence_refs_json")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  submission  Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  ruleResult  RuleResult   @relation(fields: [ruleResultId], references: [id], onDelete: Cascade)
+  providerRun ProviderRun? @relation(fields: [providerRunId], references: [id])
+
+  @@index([ruleResultId])
+  @@index([submissionId])
+  @@index([tenantId])
+  @@index([providerRunId])
+  @@map("ai_rule_validations")
 }
 
 model RuleResultCitation {
@@ -423,6 +455,68 @@ model RiskReport {
   @@index([submissionId])
   @@index([tenantId])
   @@map("risk_reports")
+}
+
+model ExpertReview {
+  id                 String    @id @default(uuid())
+  submissionId       String    @map("submission_id")
+  tenantId           String    @map("tenant_id")
+  providerRunId      String?   @map("provider_run_id")
+  status             String    @default("PENDING")
+  legalContextStatus String    @default("READY") @map("legal_context_status")
+  model              String?
+  overallRisk        String?   @map("overall_risk")
+  summary            String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  completedAt        DateTime? @map("completed_at")
+
+  tenant      Tenant                @relation(fields: [tenantId], references: [id])
+  submission  Submission            @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  providerRun ProviderRun?          @relation(fields: [providerRunId], references: [id])
+  findings    ExpertReviewFinding[]
+
+  @@index([submissionId])
+  @@index([tenantId])
+  @@index([providerRunId])
+  @@map("expert_reviews")
+}
+
+model ExpertReviewFinding {
+  id               String   @id @default(uuid())
+  expertReviewId   String   @map("expert_review_id")
+  tenantId         String   @map("tenant_id")
+  area             String
+  severity         String
+  confidence       Float
+  title            String
+  explanation      String
+  recommendation   String
+  evidenceRefsJson Json?    @map("evidence_refs_json")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant       Tenant                         @relation(fields: [tenantId], references: [id])
+  expertReview ExpertReview                   @relation(fields: [expertReviewId], references: [id], onDelete: Cascade)
+  citations    ExpertReviewFindingCitation[]
+
+  @@index([expertReviewId])
+  @@index([tenantId])
+  @@index([area])
+  @@map("expert_review_findings")
+}
+
+model ExpertReviewFindingCitation {
+  id                String   @id @default(uuid())
+  findingId         String   @map("finding_id")
+  regulationChunkId String   @map("regulation_chunk_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  finding        ExpertReviewFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  regulationChunk RegulationChunk    @relation(fields: [regulationChunkId], references: [id], onDelete: Cascade)
+
+  @@unique([findingId, regulationChunkId])
+  @@index([findingId])
+  @@index([regulationChunkId])
+  @@map("expert_review_finding_citations")
 }
 
 model OverrideAction {
@@ -484,6 +578,8 @@ model ProviderRun {
   tenant      Tenant               @relation(fields: [tenantId], references: [id])
   extractions DocumentExtraction[]
   classificationSuggestions DocumentClassificationSuggestion[]
+  expertReviews ExpertReview[]
+  aiRuleValidations AiRuleValidation[]
 
   @@index([tenantId])
   @@index([provider, operation])
@@ -531,6 +627,7 @@ model RegulationChunk {
 
   sourceDocument SourceDocument @relation(fields: [sourceDocumentId], references: [id])
   ruleLegalCitations RuleLegalCitation[]
+  expertReviewFindingCitations ExpertReviewFindingCitation[]
 
   @@index([sourceDocumentId])
   @@map("regulation_chunks")

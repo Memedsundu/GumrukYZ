@@ -1,19 +1,18 @@
 /**
- * Export-specific rule set.
- *
- * These rules apply when tradeFlow === 'EXPORT'. They complement the cross-document
- * rules with Turkey-specific export control checks aligned with:
+ * İhracat odaklı kurallar — tradeFlow === 'EXPORT' iken çalışır.
+ * Türkiye mevzuatına uyumlu:
  * - 4458 Sayılı Gümrük Kanunu (Madde 161–194 ihracat hükümleri)
  * - Gümrük Yönetmeliği ihracat rejimleri
  * - Dış Ticaret Mevzuatı (İhracat Yönetmeliği)
  */
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
-import type { RuleDefinition, SubmissionContext, RuleEvaluationResult } from '../types.js'
+import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
+import { failOrReview, failResult, hasValue, passResult } from '../helpers.js'
 
-/** Export invoices must have an invoice number */
+/** EXP-001 — İhracat faturasında fatura numarası bulunmalı. */
 export const EXP_001: RuleDefinition = {
   code: 'EXP-001',
-  name: 'Export invoice must have invoice number',
+  name: 'İhracat faturasında fatura numarası bulunmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE],
 
@@ -23,27 +22,28 @@ export const EXP_001: RuleDefinition = {
     const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
     if (!invoice) return null
 
-    const invoiceNumber = invoice.data['invoice_number']
-    const pass = Boolean(invoiceNumber && String(invoiceNumber).trim().length > 0)
-
-    return {
-      ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'FAIL',
-      message: pass
-        ? `Export invoice number present: ${invoiceNumber}.`
-        : 'Export invoice must include an invoice number (Gümrük Yönetmeliği Madde 168).',
-      sourceRefs: pass
-        ? []
-        : [{ docType: DocumentType.INVOICE, field: 'invoice_number', value: null }],
+    if (hasValue(invoice.data['invoice_number'])) {
+      return passResult(
+        this.code,
+        this.severity,
+        `İhracat fatura numarası mevcut: ${invoice.data['invoice_number']}.`,
+      )
     }
+    return failOrReview(
+      this.code,
+      this.severity,
+      [invoice],
+      'İhracat faturasında fatura numarası bulunmalı (Gümrük Yönetmeliği Madde 168).',
+      'İhracat fatura numarası güvenle okunamadı. Manuel kontrol gerekli.',
+      [{ docType: DocumentType.INVOICE, field: 'invoice_number', value: null }],
+    )
   },
 }
 
-/** Export invoice must state the seller (exporter) name */
+/** EXP-002 — İhracat faturası satıcı/ihracatçıyı tanımlamalı. */
 export const EXP_002: RuleDefinition = {
   code: 'EXP-002',
-  name: 'Export invoice must identify the seller/exporter',
+  name: 'İhracat faturasında satıcı/ihracatçı tanımlanmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE],
 
@@ -54,26 +54,24 @@ export const EXP_002: RuleDefinition = {
     if (!invoice) return null
 
     const seller = invoice.data['seller_name']
-    const pass = Boolean(seller && String(seller).trim().length > 2)
-
-    return {
-      ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'FAIL',
-      message: pass
-        ? `Exporter/seller identified: ${seller}.`
-        : 'Export invoice must identify the seller/exporter (4458 Sayılı Gümrük Kanunu Madde 168).',
-      sourceRefs: pass
-        ? []
-        : [{ docType: DocumentType.INVOICE, field: 'seller_name', value: null }],
+    if (hasValue(seller) && String(seller).trim().length > 2) {
+      return passResult(this.code, this.severity, `İhracatçı/satıcı belirtilmiş: ${seller}.`)
     }
+    return failOrReview(
+      this.code,
+      this.severity,
+      [invoice],
+      'İhracat faturası satıcı/ihracatçıyı tanımlamalı (4458 Sayılı Gümrük Kanunu Madde 168).',
+      'Satıcı/ihracatçı bilgisi güvenle okunamadı. Manuel kontrol gerekli.',
+      [{ docType: DocumentType.INVOICE, field: 'seller_name', value: null }],
+    )
   },
 }
 
-/** Export declaration must state export regime code (typically 10xx or 21xx series) */
+/** EXP-003 — İhracat beyannamesinde geçerli ihracat rejim kodu olmalı. */
 export const EXP_003: RuleDefinition = {
   code: 'EXP-003',
-  name: 'Export declaration must have a valid export regime code',
+  name: 'İhracat beyannamesinde geçerli ihracat rejim kodu olmalı',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.DECLARATION_OUTPUT],
 
@@ -84,28 +82,29 @@ export const EXP_003: RuleDefinition = {
     if (!snap?.regimeCode) return null
 
     const regime = String(snap.regimeCode).trim()
-    // Export regime codes: 10 (definitive), 11 (definitive + IPSS exit), 21 (temporary), 22 (re-export)
     const validExportPrefixes = ['10', '11', '21', '22', '23', '31']
     const pass = validExportPrefixes.some((prefix) => regime.startsWith(prefix))
 
-    return {
-      ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'WARN',
-      message: pass
-        ? `Export regime code "${regime}" is valid for export.`
-        : `Regime code "${regime}" does not appear to be an export regime. Expected codes starting with: ${validExportPrefixes.join(', ')} (Gümrük Yönetmeliği ihracat rejimleri).`,
-      sourceRefs: pass
-        ? []
-        : [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'regime_code', value: regime }],
+    if (pass) {
+      return passResult(
+        this.code,
+        this.severity,
+        `İhracat rejim kodu "${regime}" geçerli.`,
+      )
     }
+    return failResult(
+      this.code,
+      this.severity,
+      `Rejim kodu "${regime}" bir ihracat rejimi gibi görünmüyor. Beklenen ön ekler: ${validExportPrefixes.join(', ')} (Gümrük Yönetmeliği ihracat rejimleri).`,
+      [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'regime_code', value: regime }],
+    )
   },
 }
 
-/** Export invoice must specify country of origin (required for preferential origin) */
+/** EXP-004 — İhracat faturasında menşe ülke belirtilmeli (tercihli menşe için). */
 export const EXP_004: RuleDefinition = {
   code: 'EXP-004',
-  name: 'Export invoice should specify country of origin',
+  name: 'İhracat faturasında menşe ülke belirtilmeli',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.INVOICE],
 
@@ -116,26 +115,24 @@ export const EXP_004: RuleDefinition = {
     if (!invoice) return null
 
     const coo = invoice.data['country_of_origin']
-    const pass = Boolean(coo && String(coo).trim().length >= 2)
-
-    return {
-      ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'WARN',
-      message: pass
-        ? `Country of origin stated on invoice: ${coo}.`
-        : 'Country of origin is missing from the export invoice. Required for preferential tariff treatments and A.TR/EUR.1 origin declarations.',
-      sourceRefs: pass
-        ? []
-        : [{ docType: DocumentType.INVOICE, field: 'country_of_origin', value: null }],
+    if (hasValue(coo) && String(coo).trim().length >= 2) {
+      return passResult(this.code, this.severity, `Faturada menşe ülke belirtilmiş: ${coo}.`)
     }
+    return failOrReview(
+      this.code,
+      this.severity,
+      [invoice],
+      'İhracat faturasında menşe ülke eksik. Tercihli tarife ve A.TR/EUR.1 menşe beyanları için gereklidir.',
+      'Menşe ülke faturadan güvenle okunamadı. Manuel kontrol gerekli.',
+      [{ docType: DocumentType.INVOICE, field: 'country_of_origin', value: null }],
+    )
   },
 }
 
-/** Temporary export (regime 21) must have a loading instruction with return date intent */
+/** EXP-005 — Geçici ihracat (21/22) için yükleme talimatı olmalı. */
 export const EXP_005: RuleDefinition = {
   code: 'EXP-005',
-  name: 'Temporary export must include a loading instruction document',
+  name: 'Geçici ihracatta yükleme talimatı bulunmalı',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.DECLARATION_OUTPUT, DocumentType.LOADING_INSTRUCTION],
 
@@ -152,18 +149,15 @@ export const EXP_005: RuleDefinition = {
     const hasLoadingInstruction = ctx.documents.some(
       (d) => d.docType === DocumentType.LOADING_INSTRUCTION,
     )
-    const pass = hasLoadingInstruction
 
-    return {
-      ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'WARN',
-      message: pass
-        ? 'Loading instruction present for temporary export.'
-        : `Temporary export (regime ${regime}) should include a loading instruction. Ensures traceability and re-import compliance.`,
-      sourceRefs: pass
-        ? []
-        : [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'regime_code', value: regime }],
+    if (hasLoadingInstruction) {
+      return passResult(this.code, this.severity, 'Geçici ihracat için yükleme talimatı mevcut.')
     }
+    return failResult(
+      this.code,
+      this.severity,
+      `Geçici ihracat (rejim ${regime}) için yükleme talimatı eklenmeli. İzlenebilirlik ve geri-ithalat uyumu için gereklidir.`,
+      [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'regime_code', value: regime }],
+    )
   },
 }

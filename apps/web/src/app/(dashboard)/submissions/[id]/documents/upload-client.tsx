@@ -26,6 +26,7 @@ interface ExistingDocument {
   suggestedDocType: string | null
   suggestedDocTypeConfidence: number | null
   classificationReasoning: string | null
+  classificationSourceRefs: Array<{ field: string; value: string }>
   classificationValidatedAt: string | null
   isIgnored: boolean
   status: string
@@ -45,6 +46,7 @@ interface UploadedDoc {
   suggestedDocType: string | null
   suggestedDocTypeConfidence: number | null
   classificationReasoning: string | null
+  classificationSourceRefs: Array<{ field: string; value: string }>
   classificationValidatedAt: string | null
   isIgnored: boolean
   filename: string
@@ -80,6 +82,7 @@ type ClassificationResponse = {
     suggestedDocType: string
     confidence: number
     reasoning: string
+    sourceRefs: Array<{ field: string; value: string }>
     parties: Party[]
   }>
   clientMatches: ClientMatch[]
@@ -121,6 +124,15 @@ export default function DocumentUploadClient({
     documents.some((doc) => !doc.isIgnored && doc.docType === 'UNCLASSIFIED')
   )
   const canProcess = documents.length > 0 && !needsValidation
+  const nextAction = getNextAction({
+    documentCount: documents.length,
+    classificationStatus,
+    needsValidation,
+    canProcess,
+    classifying,
+    validating,
+    processing,
+  })
 
   async function uploadFile(file: File) {
     setUploading(true)
@@ -152,6 +164,7 @@ export default function DocumentUploadClient({
           suggestedDocType: null,
           suggestedDocTypeConfidence: null,
           classificationReasoning: null,
+          classificationSourceRefs: [],
           classificationValidatedAt: null,
           isIgnored: false,
         },
@@ -170,6 +183,7 @@ export default function DocumentUploadClient({
     for (const file of files) {
       await uploadFile(file)
     }
+    if (files.length > 0) await handleClassify()
   }
 
   async function handleClassify() {
@@ -212,6 +226,7 @@ export default function DocumentUploadClient({
           suggestedDocType: suggestion.suggestedDocType,
           suggestedDocTypeConfidence: suggestion.confidence,
           classificationReasoning: suggestion.reasoning,
+          classificationSourceRefs: suggestion.sourceRefs,
         }
       }))
     } catch (err) {
@@ -276,15 +291,39 @@ export default function DocumentUploadClient({
     }
   }
 
+  async function pollSubmissionStatus(): Promise<void> {
+    const maxAttempts = 120
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const res = await fetch(`/api/submissions/${submissionId}/status`)
+      if (!res.ok) {
+        throw new Error('İşlem durumu alınamadı')
+      }
+      const data = await res.json() as { status: string; job?: { errorMessage?: string | null } }
+      if (data.status === 'COMPLETED') {
+        router.push(`/submissions/${submissionId}`)
+        return
+      }
+      if (data.status === 'FAILED') {
+        throw new Error(data.job?.errorMessage ?? 'İşleme başarısız')
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+    throw new Error('İşlem zaman aşımına uğradı. Lütfen dosya detayından durumu kontrol edin.')
+  }
+
   async function handleProcess() {
     setProcessing(true)
     setProcessError(null)
 
     try {
       const res = await fetch(`/api/submissions/${submissionId}/process`, { method: 'POST' })
+      const data = await res.json() as { error?: string; async?: boolean }
       if (!res.ok) {
-        const data = await res.json() as { error?: string }
         throw new Error(data.error ?? 'İşleme başarısız')
+      }
+      if (res.status === 202 || data.async) {
+        await pollSubmissionStatus()
+        return
       }
       router.push(`/submissions/${submissionId}`)
     } catch (err) {
@@ -296,6 +335,36 @@ export default function DocumentUploadClient({
 
   return (
     <div className="max-w-4xl space-y-6">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Sıradaki adım</p>
+            <h2 className="mt-1 text-base font-semibold text-gray-900">{nextAction.title}</h2>
+            <p className="mt-1 text-sm text-gray-700">{nextAction.description}</p>
+            {nextAction.blockingReasons.length > 0 && (
+              <ul className="mt-2 space-y-1 text-sm text-blue-900">
+                {nextAction.blockingReasons.map((reason) => (
+                  <li key={reason}>• {reason}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              if (nextAction.action === 'upload') fileInputRef.current?.click()
+              if (nextAction.action === 'classify') void handleClassify()
+              if (nextAction.action === 'validate') void handleValidate()
+              if (nextAction.action === 'process') void handleProcess()
+            }}
+            disabled={nextAction.disabled}
+            className="inline-flex shrink-0 items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {nextAction.loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+            {nextAction.cta}
+          </button>
+        </div>
+      </div>
+
       <div className="rounded-lg border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-base font-semibold text-gray-900">Belgeleri Yükle</h2>
         <div
@@ -355,7 +424,7 @@ export default function DocumentUploadClient({
               className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {classifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SearchCheck className="mr-2 h-4 w-4" />}
-              {classifying ? 'Okunuyor...' : 'Azure + AI ile sınıflandır'}
+              {classifying ? 'Okunuyor...' : 'Tekrar oku ve sınıflandır'}
             </button>
           </div>
           <div className="divide-y divide-gray-50">
@@ -365,13 +434,29 @@ export default function DocumentUploadClient({
                   <FileText className="mt-1 h-5 w-5 text-gray-400" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">{doc.filename}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      {doc.suggestedDocType && (
+                        <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                          Öneri: {docTypeLabel(doc.suggestedDocType)}
+                        </span>
+                      )}
+                      {doc.suggestedDocTypeConfidence != null && (
+                        <span className={`rounded px-2 py-0.5 text-xs font-medium ${confidenceClass(doc.suggestedDocTypeConfidence)}`}>
+                          Güven %{Math.round(doc.suggestedDocTypeConfidence * 100)}
+                        </span>
+                      )}
+                    </div>
                     {doc.classificationReasoning && (
                       <p className="mt-1 text-xs text-gray-500">{doc.classificationReasoning}</p>
                     )}
-                    {doc.suggestedDocTypeConfidence != null && (
-                      <p className="mt-1 text-xs text-blue-700">
-                        Öneri güveni: %{Math.round(doc.suggestedDocTypeConfidence * 100)}
-                      </p>
+                    {doc.classificationSourceRefs.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {doc.classificationSourceRefs.slice(0, 4).map((ref, i) => (
+                          <span key={`${ref.field}-${i}`} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                            {ref.field}: {ref.value}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <select
@@ -443,6 +528,11 @@ export default function DocumentUploadClient({
                 ))}
                 <option value="create">Yeni müşteri kaydı oluştur</option>
               </select>
+              {clientMatches[0] && (
+                <p className="mt-1 text-xs text-gray-500">
+                  En güçlü eşleşme: {clientMatches[0].displayName} · {clientMatchLabel(clientMatches[0].matchType)} · güven %{Math.round(clientMatches[0].confidence * 100)}
+                </p>
+              )}
             </div>
           </div>
 
@@ -523,4 +613,90 @@ function StatusIcon({ status, validated }: { status: string; validated: boolean 
   if (status === 'PROCESSING') return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
   if (validated) return <CheckCircle className="h-5 w-5 text-blue-500" />
   return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />
+}
+
+function getNextAction(params: {
+  documentCount: number
+  classificationStatus: string
+  needsValidation: boolean
+  canProcess: boolean
+  classifying: boolean
+  validating: boolean
+  processing: boolean
+}): {
+  title: string
+  description: string
+  cta: string
+  action: 'upload' | 'classify' | 'validate' | 'process'
+  disabled: boolean
+  loading: boolean
+  blockingReasons: string[]
+} {
+  if (params.documentCount === 0) {
+    return {
+      title: 'Belgeleri yükleyin',
+      description: 'Belgeleri yükleyin; sistem belge türünü ve ithalat/ihracat yönünü otomatik önerecek.',
+      cta: 'Belge seç',
+      action: 'upload',
+      disabled: false,
+      loading: false,
+      blockingReasons: [],
+    }
+  }
+
+  if (params.classificationStatus !== 'AWAITING_VALIDATION' && params.classificationStatus !== 'VALIDATED') {
+    return {
+      title: 'Belgeleri sistem okusun',
+      description: 'Sistem belge türünü, işlem yönünü ve müşteri eşleşmesini önerecek.',
+      cta: params.classifying ? 'Okunuyor' : 'Oku ve sınıflandır',
+      action: 'classify',
+      disabled: params.classifying,
+      loading: params.classifying,
+      blockingReasons: [],
+    }
+  }
+
+  if (params.needsValidation) {
+    return {
+      title: 'Önerileri doğrulayın',
+      description: 'İşlem yönü, belge türleri ve müşteri eşleşmesi kullanıcı tarafından onaylanmalı.',
+      cta: params.validating ? 'Kaydediliyor' : 'Doğrulamayı kaydet',
+      action: 'validate',
+      disabled: params.validating,
+      loading: params.validating,
+      blockingReasons: [
+        'İthalat/ihracat yönü seçili olmalı.',
+        'Yoksayılmayan her belge için belge türü doğrulanmalı.',
+      ],
+    }
+  }
+
+  return {
+    title: 'Analizi başlatın',
+    description: 'Doğrulanan belgeler üzerinden okuma, kurallar, yapay zeka kural kontrolü ve uzman incelemesi çalışacak.',
+    cta: params.processing ? 'İşleniyor' : 'Analizi başlat',
+    action: 'process',
+    disabled: params.processing || !params.canProcess,
+    loading: params.processing,
+    blockingReasons: [],
+  }
+}
+
+function docTypeLabel(docType: string): string {
+  return DOC_TYPES.find((type) => type.value === docType)?.label ?? docType
+}
+
+function confidenceClass(confidence: number): string {
+  if (confidence >= 0.8) return 'bg-green-50 text-green-700'
+  if (confidence >= 0.6) return 'bg-yellow-50 text-yellow-700'
+  return 'bg-red-50 text-red-700'
+}
+
+function clientMatchLabel(matchType: string): string {
+  const map: Record<string, string> = {
+    TAX_ID: 'vergi numarası eşleşti',
+    NAME_ADDRESS: 'ad ve adres eşleşti',
+    NAME: 'ad benzerliği',
+  }
+  return map[matchType] ?? matchType
 }

@@ -1,9 +1,10 @@
-import { getAuthenticatedUser } from '@/lib/auth'
+import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
 import { CheckCircle, XCircle, AlertCircle, FileText, Globe } from 'lucide-react'
+import { getLegalContextReadiness, isExpertReviewEnabled } from '@/lib/expert-review'
 
 function VerificationBadge({ status }: { status: string }) {
   if (status === 'OFFICIAL_SNAPSHOT') {
@@ -41,20 +42,24 @@ function VerificationBadge({ status }: { status: string }) {
 export default async function AdminSourcesPage() {
   const user = await getAuthenticatedUser()
 
-  if (!['TENANT_MANAGER', 'PLATFORM_ADMIN'].includes(user.role)) {
+  if (!canManageTenant(user)) {
     redirect('/dashboard')
   }
 
-  const sources = await prisma.sourceDocument.findMany({
-    orderBy: [{ verificationStatus: 'asc' }, { title: 'asc' }],
-    include: {
-      _count: { select: { regulationChunks: true } },
-    },
-  })
+  const [sources, legalContextReadiness] = await Promise.all([
+    prisma.sourceDocument.findMany({
+      orderBy: [{ verificationStatus: 'asc' }, { title: 'asc' }],
+      include: {
+        _count: { select: { regulationChunks: true } },
+      },
+    }),
+    getLegalContextReadiness(),
+  ])
 
   const snapshotCount = sources.filter((s) => s.verificationStatus === 'OFFICIAL_SNAPSHOT').length
   const failedCount = sources.filter((s) => s.verificationStatus === 'FETCH_FAILED').length
   const totalChunks = sources.reduce((sum, s) => sum + s._count.regulationChunks, 0)
+  const expertReviewEnabled = isExpertReviewEnabled()
 
   return (
     <div className="p-8">
@@ -91,6 +96,15 @@ export default async function AdminSourcesPage() {
           Ağ bağlantısı düzelince{' '}
           <code className="rounded bg-yellow-100 px-1 text-xs">pnpm --filter @gumrukyz/db ingest-regulations</code>{' '}
           komutunu yeniden çalıştırın.
+        </div>
+      )}
+
+      {expertReviewEnabled && legalContextReadiness.missingRequiredSources.length > 0 && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <span className="font-medium">Yapay zeka uzman incelemesi mevzuat bağlamı eksik.</span>{' '}
+          Eksik veya embedding olmayan kaynaklar: {legalContextReadiness.missingRequiredSources.join(', ')}.{' '}
+          <code className="rounded bg-red-100 px-1 text-xs">pnpm db:bootstrap-regulations</code>{' '}
+          komutunu çalıştırın.
         </div>
       )}
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { prisma, Prisma } from '@gumrukyz/db'
 import { z } from 'zod'
 import { FINAL_DOC_TYPES, normalizePartyName, normalizeTaxId } from '@/lib/classification'
+import { requireApiUser } from '@/lib/auth'
 
 const DocumentDecisionSchema = z.object({
   id: z.string().uuid(),
@@ -35,33 +35,28 @@ interface Params {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id: submissionId } = await params
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const user = await prisma.user.findUnique({
-      where: { clerkUserId: userId },
-      include: { tenant: true },
-    })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
     const body = await req.json() as unknown
     const parsed = ClassificationValidationSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+      return NextResponse.json({ error: 'Sınıflandırma doğrulama bilgileri geçersiz' }, { status: 400 })
     }
 
     const submission = await prisma.submission.findFirst({
       where: { id: submissionId, tenantId: user.tenantId },
       include: { documents: true },
     })
-    if (!submission) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
+    if (!submission) return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 404 })
 
     if (
       submission.dataClassification === 'REAL' &&
       !user.tenant.dataClassificationAllowed.includes('REAL')
     ) {
       return NextResponse.json(
-        { error: 'REAL client data is not allowed for this tenant' },
+        { error: 'Bu tenant gerçek dosya oluşturmak için yapılandırılmamış' },
         { status: 403 },
       )
     }
@@ -69,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const documentIds = new Set(submission.documents.map((document) => document.id))
     const invalidDoc = parsed.data.documents.find((document) => !documentIds.has(document.id))
     if (invalidDoc) {
-      return NextResponse.json({ error: 'Document does not belong to this submission' }, { status: 400 })
+      return NextResponse.json({ error: 'Belge bu dosyaya ait değil' }, { status: 400 })
     }
 
     const brokerClientId = await resolveBrokerClientId({
@@ -124,10 +119,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     })
   } catch (err) {
     if (err instanceof Error && err.message === 'Broker client not found') {
-      return NextResponse.json({ error: err.message }, { status: 400 })
+      return NextResponse.json({ error: 'Müşteri kaydı bulunamadı' }, { status: 400 })
     }
     console.error('PATCH /api/submissions/[id]/classification error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }
 

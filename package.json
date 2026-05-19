@@ -11,8 +11,13 @@
     "db:migrate": "pnpm --filter @gumrukyz/db migrate:dev",
     "db:push": "pnpm --filter @gumrukyz/db push",
     "db:seed": "pnpm --filter @gumrukyz/db seed",
+    "db:bootstrap-regulations": "pnpm --filter @gumrukyz/db bootstrap-regulations",
     "db:studio": "pnpm --filter @gumrukyz/db studio",
     "rules:test": "pnpm --filter @gumrukyz/rules test:fixtures",
+    "test:urgent-fixes": "node scripts/verify-urgent-fixes.mjs",
+    "deploy:prod": "vercel deploy --prod --yes",
+    "smoke:production": "node scripts/smoke-production.mjs",
+    "verify:production-env": "node scripts/verify-production-env.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore"
   },
   "devDependencies": {
@@ -35,6 +40,7 @@
       "prisma",
       "esbuild",
       "lightningcss",
+      "@clerk/shared",
       "@next/swc-darwin-arm64",
       "@next/swc-linux-x64-gnu"
     ]

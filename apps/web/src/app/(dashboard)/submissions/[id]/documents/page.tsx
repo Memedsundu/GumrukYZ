@@ -28,7 +28,7 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
     <div className="p-8">
       <div className="mb-8">
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-          <span>Dashboard</span>
+          <span>Kontrol paneli</span>
           <span>/</span>
           <span>{submission.title}</span>
           <span>/</span>
@@ -54,6 +54,9 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
           suggestedDocType: d.suggestedDocType,
           suggestedDocTypeConfidence: d.suggestedDocTypeConfidence,
           classificationReasoning: d.classificationReasoning,
+          classificationSourceRefs: Array.isArray(d.classificationSourceRefsJson)
+            ? d.classificationSourceRefsJson as Array<{ field: string; value: string }>
+            : [],
           classificationValidatedAt: d.classificationValidatedAt?.toISOString() ?? null,
           isIgnored: d.isIgnored,
           status: d.status,

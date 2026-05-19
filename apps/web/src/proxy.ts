@@ -6,6 +6,13 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
+  '/api/health',
+])
+
+const isOrgOptionalRoute = createRouteMatcher([
+  '/onboarding(.*)',
+  '/pilot-consent(.*)',
+  '/api/pilot-consent',
 ])
 
 // Simple in-process rate limiter (per-instance; no Redis needed for MVP).
@@ -53,6 +60,15 @@ function maybeCleanup() {
 }
 
 export default clerkMiddleware(async (auth, request: NextRequest) => {
+  const { pathname } = request.nextUrl
+
+  // Root URL: explicit redirects (avoids 404 when Clerk protect runs before app/page)
+  if (pathname === '/') {
+    const { userId, orgId } = await auth()
+    const dest = !userId ? '/sign-in' : !orgId ? '/onboarding' : '/dashboard'
+    return NextResponse.redirect(new URL(dest, request.url))
+  }
+
   // Rate limiting for POST mutation endpoints
   if (request.method === 'POST') {
     const { pathname } = request.nextUrl
@@ -67,7 +83,7 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
 
       if (!checkRateLimit(key, limit)) {
         return NextResponse.json(
-          { error: 'Too many requests. Please slow down.' },
+          { error: 'Çok fazla istek gönderildi. Lütfen biraz bekleyip tekrar deneyin.' },
           {
             status: 429,
             headers: {
@@ -81,8 +97,21 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     }
   }
 
+  if (isOrgOptionalRoute(request)) {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.redirect(new URL('/sign-in', request.url))
+    }
+    return
+  }
+
   if (!isPublicRoute(request)) {
     await auth.protect()
+
+    const { orgId } = await auth()
+    if (!orgId) {
+      return NextResponse.redirect(new URL('/onboarding', request.url))
+    }
   }
 })
 

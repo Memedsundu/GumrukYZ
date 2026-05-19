@@ -24,3 +24,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.cl-footer > :not(.cl-footerAction) {
+  display: none !important;
+}

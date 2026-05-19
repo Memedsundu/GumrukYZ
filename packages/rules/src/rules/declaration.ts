@@ -1,70 +1,87 @@
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
-import type { RuleDefinition, SubmissionContext, RuleEvaluationResult } from '../types.js'
+import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
+import {
+  failOrReview,
+  failResult,
+  findDocs,
+  hasValue,
+  parseFlexibleDate,
+  passResult,
+} from '../helpers.js'
 
-function pass(code: string, severity: RuleSeverity, msg: string): RuleEvaluationResult {
-  return { ruleCode: code, severity, result: 'PASS', message: msg, sourceRefs: [] }
-}
-
-function fail(
-  code: string,
-  severity: RuleSeverity,
-  msg: string,
-  refs: RuleEvaluationResult['sourceRefs'] = [],
-): RuleEvaluationResult {
-  return {
-    ruleCode: code,
-    severity,
-    result: severity === RuleSeverity.ERROR ? 'FAIL' : 'WARN',
-    message: msg,
-    sourceRefs: refs,
+function normalizeCountryCode(raw: unknown): string | null {
+  const value = String(raw ?? '').trim()
+  if (!value) return null
+  const upper = value.toUpperCase().replace(/\./g, '').trim()
+  if (/^[A-Z]{2}$/.test(upper)) return upper
+  const normalized = upper
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[İIı]/g, 'I')
+    .replace(/[^A-Z]+/g, ' ')
+    .trim()
+  const aliases: Record<string, string> = {
+    TURKIYE: 'TR',
+    TURKEY: 'TR',
+    'REPUBLIC OF TURKEY': 'TR',
+    'TURKIYE CUMHURIYETI': 'TR',
+    POLONYA: 'PL',
+    POLAND: 'PL',
+    ALMANYA: 'DE',
+    GERMANY: 'DE',
+    FRANSA: 'FR',
+    FRANCE: 'FR',
+    ITALYA: 'IT',
+    ITALY: 'IT',
+    ROMANYA: 'RO',
+    ROMANIA: 'RO',
+    BULGARISTAN: 'BG',
+    BULGARIA: 'BG',
   }
+  return aliases[normalized] ?? null
 }
 
-function parseDocumentDate(raw: unknown): Date | null {
-  if (!raw) return null
-  const value = String(raw).trim()
-  const dmy = value.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/)
-  if (dmy) {
-    const date = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
-    return isNaN(date.getTime()) ? null : date
-  }
-  const parsed = new Date(value)
-  return isNaN(parsed.getTime()) ? null : parsed
-}
-
-/** DECL-001 – Rejim kodu (regime code) must be a 4-digit numeric string. */
+/** DECL-001 — Rejim kodu 4 haneli sayısal olmalı. */
 export const DECL_001: RuleDefinition = {
   code: 'DECL-001',
-  name: 'Regime code must be 4-digit numeric',
+  name: 'Rejim kodu 4 haneli sayısal olmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.DECLARATION_OUTPUT],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const snap = ctx.declarationSnapshot
     if (!snap) return null
+    const declarations = findDocs(ctx, DocumentType.DECLARATION_OUTPUT)
     if (!snap.regimeCode) {
-      return fail(
+      return failOrReview(
         this.code,
         this.severity,
-        'Regime code (rejim kodu) is missing on the declaration. Field: regime_code.',
-        [{ field: 'regime_code' }],
+        declarations,
+        'Beyannamede rejim kodu (rejim_kodu) eksik. Alan: regime_code.',
+        'Beyannameden rejim kodu güvenle okunamadı. Manuel kontrol gerekli.',
+        [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'regime_code' }],
       )
     }
-    const valid = /^\d{4}$/.test(snap.regimeCode)
-    if (valid) return pass(this.code, this.severity, `Regime code "${snap.regimeCode}" is a valid 4-digit code.`)
-    return fail(
+    if (/^\d{4}$/.test(snap.regimeCode)) {
+      return passResult(
+        this.code,
+        this.severity,
+        `Rejim kodu "${snap.regimeCode}" geçerli 4 haneli kod.`,
+      )
+    }
+    return failResult(
       this.code,
       this.severity,
-      `Regime code "${snap.regimeCode}" is not a valid 4-digit numeric code. Field: regime_code.`,
+      `Rejim kodu "${snap.regimeCode}" 4 haneli sayısal kod değil. Alan: regime_code.`,
       [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'regime_code', value: snap.regimeCode }],
     )
   },
 }
 
-/** DECL-002 – Country of origin must be a 2-letter ISO 3166-1 alpha-2 code. */
+/** DECL-002 — Menşe ülke ISO 3166-1 alpha-2 koduna uygun olmalı. */
 export const DECL_002: RuleDefinition = {
   code: 'DECL-002',
-  name: 'Country of origin must be present and valid',
+  name: 'Menşe ülke geçerli olmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.DECLARATION_OUTPUT, DocumentType.INVOICE],
 
@@ -72,58 +89,64 @@ export const DECL_002: RuleDefinition = {
     const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
     if (!invoice) return null
     const country = invoice.data['country_of_origin']
-    if (!country) {
-      return fail(
+    if (!hasValue(country)) {
+      return failOrReview(
         this.code,
         this.severity,
-        'Country of origin is missing on the invoice. Field: country_of_origin.',
+        [invoice],
+        'Faturada menşe ülke eksik. Alan: country_of_origin.',
+        'Faturadan menşe ülke güvenle okunamadı. Manuel kontrol gerekli.',
         [{ docType: DocumentType.INVOICE, field: 'country_of_origin' }],
       )
     }
-    const valid = /^[A-Z]{2}$/.test(String(country).toUpperCase().trim())
-    if (valid) return pass(this.code, this.severity, `Country of origin "${country}" is valid.`)
-    return fail(
+    const normalized = normalizeCountryCode(country)
+    if (normalized) {
+      return passResult(
+        this.code,
+        this.severity,
+        `Menşe ülke "${country}" geçerli (${normalized}).`,
+      )
+    }
+    return failResult(
       this.code,
       this.severity,
-      `Country of origin "${country}" is not a valid ISO 3166-1 alpha-2 code. Field: country_of_origin.`,
+      `Menşe ülke "${country}" ISO 3166-1 alpha-2 koduna normalize edilemedi. Alan: country_of_origin.`,
       [{ docType: DocumentType.INVOICE, field: 'country_of_origin', value: country }],
     )
   },
 }
 
-/** DECL-003 – Exporter/importer tax identification number must not be blank. */
+/** DECL-003 — İhracatçı/ithalatçı vergi numarası bulunmalı. */
 export const DECL_003: RuleDefinition = {
   code: 'DECL-003',
-  name: 'Exporter/importer tax ID must be present',
+  name: 'İhracatçı/ithalatçı vergi numarası bulunmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.DECLARATION_OUTPUT],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const declarations = ctx.documents.filter((d) => d.docType === DocumentType.DECLARATION_OUTPUT)
+    const declarations = findDocs(ctx, DocumentType.DECLARATION_OUTPUT)
     if (declarations.length === 0) return null
 
     const taxField = ctx.tradeFlow === 'EXPORT' ? 'exporter_tax_id' : 'importer_tax_id'
-    const missing = declarations.filter(
-      (d) =>
-        !d.data[taxField] ||
-        String(d.data[taxField]).trim() === '',
-    )
+    const missing = declarations.filter((d) => !hasValue(d.data[taxField]))
     if (missing.length === 0) {
-      return pass(this.code, this.severity, `${taxField} is present on the declaration.`)
+      return passResult(this.code, this.severity, `${taxField} beyannamede mevcut.`)
     }
-    return fail(
+    return failOrReview(
       this.code,
       this.severity,
-      `Importer/exporter tax identification number is missing on the declaration. Field: ${taxField}.`,
+      missing,
+      `Beyannamede ihracatçı/ithalatçı vergi numarası eksik. Alan: ${taxField}.`,
+      'Vergi numarası beyannameden güvenle okunamadı. Manuel kontrol gerekli.',
       [{ docType: DocumentType.DECLARATION_OUTPUT, field: taxField }],
     )
   },
 }
 
-/** DECL-004 – Declaration date must not be in the future. */
+/** DECL-004 — Beyanname tarihi gelecekte olamaz. */
 export const DECL_004: RuleDefinition = {
   code: 'DECL-004',
-  name: 'Declaration date must not be in the future',
+  name: 'Beyanname tarihi gelecekte olamaz',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.DECLARATION_OUTPUT],
 
@@ -131,49 +154,48 @@ export const DECL_004: RuleDefinition = {
     const snap = ctx.declarationSnapshot
     if (!snap) return null
 
-    const declarations = ctx.documents.filter((d) => d.docType === DocumentType.DECLARATION_OUTPUT)
+    const declarations = findDocs(ctx, DocumentType.DECLARATION_OUTPUT)
     if (declarations.length === 0) return null
 
-    const futureDecls = declarations.filter((d) => {
-      const parsed = parseDocumentDate(d.data['declaration_date'])
-      return parsed ? parsed > new Date() : false
+    const today = new Date()
+    const future = declarations.filter((d) => {
+      const parsed = parseFlexibleDate(d.data['declaration_date'])
+      return parsed ? parsed > today : false
     })
 
-    if (futureDecls.length === 0) {
-      return pass(this.code, this.severity, 'Declaration date is present and not in the future.')
+    if (future.length === 0) {
+      return passResult(this.code, this.severity, 'Beyanname tarihi mevcut ve gelecekte değil.')
     }
-    return fail(
+    return failResult(
       this.code,
       this.severity,
-      'Declaration date is set in the future, which is not allowed. Field: declaration_date.',
+      'Beyanname tarihi gelecekte olarak işaretlenmiş. Alan: declaration_date.',
       [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'declaration_date' }],
     )
   },
 }
 
-/** DECL-005 – Customs office code must be present on the declaration. */
+/** DECL-005 — Gümrük idaresi kodu bulunmalı. */
 export const DECL_005: RuleDefinition = {
   code: 'DECL-005',
-  name: 'Customs office code must be present',
+  name: 'Gümrük idaresi kodu bulunmalı',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.DECLARATION_OUTPUT],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const declarations = ctx.documents.filter((d) => d.docType === DocumentType.DECLARATION_OUTPUT)
+    const declarations = findDocs(ctx, DocumentType.DECLARATION_OUTPUT)
     if (declarations.length === 0) return null
 
-    const missing = declarations.filter(
-      (d) =>
-        !d.data['customs_office_code'] ||
-        String(d.data['customs_office_code']).trim() === '',
-    )
+    const missing = declarations.filter((d) => !hasValue(d.data['customs_office_code']))
     if (missing.length === 0) {
-      return pass(this.code, this.severity, 'Customs office code is present.')
+      return passResult(this.code, this.severity, 'Gümrük idaresi kodu mevcut.')
     }
-    return fail(
+    return failOrReview(
       this.code,
       this.severity,
-      'Customs office code is missing on the declaration. Field: customs_office_code.',
+      missing,
+      'Beyannamede gümrük idaresi kodu eksik. Alan: customs_office_code.',
+      'Gümrük idaresi kodu beyannameden güvenle okunamadı. Manuel kontrol gerekli.',
       [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'customs_office_code' }],
     )
   },

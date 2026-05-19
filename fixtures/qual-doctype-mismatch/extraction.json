@@ -1,0 +1,25 @@
+{
+  "_fixture": "qual-doctype-mismatch",
+  "_description": "User uploaded a packing-list-looking document but classified it as INVOICE — QUAL-002 should fire",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.88,
+      "data": {
+        "shipper": "Acme Tools GmbH",
+        "consignee": "Türk Elektronik A.Ş.",
+        "package_count": 12,
+        "gross_weight": 850,
+        "net_weight": 720,
+        "transport_mode": "ROAD"
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "QUAL-002": "REVIEW_NEEDED"
+  },
+  "_notes": "INV-* rules will FAIL because invoice fields are missing — but QUAL-002 makes the underlying cause clear: doc was misclassified."
+}

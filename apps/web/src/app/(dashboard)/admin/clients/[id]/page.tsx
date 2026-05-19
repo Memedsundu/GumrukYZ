@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Trash2 } from 'lucide-react'
@@ -27,21 +27,35 @@ export default function EditClientPage() {
   const [error, setError] = useState<string | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
-  const loadClient = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/clients/${id}`)
-      if (!res.ok) { setFetchError('Müşteri bulunamadı'); return }
-      const data = await res.json() as { client: Client }
-      setClient(data.client)
-      setDisplayName(data.client.displayName)
-      setTaxId(data.client.taxId ?? '')
-      setCountry(data.client.country ?? 'TR')
-    } catch {
-      setFetchError('Müşteri yüklenemedi')
+  useEffect(() => {
+    let active = true
+
+    async function loadClient() {
+      try {
+        const res = await fetch(`/api/clients/${id}`)
+        if (!active) return
+        if (!res.ok) {
+          setFetchError('Müşteri bulunamadı')
+          return
+        }
+
+        const data = await res.json() as { client: Client }
+        if (!active) return
+        setClient(data.client)
+        setDisplayName(data.client.displayName)
+        setTaxId(data.client.taxId ?? '')
+        setCountry(data.client.country ?? 'TR')
+      } catch {
+        if (active) setFetchError('Müşteri yüklenemedi')
+      }
+    }
+
+    void loadClient()
+
+    return () => {
+      active = false
     }
   }, [id])
-
-  useEffect(() => { loadClient() }, [loadClient])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

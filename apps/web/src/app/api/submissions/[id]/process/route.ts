@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
-import { prisma } from '@gumrukyz/db'
+import { prisma, Prisma } from '@gumrukyz/db'
 import { processSubmission } from '@/lib/processing'
+import { requireApiUser } from '@/lib/auth'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -15,14 +15,46 @@ function isTriggerEnabled(): boolean {
   return Boolean(process.env['TRIGGER_SECRET_KEY'])
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+const BLOCKED_PROCESSING_STATUSES = [
+  'CLASSIFYING',
+  'EXTRACTING',
+  'NORMALIZING',
+  'RUNNING_RULES',
+  'AI_RULE_VALIDATING',
+  'EXPERT_REVIEWING',
+  'GENERATING_REPORT',
+]
+
+const PROCESSABLE_STATUSES = ['UPLOADED', 'COMPLETED', 'FAILED']
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+}
+
+async function failClaimedJob(submissionId: string, jobId: string, errorMessage: string) {
+  await prisma.$transaction([
+    prisma.processingJob.update({
+      where: { id: jobId },
+      data: {
+        status: 'FAILED',
+        currentStep: 'FAILED',
+        errorMessage,
+        completedAt: new Date(),
+      },
+    }),
+    prisma.submission.update({
+      where: { id: submissionId },
+      data: { status: 'FAILED' },
+    }),
+  ]).catch(() => {})
+}
+
+export async function POST(_req: NextRequest, { params }: Params) {
   try {
     const { id: submissionId } = await params
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const user = await prisma.user.findUnique({ where: { clerkUserId: userId } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
     const submission = await prisma.submission.findFirst({
       where: { id: submissionId, tenantId: user.tenantId },
@@ -32,14 +64,14 @@ export async function POST(req: NextRequest, { params }: Params) {
         },
       },
     })
-    if (!submission) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
+    if (!submission) return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 404 })
 
     if (submission.documents.length === 0) {
-      return NextResponse.json({ error: 'No documents uploaded yet' }, { status: 400 })
+      return NextResponse.json({ error: 'Henüz belge yüklenmedi' }, { status: 400 })
     }
     if (submission.tradeFlow !== 'IMPORT' && submission.tradeFlow !== 'EXPORT') {
       return NextResponse.json(
-        { error: 'Import/export direction must be validated before processing' },
+        { error: 'İşleme başlamadan önce ithalat/ihracat yönü doğrulanmalı' },
         { status: 409 },
       )
     }
@@ -51,41 +83,75 @@ export async function POST(req: NextRequest, { params }: Params) {
     )
     if (unvalidatedDocuments.length > 0 || submission.classificationStatus !== 'VALIDATED') {
       return NextResponse.json(
-        { error: 'Document classification must be validated before processing' },
+        { error: 'İşleme başlamadan önce belge sınıflandırması doğrulanmalı' },
         { status: 409 },
       )
     }
 
-    const blockedStatuses = ['CLASSIFYING', 'EXTRACTING', 'NORMALIZING', 'RUNNING_RULES', 'GENERATING_REPORT']
-    if (blockedStatuses.includes(submission.status)) {
-      return NextResponse.json({ error: 'Processing already in progress' }, { status: 409 })
+    if (BLOCKED_PROCESSING_STATUSES.includes(submission.status)) {
+      return NextResponse.json({ error: 'İşlem zaten devam ediyor' }, { status: 409 })
+    }
+    if (!PROCESSABLE_STATUSES.includes(submission.status)) {
+      return NextResponse.json(
+        { error: `Dosya bu durumdan işlenemez: ${submission.status}` },
+        { status: 409 },
+      )
     }
 
-    // Create processing job record
-    const job = await prisma.processingJob.create({
-      data: {
-        submissionId,
-        tenantId: user.tenantId,
-        status: 'CLASSIFYING',
-        currentStep: 'CLASSIFYING',
-        startedAt: new Date(),
-      },
+    const job = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.submission.updateMany({
+        where: {
+          id: submissionId,
+          tenantId: user.tenantId,
+          status: { in: PROCESSABLE_STATUSES },
+          classificationStatus: 'VALIDATED',
+          tradeFlow: { in: ['IMPORT', 'EXPORT'] },
+        },
+        data: { status: 'CLASSIFYING' },
+      })
+
+      if (claimed.count !== 1) return null
+
+      return tx.processingJob.create({
+        data: {
+          submissionId,
+          tenantId: user.tenantId,
+          status: 'CLASSIFYING',
+          currentStep: 'CLASSIFYING',
+          startedAt: new Date(),
+        },
+      })
+    }).catch((claimErr: unknown) => {
+      if (isUniqueConstraintError(claimErr)) return null
+      throw claimErr
     })
 
-    await prisma.submission.update({
-      where: { id: submissionId },
-      data: { status: 'CLASSIFYING' },
-    })
+    if (!job) {
+      return NextResponse.json({ error: 'İşlem zaten devam ediyor' }, { status: 409 })
+    }
 
     if (isTriggerEnabled()) {
       // Durable background execution via Trigger.dev — survives Vercel timeouts.
       // Dynamic import ensures the SDK is only loaded when TRIGGER_SECRET_KEY is set.
-      const { tasks } = await import('@trigger.dev/sdk/v3')
-      const handle = await tasks.trigger('process-submission', {
-        submissionId,
-        tenantId: user.tenantId,
-        jobId: job.id,
-      })
+      let handle: { id: string }
+      try {
+        const { tasks } = await import('@trigger.dev/sdk/v3')
+        handle = await tasks.trigger('process-submission', {
+          submissionId,
+          tenantId: user.tenantId,
+          jobId: job.id,
+        })
+        await prisma.processingJob.update({
+          where: { id: job.id },
+          data: { triggerJobId: handle.id },
+        })
+      } catch (triggerErr) {
+        const errorMessage = triggerErr instanceof Error
+          ? triggerErr.message
+          : 'İşleme işi başlatılamadı'
+        await failClaimedJob(submissionId, job.id, errorMessage)
+        throw triggerErr
+      }
 
       return NextResponse.json(
         { jobId: job.id, triggerRunId: handle.id, async: true },
@@ -113,6 +179,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     )
   } catch (err) {
     console.error('POST /api/submissions/[id]/process error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }

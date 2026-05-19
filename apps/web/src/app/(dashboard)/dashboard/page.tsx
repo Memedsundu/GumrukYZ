@@ -22,7 +22,18 @@ export default async function DashboardPage() {
     completed: submissions.filter((s) => s.status === 'COMPLETED').length,
     failed: submissions.filter((s) => s.status === 'FAILED').length,
     pending: submissions.filter((s) =>
-      ['PENDING', 'UPLOADED', 'CLASSIFYING', 'AWAITING_VALIDATION', 'EXTRACTING', 'NORMALIZING', 'RUNNING_RULES', 'GENERATING_REPORT'].includes(s.status),
+      [
+        'PENDING',
+        'UPLOADED',
+        'CLASSIFYING',
+        'AWAITING_VALIDATION',
+        'EXTRACTING',
+        'NORMALIZING',
+        'RUNNING_RULES',
+        'AI_RULE_VALIDATING',
+        'EXPERT_REVIEWING',
+        'GENERATING_REPORT',
+      ].includes(s.status),
     ).length,
   }
 
@@ -30,7 +41,7 @@ export default async function DashboardPage() {
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Kontrol paneli</h1>
           <p className="mt-1 text-sm text-gray-500">
             {user.tenant.name} — Aktif dosyalar ve son analizler
           </p>
@@ -40,7 +51,7 @@ export default async function DashboardPage() {
           className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
           <Plus className="mr-2 h-4 w-4" />
-          Yeni Dosya
+          Yeni dosya
         </Link>
       </div>
 
@@ -50,7 +61,7 @@ export default async function DashboardPage() {
           <div className="flex items-center">
             <FileText className="h-8 w-8 text-blue-500" />
             <div className="ml-4">
-              <p className="text-sm text-gray-500">Toplam Dosya</p>
+              <p className="text-sm text-gray-500">Toplam dosya</p>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
           </div>
@@ -87,7 +98,7 @@ export default async function DashboardPage() {
       {/* Submissions list */}
       <div className="rounded-lg border border-gray-200 bg-white">
         <div className="border-b border-gray-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-gray-900">Son Dosyalar</h2>
+          <h2 className="text-base font-semibold text-gray-900">Son dosyalar</h2>
         </div>
         {submissions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
@@ -194,6 +205,8 @@ function StatusBadge({ status }: { status: string }) {
     EXTRACTING: { label: 'Çıkarılıyor', className: 'bg-blue-100 text-blue-600' },
     NORMALIZING: { label: 'Normalleştiriliyor', className: 'bg-blue-100 text-blue-600' },
     RUNNING_RULES: { label: 'Kural Çalışıyor', className: 'bg-yellow-100 text-yellow-600' },
+    AI_RULE_VALIDATING: { label: 'Yapay zeka kural kontrolü', className: 'bg-purple-100 text-purple-700' },
+    EXPERT_REVIEWING: { label: 'Yapay zeka uzman incelemesi', className: 'bg-indigo-100 text-indigo-700' },
     GENERATING_REPORT: { label: 'Rapor Üretiliyor', className: 'bg-yellow-100 text-yellow-600' },
     COMPLETED: { label: 'Tamamlandı', className: 'bg-green-100 text-green-600' },
     FAILED: { label: 'Başarısız', className: 'bg-red-100 text-red-600' },

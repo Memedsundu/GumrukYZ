@@ -1,4 +1,4 @@
-import { getAuthenticatedUser } from '@/lib/auth'
+import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { Activity, TrendingUp, AlertCircle, DollarSign } from 'lucide-react'
@@ -32,7 +32,7 @@ function formatMs(ms: number | null): string {
 export default async function ObservabilityPage() {
   const user = await getAuthenticatedUser()
 
-  if (!['TENANT_MANAGER', 'PLATFORM_ADMIN'].includes(user.role)) {
+  if (!canManageTenant(user)) {
     redirect('/dashboard')
   }
 
@@ -104,7 +104,7 @@ export default async function ObservabilityPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Sağlayıcı Takibi</h1>
         <p className="mt-1 text-sm text-gray-500">
-          AI sağlayıcıları ve işlem maliyetleri. Gerçek zamanlı veriler.
+          Yapay zeka sağlayıcıları ve işlem maliyetleri. Gerçek zamanlı veriler.
         </p>
       </div>
 

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@gumrukyz/db'
 import { z } from 'zod'
+import { canManageTenant, requireApiUser } from '@/lib/auth'
 
 const OverrideSchema = z.object({
-  reason: z.string().min(10, 'Reason must be at least 10 characters').max(2000),
+  reason: z.string().min(10, 'Neden en az 10 karakter olmalı').max(2000),
 })
 
 interface Params {
@@ -14,30 +14,28 @@ interface Params {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { id: ruleResultId } = await params
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const user = await prisma.user.findUnique({ where: { clerkUserId: userId } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
     // Only TENANT_MANAGER and PLATFORM_ADMIN can override
-    if (!['TENANT_MANAGER', 'PLATFORM_ADMIN'].includes(user.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions to override' }, { status: 403 })
+    if (!canManageTenant(user)) {
+      return NextResponse.json({ error: 'Bu işlem için yetkiniz yok' }, { status: 403 })
     }
 
     const ruleResult = await prisma.ruleResult.findFirst({
       where: { id: ruleResultId, tenantId: user.tenantId },
     })
-    if (!ruleResult) return NextResponse.json({ error: 'Rule result not found' }, { status: 404 })
+    if (!ruleResult) return NextResponse.json({ error: 'Kural sonucu bulunamadı' }, { status: 404 })
 
     if (ruleResult.result === 'PASS') {
-      return NextResponse.json({ error: 'Cannot override a passing result' }, { status: 400 })
+      return NextResponse.json({ error: 'Geçen sonuç geçersiz kılınamaz' }, { status: 400 })
     }
 
     const body = await req.json() as unknown
     const parsed = OverrideSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+      return NextResponse.json({ error: 'Geçerli bir neden girin' }, { status: 400 })
     }
 
     const override = await prisma.$transaction(async (tx) => {
@@ -70,6 +68,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(override, { status: 201 })
   } catch (err) {
     console.error('POST /api/rule-results/[id]/override error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }

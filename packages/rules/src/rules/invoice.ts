@@ -1,57 +1,38 @@
 import { DocumentType, RuleSeverity, isValidCurrency, isValidIncoterm } from '@gumrukyz/domain'
-import type { RuleDefinition, SubmissionContext, RuleEvaluationResult } from '../types.js'
+import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
+import {
+  failOrReview,
+  failResult,
+  findDocs,
+  hasValue,
+  parseFlexibleDate,
+  passResult,
+  toFiniteNumber,
+} from '../helpers.js'
 
 function getInvoices(ctx: SubmissionContext) {
-  return ctx.documents.filter((d) => d.docType === DocumentType.INVOICE)
-}
-
-function parseDocumentDate(raw: unknown): Date | null {
-  if (!raw) return null
-  const value = String(raw).trim()
-  const dmy = value.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/)
-  if (dmy) {
-    const date = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
-    return isNaN(date.getTime()) ? null : date
-  }
-  const parsed = new Date(value)
-  return isNaN(parsed.getTime()) ? null : parsed
-}
-
-function makeResult(
-  code: string,
-  severity: RuleSeverity,
-  pass: boolean,
-  passMsg: string,
-  failMsg: string,
-  refs: Array<{ docType?: string; field?: string; value?: unknown }> = [],
-): RuleEvaluationResult {
-  return {
-    ruleCode: code,
-    severity,
-    result: pass ? 'PASS' : severity === RuleSeverity.ERROR ? 'FAIL' : 'WARN',
-    message: pass ? passMsg : failMsg,
-    sourceRefs: pass ? [] : refs,
-  }
+  return findDocs(ctx, DocumentType.INVOICE)
 }
 
 export const INV_001: RuleDefinition = {
   code: 'INV-001',
-  name: 'Invoice number must be present',
+  name: 'Fatura numarası bulunmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const invoices = getInvoices(ctx)
     if (invoices.length === 0) return null
-    const allHave = invoices.every(
-      (inv) => inv.data['invoice_number'] && String(inv.data['invoice_number']).trim() !== '',
-    )
-    return makeResult(
+    const missing = invoices.filter((inv) => !hasValue(inv.data['invoice_number']))
+    if (missing.length === 0) {
+      return passResult(this.code, this.severity, 'Fatura numarası mevcut.')
+    }
+    return failOrReview(
       this.code,
       this.severity,
-      allHave,
-      'Invoice number present.',
-      'Invoice number is missing. Field: invoice_number.',
+      missing,
+      'Faturada fatura numarası eksik. Alan: invoice_number.',
+      'Faturada fatura numarası okunamadı. Çıkarma güveni düşük — belgeyi gözden geçirin.',
       [{ docType: DocumentType.INVOICE, field: 'invoice_number' }],
     )
   },
@@ -59,7 +40,7 @@ export const INV_001: RuleDefinition = {
 
 export const INV_002: RuleDefinition = {
   code: 'INV-002',
-  name: 'Invoice date must be valid',
+  name: 'Fatura tarihi geçerli olmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE],
 
@@ -67,18 +48,22 @@ export const INV_002: RuleDefinition = {
     const invoices = getInvoices(ctx)
     if (invoices.length === 0) return null
 
-    const allValid = invoices.every((inv) => {
-      const parsed = parseDocumentDate(inv.data['invoice_date'])
-      if (!parsed) return false
-      return parsed <= new Date()
+    const today = new Date()
+    const offenders = invoices.filter((inv) => {
+      const parsed = parseFlexibleDate(inv.data['invoice_date'])
+      return !parsed || parsed > today
     })
 
-    return makeResult(
+    if (offenders.length === 0) {
+      return passResult(this.code, this.severity, 'Fatura tarihi geçerli.')
+    }
+
+    return failOrReview(
       this.code,
       this.severity,
-      allValid,
-      'Invoice date is valid.',
-      'Invoice date is missing, unparseable, or in the future. Field: invoice_date.',
+      offenders,
+      'Fatura tarihi eksik, ayrıştırılamadı veya gelecekte. Alan: invoice_date.',
+      'Fatura tarihi okunamadı veya beklenmedik biçimde. Manuel kontrol gerekli.',
       [{ docType: DocumentType.INVOICE, field: 'invoice_date' }],
     )
   },
@@ -86,7 +71,7 @@ export const INV_002: RuleDefinition = {
 
 export const INV_003: RuleDefinition = {
   code: 'INV-003',
-  name: 'Seller and buyer must be identified',
+  name: 'Satıcı ve alıcı tanımlanmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE],
 
@@ -94,20 +79,20 @@ export const INV_003: RuleDefinition = {
     const invoices = getInvoices(ctx)
     if (invoices.length === 0) return null
 
-    const allValid = invoices.every(
-      (inv) =>
-        inv.data['seller_name'] &&
-        String(inv.data['seller_name']).trim() !== '' &&
-        inv.data['buyer_name'] &&
-        String(inv.data['buyer_name']).trim() !== '',
+    const offenders = invoices.filter(
+      (inv) => !hasValue(inv.data['seller_name']) || !hasValue(inv.data['buyer_name']),
     )
 
-    return makeResult(
+    if (offenders.length === 0) {
+      return passResult(this.code, this.severity, 'Satıcı ve alıcı tanımlı.')
+    }
+
+    return failOrReview(
       this.code,
       this.severity,
-      allValid,
-      'Seller and buyer identified.',
-      'Seller or buyer name is missing. Fields: seller_name, buyer_name.',
+      offenders,
+      'Faturada satıcı (seller_name) veya alıcı (buyer_name) eksik.',
+      'Satıcı/alıcı bilgileri faturadan güvenle okunamadı. Manuel kontrol gerekli.',
       [
         { docType: DocumentType.INVOICE, field: 'seller_name' },
         { docType: DocumentType.INVOICE, field: 'buyer_name' },
@@ -118,7 +103,7 @@ export const INV_003: RuleDefinition = {
 
 export const INV_004: RuleDefinition = {
   code: 'INV-004',
-  name: 'Currency must be valid ISO 4217',
+  name: 'Para birimi geçerli ISO 4217 olmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE],
 
@@ -127,20 +112,18 @@ export const INV_004: RuleDefinition = {
     if (invoices.length === 0) return null
 
     const invalid = invoices.filter(
-      (inv) => inv.data['currency'] && !isValidCurrency(String(inv.data['currency'])),
+      (inv) => hasValue(inv.data['currency']) && !isValidCurrency(String(inv.data['currency'])),
     )
 
     if (invalid.length === 0) {
-      return makeResult(this.code, this.severity, true, 'Currency is valid.', '')
+      return passResult(this.code, this.severity, 'Para birimi geçerli.')
     }
 
     const badValues = invalid.map((inv) => inv.data['currency']).join(', ')
-    return makeResult(
+    return failResult(
       this.code,
       this.severity,
-      false,
-      '',
-      `Currency code(s) "${badValues}" are not valid ISO 4217 codes. Field: currency.`,
+      `Para birimi kodu "${badValues}" geçerli bir ISO 4217 kodu değil. Alan: currency.`,
       [{ docType: DocumentType.INVOICE, field: 'currency', value: badValues }],
     )
   },
@@ -148,7 +131,7 @@ export const INV_004: RuleDefinition = {
 
 export const INV_005: RuleDefinition = {
   code: 'INV-005',
-  name: 'Total amount must be positive',
+  name: 'Toplam tutar pozitif olmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.INVOICE],
 
@@ -156,17 +139,21 @@ export const INV_005: RuleDefinition = {
     const invoices = getInvoices(ctx)
     if (invoices.length === 0) return null
 
-    const allPositive = invoices.every((inv) => {
-      const amt = inv.data['total_amount']
-      return amt != null && Number(amt) > 0
+    const offenders = invoices.filter((inv) => {
+      const amount = toFiniteNumber(inv.data['total_amount'])
+      return amount == null || amount <= 0
     })
 
-    return makeResult(
+    if (offenders.length === 0) {
+      return passResult(this.code, this.severity, 'Toplam tutar pozitif.')
+    }
+
+    return failOrReview(
       this.code,
       this.severity,
-      allPositive,
-      'Total amount is positive.',
-      'Invoice total amount is missing or not a positive number. Field: total_amount.',
+      offenders,
+      'Fatura toplam tutarı eksik veya pozitif değil. Alan: total_amount.',
+      'Fatura toplam tutarı güvenle okunamadı. Manuel kontrol gerekli.',
       [{ docType: DocumentType.INVOICE, field: 'total_amount' }],
     )
   },
@@ -174,7 +161,7 @@ export const INV_005: RuleDefinition = {
 
 export const INV_006: RuleDefinition = {
   code: 'INV-006',
-  name: 'Incoterm must be a valid Incoterms 2020 term',
+  name: 'Incoterm Incoterms 2020 değerlerinden olmalı',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.INVOICE],
 
@@ -183,20 +170,18 @@ export const INV_006: RuleDefinition = {
     if (invoices.length === 0) return null
 
     const invalid = invoices.filter(
-      (inv) => inv.data['incoterm'] && !isValidIncoterm(String(inv.data['incoterm'])),
+      (inv) => hasValue(inv.data['incoterm']) && !isValidIncoterm(String(inv.data['incoterm'])),
     )
 
     if (invalid.length === 0) {
-      return makeResult(this.code, this.severity, true, 'Incoterm is valid or not specified.', '')
+      return passResult(this.code, this.severity, 'Incoterm geçerli veya belirtilmemiş.')
     }
 
     const badValues = invalid.map((inv) => inv.data['incoterm']).join(', ')
-    return makeResult(
+    return failResult(
       this.code,
       this.severity,
-      false,
-      '',
-      `Incoterm(s) "${badValues}" are not valid Incoterms 2020 terms. Field: incoterm.`,
+      `Incoterm "${badValues}" Incoterms 2020 listesinde değil. Alan: incoterm.`,
       [{ docType: DocumentType.INVOICE, field: 'incoterm', value: badValues }],
     )
   },

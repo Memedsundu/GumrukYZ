@@ -1,0 +1,59 @@
+{
+  "_fixture": "gtip-prefix-compatible",
+  "_description": "12-digit invoice GTIP and 8-digit declaration HS prefix should be compatible",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "GTIP-001": "PASS",
+    "GTIP-003": "PASS"
+  },
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.95,
+      "data": {
+        "invoice_number": "EXP-2",
+        "invoice_date": "2026-05-01",
+        "seller_name": "Turkish Exporter A.S.",
+        "seller_address": "Istanbul Turkiye",
+        "buyer_name": "Poland Buyer",
+        "buyer_address": "Warsaw Poland",
+        "currency": "EUR",
+        "total_amount": 1000,
+        "country_of_origin": "TR",
+        "gtip_code": "870829909000",
+        "items": [
+          {
+            "description": "Automotive part",
+            "quantity": 1,
+            "unit": "PCS",
+            "unit_price": 1000,
+            "total_price": 1000
+          }
+        ]
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.95,
+      "data": {
+        "declaration_number": "TST-1",
+        "declaration_date": "2026-05-01",
+        "exporter": "Turkish Exporter A.S.",
+        "importer": "Poland Buyer",
+        "regime_code": "1000",
+        "gtip_code": "87082990",
+        "goods_description": "Automotive part",
+        "total_value": 1000,
+        "currency": "EUR"
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "TST-1",
+    "declarationDate": "2026-05-01",
+    "regimeCode": "1000",
+    "totalValue": 1000,
+    "currency": "EUR",
+    "gtipCode": "87082990"
+  }
+}

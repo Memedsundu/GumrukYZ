@@ -38,6 +38,8 @@ export const SubmissionStatus = {
   EXTRACTING: 'EXTRACTING',
   NORMALIZING: 'NORMALIZING',
   RUNNING_RULES: 'RUNNING_RULES',
+  AI_RULE_VALIDATING: 'AI_RULE_VALIDATING',
+  EXPERT_REVIEWING: 'EXPERT_REVIEWING',
   GENERATING_REPORT: 'GENERATING_REPORT',
   COMPLETED: 'COMPLETED',
   FAILED: 'FAILED',
@@ -169,6 +171,7 @@ export type ProviderName = (typeof ProviderName)[keyof typeof ProviderName]
 // Tenant plan
 export const TenantPlan = {
   INTERNAL: 'internal',
+  PILOT: 'pilot',
   STARTER: 'starter',
   PRO: 'pro',
 } as const
@@ -196,9 +199,9 @@ export function isValidIncoterm(value: string): value is Incoterm {
   return (INCOTERMS_2020 as readonly string[]).includes(value.toUpperCase())
 }
 
-// GTİP (HS code) format: exactly 8 digits
+// GTİP/HS code format used in customs documents: 8, 10, or 12 digits.
 export function isValidGtip(value: string): boolean {
-  return /^\d{8}$/.test(value.trim())
+  return /^\d{8}(\d{2}){0,2}$/.test(value.replace(/\D/g, ''))
 }
 
 // ISO 4217 currency codes (common subset)

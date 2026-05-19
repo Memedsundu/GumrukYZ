@@ -1,30 +1,16 @@
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
-import type { RuleDefinition, SubmissionContext, RuleEvaluationResult } from '../types.js'
-
-function pass(code: string, severity: RuleSeverity, msg: string): RuleEvaluationResult {
-  return { ruleCode: code, severity, result: 'PASS', message: msg, sourceRefs: [] }
-}
-
-function fail(
-  code: string,
-  severity: RuleSeverity,
-  msg: string,
-  refs: RuleEvaluationResult['sourceRefs'] = [],
-): RuleEvaluationResult {
-  return {
-    ruleCode: code,
-    severity,
-    result: severity === RuleSeverity.ERROR ? 'FAIL' : 'WARN',
-    message: msg,
-    sourceRefs: refs,
-  }
-}
+import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
+import {
+  failOrReview,
+  failResult,
+  hasValue,
+  passResult,
+} from '../helpers.js'
 
 function getBLs(ctx: SubmissionContext) {
   return ctx.documents.filter((d) => {
     if (d.docType === DocumentType.BILL_OF_LADING) return true
     if (d.docType !== DocumentType.TRANSPORT_DOC) return false
-
     const documentType = String(d.data['document_type'] ?? '').toUpperCase()
     return (
       documentType.includes('B/L') ||
@@ -45,17 +31,15 @@ function textField(
 ): { field: string; value: string | null } {
   for (const field of fields) {
     const value = data[field]
-    if (value != null && String(value).trim() !== '') {
-      return { field, value: String(value).trim() }
-    }
+    if (hasValue(value)) return { field, value: String(value).trim() }
   }
   return { field: fields[0]!, value: null }
 }
 
-/** BL-001 – Bill of lading number must be present. */
+/** BL-001 — Konşimento numarası bulunmalı. */
 export const BL_001: RuleDefinition = {
   code: 'BL-001',
-  name: 'Bill of lading number must be present',
+  name: 'Konşimento numarası bulunmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.TRANSPORT_DOC],
 
@@ -63,21 +47,25 @@ export const BL_001: RuleDefinition = {
     const bls = getBLs(ctx)
     if (bls.length === 0) return null
 
-    const allHave = bls.every((bl) => textField(bl.data, ['bl_number', 'document_number']).value)
-    if (allHave) return pass(this.code, this.severity, 'Bill of lading number is present.')
-    return fail(
+    const missing = bls.filter((bl) => !textField(bl.data, ['bl_number', 'document_number']).value)
+    if (missing.length === 0) {
+      return passResult(this.code, this.severity, 'Konşimento numarası mevcut.')
+    }
+    return failOrReview(
       this.code,
       this.severity,
-      'Bill of lading number is missing. Field: document_number.',
+      missing,
+      'Konşimentoda belge numarası eksik. Alan: document_number.',
+      'Konşimento belge numarası güvenle okunamadı. Manuel kontrol gerekli.',
       [{ docType: refDocType(bls[0]!.docType), field: 'document_number' }],
     )
   },
 }
 
-/** BL-002 – Port of loading and port of discharge must both be present. */
+/** BL-002 — Yükleme ve boşaltma limanları bulunmalı. */
 export const BL_002: RuleDefinition = {
   code: 'BL-002',
-  name: 'Port of loading and discharge must be present',
+  name: 'Yükleme ve boşaltma limanları bulunmalı',
   severity: RuleSeverity.ERROR,
   appliesToDocTypes: [DocumentType.TRANSPORT_DOC],
 
@@ -93,26 +81,32 @@ export const BL_002: RuleDefinition = {
     )
 
     if (missingPOL.length === 0 && missingPOD.length === 0) {
-      return pass(this.code, this.severity, 'Port of loading and discharge are both present.')
+      return passResult(
+        this.code,
+        this.severity,
+        'Yükleme ve boşaltma limanlarının her ikisi de mevcut.',
+      )
     }
 
     const missing: string[] = []
     if (missingPOL.length > 0) missing.push('departure/loading_port')
     if (missingPOD.length > 0) missing.push('destination/discharge_port')
 
-    return fail(
+    return failOrReview(
       this.code,
       this.severity,
-      `B/L is missing required port fields: ${missing.join(', ')}.`,
+      [...missingPOL, ...missingPOD],
+      `Konşimentoda eksik liman alanı: ${missing.join(', ')}.`,
+      'Liman bilgileri konşimentodan güvenle okunamadı. Manuel kontrol gerekli.',
       missing.map((f) => ({ docType: refDocType(bls[0]!.docType), field: f })),
     )
   },
 }
 
-/** BL-003 – Consignee on the B/L must not be blank and should match the invoice buyer. */
+/** BL-003 — Konşimento alıcısı fatura alıcısıyla uyumlu olmalı. */
 export const BL_003: RuleDefinition = {
   code: 'BL-003',
-  name: 'B/L consignee must be present and match invoice buyer',
+  name: 'Konşimento alıcısı fatura alıcısıyla uyumlu olmalı',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.TRANSPORT_DOC, DocumentType.INVOICE],
 
@@ -122,30 +116,37 @@ export const BL_003: RuleDefinition = {
 
     const bl = bls[0]!
     const consignee = bl.data['consignee']
-    if (!consignee || String(consignee).trim() === '') {
-      return fail(
+    if (!hasValue(consignee)) {
+      return failOrReview(
         this.code,
         this.severity,
-        'Consignee field is blank on the bill of lading. Field: consignee.',
+        [bl],
+        'Konşimentoda alıcı (consignee) alanı boş. Alan: consignee.',
+        'Konşimento alıcısı güvenle okunamadı. Manuel kontrol gerekli.',
         [{ docType: refDocType(bl.docType), field: 'consignee' }],
       )
     }
 
     const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
-    if (!invoice || !invoice.data['buyer_name']) {
-      return pass(this.code, this.severity, 'B/L consignee is present (no invoice buyer to cross-check).')
+    if (!invoice || !hasValue(invoice.data['buyer_name'])) {
+      return passResult(
+        this.code,
+        this.severity,
+        'Konşimento alıcısı mevcut (fatura alıcısı ile karşılaştırma yapılamadı).',
+      )
     }
 
     const consigneeLower = String(consignee).toLowerCase()
     const buyerLower = String(invoice.data['buyer_name']).toLowerCase()
-
     const match = consigneeLower.includes(buyerLower) || buyerLower.includes(consigneeLower)
-    if (match) return pass(this.code, this.severity, 'B/L consignee matches invoice buyer.')
+    if (match) {
+      return passResult(this.code, this.severity, 'Konşimento alıcısı fatura alıcısıyla uyumlu.')
+    }
 
-    return fail(
+    return failResult(
       this.code,
       this.severity,
-      `B/L consignee "${consignee}" may not match invoice buyer "${invoice.data['buyer_name']}". Please verify.`,
+      `Konşimento alıcısı "${consignee}" fatura alıcısı "${invoice.data['buyer_name']}" ile uyuşmuyor. Lütfen doğrulayın.`,
       [
         { docType: refDocType(bl.docType), field: 'consignee', value: consignee },
         { docType: DocumentType.INVOICE, field: 'buyer_name', value: invoice.data['buyer_name'] },

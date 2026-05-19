@@ -25,4 +25,8 @@ export type {
   DocumentClassificationSuggestion,
   RuleLegalCitation,
   RuleResultCitation,
+  AiRuleValidation,
+  ExpertReview,
+  ExpertReviewFinding,
+  ExpertReviewFindingCitation,
 } from '@prisma/client'

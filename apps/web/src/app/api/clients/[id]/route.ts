@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { prisma, Prisma } from '@gumrukyz/db'
+import { canManageTenant, requireApiUser } from '@/lib/auth'
 
 function normalize(value: string): string {
   return value
@@ -18,11 +18,9 @@ interface Params {
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const user = await prisma.user.findUnique({ where: { clerkUserId: userId } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
     const client = await prisma.brokerClient.findFirst({
       where: { id, tenantId: user.tenantId },
@@ -30,32 +28,30 @@ export async function GET(_req: NextRequest, { params }: Params) {
         _count: { select: { submissions: true } },
       },
     })
-    if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    if (!client) return NextResponse.json({ error: 'Müşteri bulunamadı' }, { status: 404 })
 
     return NextResponse.json({ client })
   } catch (err) {
     console.error('GET /api/clients/[id] error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
-    const user = await prisma.user.findUnique({ where: { clerkUserId: userId } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
-
-    if (!['TENANT_MANAGER', 'PLATFORM_ADMIN'].includes(user.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!canManageTenant(user)) {
+      return NextResponse.json({ error: 'Bu işlem için yetkiniz yok' }, { status: 403 })
     }
 
     const client = await prisma.brokerClient.findFirst({
       where: { id, tenantId: user.tenantId },
     })
-    if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    if (!client) return NextResponse.json({ error: 'Müşteri bulunamadı' }, { status: 404 })
 
     const body = await req.json() as { displayName?: string; taxId?: string; country?: string }
     const displayName = body.displayName?.trim()
@@ -68,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       })
       if (duplicate) {
         return NextResponse.json(
-          { error: `Tax ID already used by another client: ${duplicate.displayName}` },
+          { error: `Vergi numarası başka bir müşteride kullanılıyor: ${duplicate.displayName}` },
           { status: 409 },
         )
       }
@@ -98,32 +94,30 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ client: updated })
   } catch (err) {
     console.error('PATCH /api/clients/[id] error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
-    const user = await prisma.user.findUnique({ where: { clerkUserId: userId } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
-
-    if (!['TENANT_MANAGER', 'PLATFORM_ADMIN'].includes(user.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!canManageTenant(user)) {
+      return NextResponse.json({ error: 'Bu işlem için yetkiniz yok' }, { status: 403 })
     }
 
     const client = await prisma.brokerClient.findFirst({
       where: { id, tenantId: user.tenantId },
       include: { _count: { select: { submissions: true } } },
     })
-    if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    if (!client) return NextResponse.json({ error: 'Müşteri bulunamadı' }, { status: 404 })
 
     if (client._count.submissions > 0) {
       return NextResponse.json(
-        { error: `Cannot delete: client has ${client._count.submissions} submission(s). Reassign them first.` },
+        { error: `Silinemez: müşteriye bağlı ${client._count.submissions} dosya var. Önce dosyaları başka müşteriye bağlayın.` },
         { status: 409 },
       )
     }
@@ -144,6 +138,6 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('DELETE /api/clients/[id] error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }

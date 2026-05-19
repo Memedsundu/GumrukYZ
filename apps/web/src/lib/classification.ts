@@ -63,6 +63,16 @@ type ClassificationReadResult = {
   providerRunId: string | null
 }
 
+type ClassificationDecision = {
+  detectedType: string
+  confidence: number
+  detectedTradeFlow: string
+  tradeFlowConfidence: number
+  reasoning: string
+  sourceRefs: Array<{ field: string; value: string }>
+  parties: PartyCandidate[]
+}
+
 type DocumentForClassification = {
   id: string
   docType: string
@@ -349,6 +359,8 @@ async function classifyText(params: {
   parties: PartyCandidate[]
   providerRunId: string | null
 }> {
+  const deterministic = classifyHeuristically(params.text, params.filename)
+
   if (params.ai.isEnabled() && params.text.trim().length > 20) {
     const providerRun = await prisma.providerRun.create({
       data: {
@@ -361,6 +373,18 @@ async function classifyText(params: {
     })
     try {
       const { result, meta } = await params.ai.classifyDocument(params.text, params.filename)
+      const merged = mergeClassifications({
+        ai: {
+          detectedType: isFinalDocType(result.detectedType) ? result.detectedType : DocumentType.OTHER,
+          confidence: result.confidence,
+          detectedTradeFlow: result.detectedTradeFlow ?? TradeFlow.UNKNOWN,
+          tradeFlowConfidence: result.tradeFlowConfidence ?? 0,
+          reasoning: result.reasoning,
+          sourceRefs: result.sourceRefs ?? [],
+          parties: result.parties ?? [],
+        },
+        deterministic,
+      })
       await prisma.providerRun.update({
         where: { id: providerRun.id },
         data: {
@@ -372,13 +396,7 @@ async function classifyText(params: {
         },
       })
       return {
-        detectedType: isFinalDocType(result.detectedType) ? result.detectedType : DocumentType.OTHER,
-        confidence: result.confidence,
-        detectedTradeFlow: result.detectedTradeFlow ?? TradeFlow.UNKNOWN,
-        tradeFlowConfidence: result.tradeFlowConfidence ?? 0,
-        reasoning: result.reasoning,
-        sourceRefs: result.sourceRefs ?? [],
-        parties: result.parties ?? [],
+        ...merged,
         providerRunId: providerRun.id,
       }
     } catch (error) {
@@ -395,43 +413,61 @@ async function classifyText(params: {
     }
   }
 
-  const heuristic = classifyHeuristically(params.text, params.filename)
-  return { ...heuristic, providerRunId: null }
+  return { ...deterministic, providerRunId: null }
 }
 
-function classifyHeuristically(text: string, filename: string) {
-  const haystack = `${filename}\n${text}`.toLowerCase()
-  const checks: Array<[string, RegExp, number, string]> = [
-    [DocumentType.DECLARATION_OUTPUT, /(beyanname|tcgb|rejim kodu|gümrük idaresi|gumruk idaresi)/i, 0.82, 'Beyannameye ait alanlar tespit edildi.'],
-    [DocumentType.INVOICE, /(invoice|fatura|e-fatura|seller|buyer|total amount|mal hizmet toplam)/i, 0.78, 'Fatura göstergeleri tespit edildi.'],
-    [DocumentType.PACKING_LIST, /(packing list|çeki listesi|ceki listesi|gross weight|net weight|kap adedi)/i, 0.76, 'Çeki listesi/ağırlık göstergeleri tespit edildi.'],
-    [DocumentType.LOADING_INSTRUCTION, /(yükleme talimat|yukleme talimat|loading instruction|yükleme yeri|teslim adresi)/i, 0.74, 'Yükleme talimatı göstergeleri tespit edildi.'],
-    [DocumentType.TRANSPORT_DOC, /(cmr|konşimento|konsimento|bill of lading|air waybill|awb|taşıma belgesi|tasima belgesi)/i, 0.74, 'Taşıma belgesi göstergeleri tespit edildi.'],
-    [DocumentType.ORIGIN_DOC, /(menşe|mense|certificate of origin|eur\.?1|a\.?tr|form a)/i, 0.74, 'Menşe belgesi göstergeleri tespit edildi.'],
-    [DocumentType.PERMIT_DOC, /(izin|uygunluk|kontrol belgesi|inspection certificate|permit|tip onay)/i, 0.68, 'İzin/uygunluk belgesi göstergeleri tespit edildi.'],
-  ]
-
-  const match = checks.find(([, pattern]) => pattern.test(haystack))
+export function classifyHeuristically(text: string, filename: string): ClassificationDecision {
+  const normalizedFilename = normalizeClassificationText(filename)
+  const normalizedText = normalizeClassificationText(text)
+  const haystack = `${normalizedFilename}\n${normalizedText}`
+  const scoredTypes = DOCUMENT_TYPE_SIGNAL_SETS.map((set) => {
+    const matches = set.signals.filter((signal) => signal.pattern.test(haystack))
+    const score = matches.reduce((total, signal) => total + signal.weight, 0)
+    return { ...set, matches, score }
+  }).sort((a, b) => b.score - a.score)
+  const best = scoredTypes[0]
   const trade = inferTradeFlow(haystack)
+  const hasMatch = Boolean(best && best.score > 0)
+
   return {
-    detectedType: match?.[0] ?? DocumentType.OTHER,
-    confidence: match?.[2] ?? 0.45,
+    detectedType: hasMatch ? best.docType : DocumentType.OTHER,
+    confidence: hasMatch ? confidenceFromSignalScore(best.score) : 0.45,
     detectedTradeFlow: trade.value,
     tradeFlowConfidence: trade.confidence,
-    reasoning: match?.[3] ?? 'Belge türü için güçlü bir gösterge bulunamadı.',
-    sourceRefs: [{ field: 'filename', value: filename }],
+    reasoning: hasMatch ? best.reasoning : 'Belge türü için güçlü bir gösterge bulunamadı.',
+    sourceRefs: hasMatch
+      ? best.matches.slice(0, 3).map((signal) => ({ field: signal.field, value: signal.label }))
+      : [{ field: 'filename', value: filename }],
     parties: extractPartiesHeuristically(text),
   }
 }
 
 function inferTradeFlow(text: string): { value: string; confidence: number } {
-  const exportScore = scoreMatches(text, [/ihracat/i, /export/i, /exporter/i, /ihracatçı/i, /ihracatci/i])
-  const importScore = scoreMatches(text, [/ithalat/i, /import/i, /importer/i, /ithalatçı/i, /ithalatci/i])
+  const normalized = normalizeClassificationText(text)
+  const exportScore = scoreWeightedMatches(normalized, [
+    [/scenario\s*:?\s*ihracat/, 4],
+    [/partytype\s*:?\s*export/, 4],
+    [/mal ihracati|bedelsiz ihracat/, 4],
+    [/\bihracatci\b|\bexporter\b/, 2],
+    [/\bihracat\b|\bexport\b/, 2],
+    [/\bcikis\s*\/\s*varis gumrugu\b/, 1],
+    [/\bbosaltma adresi\b[\s\S]{0,250}\b(polonya|poland|germany|almanya|france|fransa|italy|italya|romania|romanya|bulgaria|bulgaristan)\b/, 2],
+    [/\bturkiye\b[\s\S]{0,250}\b(polonya|poland|germany|almanya|france|fransa|italy|italya|romania|romanya|bulgaria|bulgaristan)\b/, 1],
+  ])
+  const importScore = scoreWeightedMatches(normalized, [
+    [/scenario\s*:?\s*ithalat/, 4],
+    [/partytype\s*:?\s*import/, 4],
+    [/\bithalatci\b|\bimporter\b/, 2],
+    [/\bithalat\b|\bimport\b/, 2],
+    [/\bforeign seller\b[\s\S]{0,200}\bturkish buyer\b/, 2],
+    [/\bvaris gumrugu\b[\s\S]{0,120}\b(turkiye|turkey|istanbul|ankara|izmir|muratbey|kapikule)\b/, 1],
+  ])
   if (exportScore === 0 && importScore === 0) return { value: TradeFlow.UNKNOWN, confidence: 0 }
   if (Math.abs(exportScore - importScore) <= 1) return { value: TradeFlow.UNKNOWN, confidence: 0.45 }
+  const winningScore = Math.max(exportScore, importScore)
   return exportScore > importScore
-    ? { value: TradeFlow.EXPORT, confidence: Math.min(0.95, 0.6 + exportScore * 0.1) }
-    : { value: TradeFlow.IMPORT, confidence: Math.min(0.95, 0.6 + importScore * 0.1) }
+    ? { value: TradeFlow.EXPORT, confidence: roundClassificationConfidence(Math.min(0.95, 0.55 + winningScore * 0.08)) }
+    : { value: TradeFlow.IMPORT, confidence: roundClassificationConfidence(Math.min(0.95, 0.55 + winningScore * 0.08)) }
 }
 
 function chooseTradeFlow(votes: Array<{ value: string; confidence: number }>): { value: string; confidence: number } {
@@ -442,6 +478,10 @@ function chooseTradeFlow(votes: Array<{ value: string; confidence: number }>): {
   const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1])
   if (ranked.length === 0) return { value: TradeFlow.UNKNOWN, confidence: 0 }
   const [value, score] = ranked[0]!
+  const secondScore = ranked[1]?.[1] ?? 0
+  if (secondScore > 0 && score - secondScore < 0.2) {
+    return { value: TradeFlow.UNKNOWN, confidence: 0.45 }
+  }
   const maxPossible = votes.reduce((sum, vote) => sum + vote.confidence, 0)
   return { value, confidence: Math.round((score / Math.max(maxPossible, 1)) * 100) / 100 }
 }
@@ -464,8 +504,8 @@ function extractPartiesHeuristically(text: string): PartyCandidate[] {
   return parties
 }
 
-function scoreMatches(text: string, patterns: RegExp[]): number {
-  return patterns.reduce((score, pattern) => score + (pattern.test(text) ? 1 : 0), 0)
+function scoreWeightedMatches(text: string, patterns: Array<[RegExp, number]>): number {
+  return patterns.reduce((score, [pattern, weight]) => score + (pattern.test(text) ? weight : 0), 0)
 }
 
 function isFinalDocType(value: string): value is (typeof FINAL_DOC_TYPES)[number] {
@@ -481,3 +521,127 @@ function hasMeaningfulOverlap(a: string, b: string): boolean {
   }
   return overlaps >= 2
 }
+
+function mergeClassifications(params: {
+  ai: ClassificationDecision
+  deterministic: ClassificationDecision
+}): ClassificationDecision {
+  const { ai, deterministic } = params
+  const useDeterministicDocType =
+    deterministic.detectedType !== DocumentType.OTHER &&
+    deterministic.confidence >= 0.7 &&
+    (
+      ai.detectedType === DocumentType.OTHER ||
+      ai.confidence < 0.65 ||
+      (ai.detectedType !== deterministic.detectedType && deterministic.confidence >= 0.82 && ai.confidence < 0.9)
+    )
+  const useDeterministicTradeFlow =
+    deterministic.detectedTradeFlow !== TradeFlow.UNKNOWN &&
+    deterministic.tradeFlowConfidence >= 0.65 &&
+    (
+      ai.detectedTradeFlow === TradeFlow.UNKNOWN ||
+      ai.tradeFlowConfidence < 0.65 ||
+      (ai.detectedTradeFlow !== deterministic.detectedTradeFlow && deterministic.tradeFlowConfidence > ai.tradeFlowConfidence)
+    )
+
+  return {
+    detectedType: useDeterministicDocType ? deterministic.detectedType : ai.detectedType,
+    confidence: useDeterministicDocType ? deterministic.confidence : ai.confidence,
+    detectedTradeFlow: useDeterministicTradeFlow ? deterministic.detectedTradeFlow : ai.detectedTradeFlow,
+    tradeFlowConfidence: useDeterministicTradeFlow ? deterministic.tradeFlowConfidence : ai.tradeFlowConfidence,
+    reasoning: useDeterministicDocType || useDeterministicTradeFlow
+      ? deterministic.reasoning
+      : ai.reasoning,
+    sourceRefs: [
+      ...(useDeterministicDocType || useDeterministicTradeFlow ? deterministic.sourceRefs : ai.sourceRefs),
+      ...((useDeterministicDocType || useDeterministicTradeFlow) ? ai.sourceRefs.slice(0, 2) : deterministic.sourceRefs.slice(0, 2)),
+    ].slice(0, 5),
+    parties: ai.parties.length > 0 ? ai.parties : deterministic.parties,
+  }
+}
+
+function normalizeClassificationText(value: string): string {
+  return value
+    .replace(/[İIı]/g, 'i')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function confidenceFromSignalScore(score: number): number {
+  if (score >= 5) return 0.92
+  if (score >= 3) return 0.84
+  if (score >= 2) return 0.76
+  return 0.68
+}
+
+function roundClassificationConfidence(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+const DOCUMENT_TYPE_SIGNAL_SETS: Array<{
+  docType: string
+  reasoning: string
+  signals: Array<{ pattern: RegExp; weight: number; field: string; label: string }>
+}> = [
+  {
+    docType: DocumentType.DECLARATION_OUTPUT,
+    reasoning: 'Gümrük beyannamesi/kontrol çıktısı göstergeleri tespit edildi.',
+    signals: [
+      { pattern: /\bgumruk beyannamesi\b|\bt c gumruk beyannamesi\b/, weight: 5, field: 'text', label: 'gümrük beyannamesi' },
+      { pattern: /\btcgb\b|\btescil no\b|\brejim\b|\bg t i p\b|\bgtip\b/, weight: 2, field: 'text', label: 'beyanname alanları' },
+      { pattern: /\btoplam fob\b|\bg c amaci\b|\bgumruk mudurlugu\b/, weight: 2, field: 'text', label: 'gümrük çıktı alanları' },
+      { pattern: /\bkontrol\b.*\.pdf\b|^kontrol\b/, weight: 2, field: 'filename', label: 'KONTROL dosya adı' },
+    ],
+  },
+  {
+    docType: DocumentType.INVOICE,
+    reasoning: 'Fatura/e-Fatura göstergeleri tespit edildi.',
+    signals: [
+      { pattern: /\be fatura\b|\befatura\b|\bfatura\b|\binvoice\b/, weight: 4, field: 'text', label: 'fatura/invoice başlığı' },
+      { pattern: /\binvoice number\b|\binvoice date\b|\bpayable amount\b|\btotal price of goods\b/, weight: 2, field: 'text', label: 'fatura alanları' },
+      { pattern: /\bmal hizmet toplam\b|\btoplam tutar\b|\bkdv\b|\bett?n\b/, weight: 2, field: 'text', label: 'e-Fatura alanları' },
+      { pattern: /\bfi\d{8,}\b/, weight: 3, field: 'filename', label: 'FI fatura numarası' },
+    ],
+  },
+  {
+    docType: DocumentType.PACKING_LIST,
+    reasoning: 'Çeki listesi/ağırlık göstergeleri tespit edildi.',
+    signals: [
+      { pattern: /\bpacking list\b|\bceki listesi\b/, weight: 4, field: 'text', label: 'packing list/çeki listesi başlığı' },
+      { pattern: /\bgross weight\b|\bnet weight\b|\bbrut agirlik\b|\bkap adedi\b|\bpackage type\b/, weight: 2, field: 'text', label: 'ağırlık/paket alanları' },
+      { pattern: /\bpacking\b.*\.pdf\b|\bceki\b.*\.pdf\b/, weight: 3, field: 'filename', label: 'packing list dosya adı' },
+    ],
+  },
+  {
+    docType: DocumentType.LOADING_INSTRUCTION,
+    reasoning: 'Yükleme talimatı göstergeleri tespit edildi.',
+    signals: [
+      { pattern: /\byukleme talimati\b|\byukleme talimat\b|\bloading instruction\b/, weight: 5, field: 'text', label: 'yükleme talimatı başlığı' },
+      { pattern: /\bbosaltma adresi\b|\bcikis\s*\/\s*varis gumrugu\b|\bgumruk komisyoncusu\b|\bteslim sekli\b/, weight: 2, field: 'text', label: 'yükleme talimatı alanları' },
+      { pattern: /\byukleme\b.*\btal/i, weight: 3, field: 'filename', label: 'yükleme talimatı dosya adı' },
+    ],
+  },
+  {
+    docType: DocumentType.TRANSPORT_DOC,
+    reasoning: 'Taşıma belgesi göstergeleri tespit edildi.',
+    signals: [
+      { pattern: /\bcmr\b|\bbill of lading\b|\bkon[sş]imento\b|\bair waybill\b|\bawb\b/, weight: 4, field: 'text', label: 'taşıma belgesi başlığı' },
+      { pattern: /\bconsignment note\b|\btruck plate\b|\bvehicle\b|\bcarrier\b/, weight: 1.5, field: 'text', label: 'taşıma alanları' },
+    ],
+  },
+  {
+    docType: DocumentType.ORIGIN_DOC,
+    reasoning: 'Menşe belgesi göstergeleri tespit edildi.',
+    signals: [
+      { pattern: /\bmense\b|\bcertificate of origin\b|\beur\.?1\b|\ba\.?tr\b|\bform a\b/, weight: 4, field: 'text', label: 'menşe belgesi başlığı' },
+    ],
+  },
+  {
+    docType: DocumentType.PERMIT_DOC,
+    reasoning: 'İzin/uygunluk belgesi göstergeleri tespit edildi.',
+    signals: [
+      { pattern: /\bkontrol belgesi\b|\buygunluk\b|\bizin\b|\bpermit\b|\binspection certificate\b|\btip onay\b/, weight: 3, field: 'text', label: 'izin/uygunluk alanları' },
+    ],
+  },
+]

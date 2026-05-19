@@ -1,0 +1,40 @@
+{
+  "_fixture": "qual-duplicate-invoice",
+  "_description": "Two INVOICE documents with the same invoice_number — QUAL-003 should flag as duplicate",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.94,
+      "data": {
+        "invoice_number": "INV-2026-00042",
+        "invoice_date": "2026-04-15",
+        "seller_name": "Acme Exports GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 12500,
+        "country_of_origin": "DE"
+      }
+    },
+    {
+      "docType": "INVOICE",
+      "confidence": 0.93,
+      "data": {
+        "invoice_number": "INV-2026-00042",
+        "invoice_date": "2026-04-15",
+        "seller_name": "Acme Exports GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 12500,
+        "country_of_origin": "DE"
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "QUAL-003": "REVIEW_NEEDED",
+    "INV-001": "PASS"
+  },
+  "_notes": "Both invoices have the same invoice_number — QUAL-003 catches the duplicate upload."
+}

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@gumrukyz/db'
 import { put } from '@vercel/blob'
 import { createHash } from 'crypto'
 import { inferDocumentContentType, isSupportedUploadFile } from '@/lib/document-file-types'
+import { requireApiUser } from '@/lib/auth'
 
 const ALLOWED_DOC_TYPES = [
   'UNCLASSIFIED',
@@ -18,34 +18,32 @@ interface Params {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { id: submissionId } = await params
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const user = await prisma.user.findUnique({ where: { clerkUserId: userId } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
     const submission = await prisma.submission.findFirst({
       where: { id: submissionId, tenantId: user.tenantId },
     })
-    if (!submission) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
+    if (!submission) return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 404 })
 
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     const docType = (formData.get('docType') as string | null) ?? 'UNCLASSIFIED'
     const label = formData.get('label') as string | null
 
-    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    if (!file) return NextResponse.json({ error: 'Dosya gönderilmedi' }, { status: 400 })
     if (!ALLOWED_DOC_TYPES.includes(docType)) {
-      return NextResponse.json({ error: 'Invalid document type' }, { status: 400 })
+      return NextResponse.json({ error: 'Geçersiz belge türü' }, { status: 400 })
     }
     if (!isSupportedUploadFile(file.name, file.type)) {
       return NextResponse.json(
-        { error: 'Unsupported file type. Upload PDF, image, Word, Excel, PowerPoint, or HTML.' },
+        { error: 'Desteklenmeyen dosya türü. PDF, görsel, Word, Excel, PowerPoint veya HTML yükleyin.' },
         { status: 400 },
       )
     }
     if (file.size > 20 * 1024 * 1024) {
-      return NextResponse.json({ error: 'File size must be under 20MB' }, { status: 400 })
+      return NextResponse.json({ error: 'Dosya boyutu 20MB altında olmalı' }, { status: 400 })
     }
 
     const fileBuffer = await file.arrayBuffer()
@@ -133,6 +131,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     }, { status: 201 })
   } catch (err) {
     console.error('POST /api/submissions/[id]/documents error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }

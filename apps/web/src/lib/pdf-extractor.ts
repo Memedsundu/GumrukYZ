@@ -33,9 +33,16 @@ export async function extractTextFromPdf(
     // Dynamically import the legacy build; the default build expects browser worker setup.
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
 
-    // Disable the web worker — in Node.js/Vercel serverless we use pdfjs's built-in
-    // fake worker (synchronous mode). No worker file on disk is required.
-    pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+    // pdfjs still needs a concrete worker module path when it falls back to the
+    // fake worker in Node/Vercel. An empty workerSrc fails in serverless builds.
+    const [{ createRequire }, { pathToFileURL }] = await Promise.all([
+      import('module'),
+      import('url'),
+    ])
+    const require = createRequire(import.meta.url)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
+      require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs'),
+    ).toString()
 
     const arrayBuffer = await readFileArrayBuffer(fileUrl)
     const uint8Array = new Uint8Array(arrayBuffer)

@@ -1,4 +1,4 @@
-import { getAuthenticatedUser } from '@/lib/auth'
+import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -8,7 +8,7 @@ import { Users, Plus, FileText } from 'lucide-react'
 export default async function AdminClientsPage() {
   const user = await getAuthenticatedUser()
 
-  if (!['TENANT_MANAGER', 'PLATFORM_ADMIN'].includes(user.role)) {
+  if (!canManageTenant(user)) {
     redirect('/dashboard')
   }
 

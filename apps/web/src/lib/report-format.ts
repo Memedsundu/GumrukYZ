@@ -4,6 +4,12 @@ export type SourceRef = {
   value?: unknown
 }
 
+export {
+  getRuleDisplayMetadata,
+  recommendedActionForRuleResult,
+  type RuleDisplayMetadata,
+} from './rule-display-metadata'
+
 export type RuleResultDisplayInput = {
   ruleCode: string
   result: string
@@ -58,6 +64,7 @@ const FIELD_LABELS: Record<string, string> = {
   'items[].total_price': 'kalem toplam fiyatı',
   total_value: 'beyan toplam kıymeti',
   total_gross_weight: 'beyan toplam brüt ağırlığı',
+  'seller/buyer evidence': 'satıcı/alıcı yön kanıtı',
 }
 
 const PASS_MESSAGES: Record<string, string> = {
@@ -98,6 +105,15 @@ const PASS_MESSAGES: Record<string, string> = {
   'CROSS-006': 'Fatura ve çeki listesi net ağırlık bilgileri uyumlu.',
   'CROSS-007': 'Fatura ve beyanname para birimi uyumlu.',
   'CROSS-008': 'Çeki listesi ve beyanname kap sayısı uyumlu.',
+  'CROSS-009': 'Beyan edilen ticaret akışı taraf ve güzergah verisiyle örtüşüyor.',
+  'QUAL-001': 'Tüm belgelerden veri başarıyla çıkarıldı.',
+  'QUAL-002': 'Belge türleri içerikleriyle örtüşüyor.',
+  'QUAL-003': 'Yinelenen belge tespit edilmedi.',
+  'EXP-001': 'İhracat fatura numarası mevcut.',
+  'EXP-002': 'İhracatçı/satıcı bilgisi mevcut.',
+  'EXP-003': 'İhracat rejim kodu geçerli.',
+  'EXP-004': 'İhracat faturasında menşe bilgisi mevcut.',
+  'EXP-005': 'Geçici ihracat için yükleme talimatı mevcut.',
 }
 
 const ISSUE_MESSAGES: Record<string, string> = {
@@ -138,6 +154,15 @@ const ISSUE_MESSAGES: Record<string, string> = {
   'CROSS-006': 'Fatura ve çeki listesi net ağırlık bilgileri tolerans dışında farklı.',
   'CROSS-007': 'Fatura ve beyanname para birimi farklı.',
   'CROSS-008': 'Çeki listesi kap sayısı ile beyanname kap sayısı farklı.',
+  'CROSS-009': 'Beyan edilen ticaret akışı taraf veya güzergah verisiyle çelişebilir; manuel doğrulama önerilir.',
+  'QUAL-001': 'Belgeden veri çıkarılamadı (içerik boş). Belgeyi yeniden yükleyin veya farklı formatta deneyin.',
+  'QUAL-002': 'Belge yüklenen türle örtüşmüyor; yanlış sınıflandırma olabilir.',
+  'QUAL-003': 'Aynı belge birden fazla yüklenmiş olabilir; yinelenen yüklemeleri kontrol edin.',
+  'EXP-001': 'İhracat faturasında fatura numarası eksik.',
+  'EXP-002': 'İhracat faturası satıcı/ihracatçı bilgisi içermiyor.',
+  'EXP-003': 'Beyannamedeki rejim kodu ihracat rejimleriyle uyumlu değil.',
+  'EXP-004': 'İhracat faturasında menşe ülkesi eksik.',
+  'EXP-005': 'Geçici ihracat için yükleme talimatı eksik.',
 }
 
 export function parseSourceRefs(value: unknown): SourceRef[] {
@@ -186,14 +211,31 @@ export function formatSourceRef(ref: SourceRef): string {
 export function formatRuleResultMessage(result: RuleResultDisplayInput): string {
   const sourceRefs = parseSourceRefs(result.sourceRefsJson)
 
-  if (result.ruleCode === 'OCR-001') {
-    const ref = sourceRefs[0]
-    const confidence = typeof ref?.value === 'number' ? ` (%${Math.round(ref.value * 100)})` : ''
-    return `${docTypeLabel(ref?.docType)} için veri çıkarma güven skoru düşük${confidence}. OCR fallback yeterli sonuç üretmediyse belge manuel incelenmeli.`
+  // For OCR-001 and the QUAL-* family, the rule itself returns a detailed
+  // Turkish message that already enumerates the affected documents — prefer it.
+  if (
+    result.ruleCode === 'OCR-001' ||
+    result.ruleCode.startsWith('QUAL-')
+  ) {
+    if (result.message && result.message.trim().length > 0) {
+      return result.message
+    }
+    if (result.ruleCode === 'OCR-001') {
+      const ref = sourceRefs[0]
+      const confidence = typeof ref?.value === 'number' ? ` (%${Math.round(ref.value * 100)})` : ''
+      return `${docTypeLabel(ref?.docType)} için veri çıkarma güven skoru düşük${confidence}. OCR fallback yeterli sonuç üretmediyse belge manuel incelenmeli.`
+    }
   }
 
   if (result.result === 'PASS') {
     return PASS_MESSAGES[result.ruleCode] ?? 'Kontrol geçti.'
+  }
+
+  // When the rule produces a REVIEW_NEEDED outcome (e.g. confidence-aware
+  // failOrReview helper), the rule's own Turkish message is more specific
+  // than the generic ISSUE_MESSAGES fallback — prefer it.
+  if (result.result === 'REVIEW_NEEDED' && result.message && result.message.trim().length > 0) {
+    return result.message
   }
 
   return ISSUE_MESSAGES[result.ruleCode] ?? `${result.ruleCode} kontrolünde bulgu tespit edildi. Kaynak alanlar manuel kontrol edilmeli.`

@@ -36,7 +36,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-          <Link href="/dashboard" className="hover:text-gray-700">Dashboard</Link>
+          <Link href="/dashboard" className="hover:text-gray-700">Kontrol paneli</Link>
           <span>/</span>
           <span>{submission.title}</span>
         </div>
@@ -103,7 +103,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
                     <div className="ml-3 flex-1">
                       <p className="text-sm font-medium text-gray-900">{doc.label}</p>
                       <p className="text-xs text-gray-500">
-                        {doc.latestVersion?.originalFilename ?? 'No file'} •{' '}
+                        {doc.latestVersion?.originalFilename ?? 'Dosya yok'} •{' '}
                         {doc.isIgnored ? 'Yoksayıldı' : doc.docType}
                       </p>
                       {doc.suggestedDocType && !doc.classificationValidatedAt && (
@@ -178,7 +178,9 @@ export default async function SubmissionDetailPage({ params }: Props) {
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Sınıflandırma</dt>
-                <dd className="font-medium text-gray-900">{submission.classificationStatus}</dd>
+                <dd className="font-medium text-gray-900">
+                  {classificationStatusLabel(submission.classificationStatus)}
+                </dd>
               </div>
               {submission.brokerClient && (
                 <div className="flex justify-between">
@@ -186,10 +188,6 @@ export default async function SubmissionDetailPage({ params }: Props) {
                   <dd className="font-medium text-gray-900">{submission.brokerClient.displayName}</dd>
                 </div>
               )}
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Veri Sınıfı</dt>
-                <dd className="font-medium text-gray-900">{submission.dataClassification}</dd>
-              </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Belgeler</dt>
                 <dd className="font-medium text-gray-900">{submission.documents.length}</dd>
@@ -214,13 +212,15 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
     { key: 'EXTRACTING', label: 'Veri Çıkarılıyor' },
     { key: 'NORMALIZING', label: 'Normalleştiriliyor' },
     { key: 'RUNNING_RULES', label: 'Kurallar Çalışıyor' },
+    { key: 'AI_RULE_VALIDATING', label: 'Yapay zeka kural kontrolü' },
+    { key: 'EXPERT_REVIEWING', label: 'Yapay zeka uzman incelemesi' },
     { key: 'GENERATING_REPORT', label: 'Rapor Üretiliyor' },
     { key: 'COMPLETED', label: 'Tamamlandı' },
   ]
 
   const statusOrder = [
     'PENDING', 'UPLOADED', 'CLASSIFYING', 'AWAITING_VALIDATION', 'EXTRACTING', 'NORMALIZING',
-    'RUNNING_RULES', 'GENERATING_REPORT', 'COMPLETED',
+    'RUNNING_RULES', 'AI_RULE_VALIDATING', 'EXPERT_REVIEWING', 'GENERATING_REPORT', 'COMPLETED',
   ]
 
   const currentIndex = statusOrder.indexOf(status)
@@ -277,4 +277,13 @@ function tradeFlowLabel(tradeFlow: string) {
   if (tradeFlow === 'IMPORT') return 'İthalat'
   if (tradeFlow === 'EXPORT') return 'İhracat'
   return 'Henüz doğrulanmadı'
+}
+
+function classificationStatusLabel(status: string) {
+  const map: Record<string, string> = {
+    PENDING: 'Bekliyor',
+    AWAITING_VALIDATION: 'Doğrulama bekliyor',
+    VALIDATED: 'Doğrulandı',
+  }
+  return map[status] ?? status
 }

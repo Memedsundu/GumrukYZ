@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync } from 'fs'
 import { join, resolve } from 'path'
 import { RuleEvaluator } from './evaluator.js'
-import { ALL_RULES } from './index.js'
+import { ALL_RULES, LOW_CONFIDENCE_THRESHOLD } from './index.js'
 import type { SubmissionContext, ExtractionData } from './types.js'
 import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
 
@@ -37,8 +37,6 @@ interface FixtureFile {
   } | null
 }
 
-const LOW_CONFIDENCE_THRESHOLD = 0.5
-
 function loadFixture(fixturePath: string): FixtureFile {
   const content = readFileSync(fixturePath, 'utf-8')
   return JSON.parse(content) as FixtureFile
@@ -61,28 +59,20 @@ function buildContext(fixture: FixtureFile): SubmissionContext {
 }
 
 function evaluateLikeProcessing(ctx: SubmissionContext): ReturnType<RuleEvaluator['evaluate']> {
-  const lowConfidenceDocs = ctx.documents.filter(
-    (doc) => doc.confidence < LOW_CONFIDENCE_THRESHOLD,
-  )
   const ruleUsableDocs = ctx.documents.filter(
     (doc) => doc.confidence >= LOW_CONFIDENCE_THRESHOLD,
   )
-  const presenceRules = ALL_RULES.filter((rule) => rule.code.startsWith('PRES-'))
-  const contentRules = ALL_RULES.filter((rule) => !rule.code.startsWith('PRES-'))
+  const isQualityOrPresence = (code: string) =>
+    code.startsWith('QUAL-') || code.startsWith('PRES-') || code === 'OCR-001'
+  const qualityAndPresenceRules = ALL_RULES.filter((r) => isQualityOrPresence(r.code))
+  const contentRules = ALL_RULES.filter((r) => !isQualityOrPresence(r.code))
 
   return [
-    ...new RuleEvaluator(presenceRules).evaluate(ctx),
+    ...new RuleEvaluator(qualityAndPresenceRules).evaluate(ctx),
     ...new RuleEvaluator(contentRules).evaluate({
       ...ctx,
       documents: ruleUsableDocs,
     }),
-    ...lowConfidenceDocs.map((doc) => ({
-      ruleCode: 'OCR-001',
-      severity: 'WARNING' as const,
-      result: 'REVIEW_NEEDED' as const,
-      message: `Document type ${doc.docType} has low extraction confidence (${(doc.confidence * 100).toFixed(0)}%). Manual review recommended.`,
-      sourceRefs: [{ docType: doc.docType, field: 'confidence', value: doc.confidence }],
-    })),
   ]
 }
 

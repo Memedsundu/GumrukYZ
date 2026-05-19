@@ -2,7 +2,9 @@ import { prisma } from '@gumrukyz/db'
 import {
   formatRuleResultMessage,
   formatSourceRef,
+  getRuleDisplayMetadata,
   parseSourceRefs,
+  recommendedActionForRuleResult,
   resultLabel,
   severityLabel,
 } from './report-format'
@@ -29,6 +31,27 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
               },
             },
           },
+          aiValidations: {
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      },
+      expertReviews: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        include: {
+          findings: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              citations: {
+                include: {
+                  regulationChunk: {
+                    include: { sourceDocument: true },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -38,6 +61,22 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
 
   const report = submission.riskReports[0]
   if (!report) return null
+  const expertReview = submission.expertReviews[0] ?? null
+  const expertWarnings = expertReview?.findings.filter((finding) => finding.severity === 'WARN').length ?? 0
+  const expertReviewNeeded =
+    expertReview?.findings.filter((finding) => finding.severity === 'REVIEW_NEEDED').length ?? 0
+
+  const actionSummary = submission.ruleResults
+    .filter((result) => result.result !== 'PASS' && result.result !== 'SKIP')
+    .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
+    .slice(0, 6)
+    .map((result) => ({
+      ruleCode: result.ruleCode,
+      result: result.result,
+      title: getRuleDisplayMetadata(result.ruleCode).turkishTitle,
+      description: formatRuleResultMessage(result),
+      action: recommendedActionForRuleResult(result.ruleCode, result.result),
+    }))
 
   return {
     generatedAt: new Date().toISOString(),
@@ -69,10 +108,47 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
     })),
     counts: {
       errors: submission.ruleResults.filter((result) => result.result === 'FAIL').length,
-      warnings: submission.ruleResults.filter((result) => result.result === 'WARN').length,
-      reviewNeeded: submission.ruleResults.filter((result) => result.result === 'REVIEW_NEEDED').length,
+      warnings: submission.ruleResults.filter((result) => result.result === 'WARN').length + expertWarnings,
+      reviewNeeded: submission.ruleResults.filter((result) => result.result === 'REVIEW_NEEDED').length + expertReviewNeeded,
       passes: submission.ruleResults.filter((result) => result.result === 'PASS').length,
     },
+    actionSummary,
+    expertReview: expertReview
+      ? {
+          id: expertReview.id,
+          status: expertReview.status,
+          legalContextStatus: expertReview.legalContextStatus,
+          model: expertReview.model,
+          overallRisk: expertReview.overallRisk,
+          summary: expertReview.summary,
+          completedAt: expertReview.completedAt?.toISOString() ?? null,
+          findings: expertReview.findings.map((finding) => ({
+            id: finding.id,
+            area: finding.area,
+            severity: finding.severity,
+            confidence: finding.confidence,
+            title: finding.title,
+            explanation: finding.explanation,
+            recommendation: finding.recommendation,
+            evidenceRefs: finding.evidenceRefsJson,
+            citations: finding.citations.map((citation) => ({
+              id: citation.id,
+              chunkId: citation.regulationChunk.id,
+              sourceTitle: citation.regulationChunk.sourceDocument.title,
+              sourceType: citation.regulationChunk.sourceDocument.sourceType,
+              jurisdiction: citation.regulationChunk.sourceDocument.jurisdiction,
+              articleLabel: citation.regulationChunk.articleLabel,
+              excerpt: citation.regulationChunk.chunkText.slice(0, 500),
+              url: citation.regulationChunk.sourceUrl ?? citation.regulationChunk.sourceDocument.url,
+              verifiedAt: citation.regulationChunk.verifiedAt?.toISOString()
+                ?? citation.regulationChunk.sourceDocument.lastVerifiedAt?.toISOString()
+                ?? citation.regulationChunk.sourceDocument.snapshotFetchedAt?.toISOString()
+                ?? null,
+            })),
+            createdAt: finding.createdAt.toISOString(),
+          })),
+        }
+      : null,
     ruleResults: submission.ruleResults.map((result) => {
       const sourceRefs = parseSourceRefs(result.sourceRefsJson)
       return {
@@ -84,6 +160,8 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
         resultLabel: resultLabel(result.result),
         message: result.message,
         displayMessage: formatRuleResultMessage(result),
+        metadata: getRuleDisplayMetadata(result.ruleCode),
+        recommendedAction: recommendedActionForRuleResult(result.ruleCode, result.result),
         sourceRefs,
         sourceRefsDisplay: sourceRefs.map(formatSourceRef),
         legalCitations: result.citations.map((citation) => ({
@@ -107,7 +185,23 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
           reason: override.reason,
           createdAt: override.createdAt.toISOString(),
         })),
+        aiValidations: result.aiValidations.map((validation) => ({
+          id: validation.id,
+          status: validation.status,
+          confidence: validation.confidence,
+          explanation: validation.explanation,
+          recommendation: validation.recommendation,
+          evidenceRefs: validation.evidenceRefsJson,
+          createdAt: validation.createdAt.toISOString(),
+        })),
       }
     }),
   }
+}
+
+function resultPriority(result: string): number {
+  if (result === 'FAIL') return 0
+  if (result === 'REVIEW_NEEDED') return 1
+  if (result === 'WARN') return 2
+  return 3
 }

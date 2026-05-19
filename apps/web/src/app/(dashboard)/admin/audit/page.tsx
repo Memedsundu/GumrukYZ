@@ -1,4 +1,4 @@
-import { getAuthenticatedUser } from '@/lib/auth'
+import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { ScrollText } from 'lucide-react'
@@ -28,7 +28,7 @@ interface PageProps {
 export default async function AuditPage({ searchParams }: PageProps) {
   const user = await getAuthenticatedUser()
 
-  if (!['TENANT_MANAGER', 'PLATFORM_ADMIN'].includes(user.role)) {
+  if (!canManageTenant(user)) {
     redirect('/dashboard')
   }
 

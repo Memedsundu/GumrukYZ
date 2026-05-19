@@ -1,13 +1,12 @@
-import { PrismaClient } from '@prisma/client'
-import { DataClassification, TenantPlan, SourceType, Jurisdiction } from '@gumrukyz/domain'
-
-const prisma = new PrismaClient()
+import { DataClassification, TenantPlan } from '@gumrukyz/domain'
+import { prisma } from './client.js'
+import { REGULATION_SOURCE_MANIFEST } from './regulation-source-manifest.js'
 
 async function main() {
   console.log('Seeding database...')
 
   // Upsert internal tenant
-  const internalTenant = await prisma.tenant.upsert({
+  let internalTenant = await prisma.tenant.upsert({
     where: { clerkOrgId: process.env['INTERNAL_TENANT_CLERK_ORG_ID'] ?? 'internal_dev' },
     update: {},
     create: {
@@ -17,75 +16,73 @@ async function main() {
       dataClassificationAllowed: [
         DataClassification.SYNTHETIC,
         DataClassification.REDACTED,
+        DataClassification.REAL,
       ],
     },
   })
+  if (!internalTenant.dataClassificationAllowed.includes(DataClassification.REAL)) {
+    internalTenant = await prisma.tenant.update({
+      where: { id: internalTenant.id },
+      data: {
+        dataClassificationAllowed: [
+          ...internalTenant.dataClassificationAllowed,
+          DataClassification.REAL,
+        ],
+      },
+    })
+  }
   console.log('Tenant:', internalTenant.name)
 
-  // Seed source documents
-  const sources = [
-    {
-      title: '4458 Sayılı Gümrük Kanunu',
-      url: 'https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=4458&MevzuatTur=1&MevzuatTertip=5',
-      sourceType: SourceType.LAW,
-      jurisdiction: Jurisdiction.TR,
-      language: 'TR',
-      effectiveDate: new Date('1999-11-04'),
-      rawExcerpt: 'Türkiye Cumhuriyeti gümrük mevzuatının temel kanunu.',
-    },
-    {
-      title: 'Gümrük Yönetmeliği',
-      url: 'https://www.mevzuat.gov.tr/mevzuat?MevzuatNo=25407&MevzuatTur=9&MevzuatTertip=5',
-      sourceType: SourceType.REGULATION,
-      jurisdiction: Jurisdiction.TR,
-      language: 'TR',
-      effectiveDate: new Date('2006-10-07'),
-      rawExcerpt: '4458 sayılı Gümrük Kanununun uygulanmasına ilişkin yönetmelik.',
-    },
-    {
-      title: 'Türk Gümrük Tarife Cetveli',
-      url: 'https://www.ticaret.gov.tr/dis-ticaret/urun-klasifikasyon-ve-gtip',
-      sourceType: SourceType.REGULATION,
-      jurisdiction: Jurisdiction.TR,
-      language: 'TR',
-      effectiveDate: new Date('2024-01-01'),
-      rawExcerpt: 'GTİP kodları ve tarife sınıflandırması için referans belge.',
-    },
-    {
-      title: 'ICC Incoterms 2020',
-      url: 'https://iccwbo.org/business-solutions/incoterms-rules/incoterms-2020/',
-      sourceType: SourceType.INTERNATIONAL_STANDARD,
-      jurisdiction: Jurisdiction.ICC,
-      language: 'EN',
-      effectiveDate: new Date('2020-01-01'),
-      rawExcerpt:
-        'International Commercial Terms 2020 edition. Defines trade term obligations for buyers and sellers.',
-    },
-    {
-      title: 'WCO HS Nomenclature 2022',
-      url: 'https://www.wcoomd.org/en/topics/nomenclature/instrument-and-tools/hs-nomenclature-2022-edition.aspx',
-      sourceType: SourceType.INTERNATIONAL_STANDARD,
-      jurisdiction: Jurisdiction.WCO,
-      language: 'EN',
-      effectiveDate: new Date('2022-01-01'),
-      rawExcerpt:
-        'Harmonized System Nomenclature 2022 — international standard for classifying goods in trade.',
-    },
-    {
-      title: 'FIATA Bill of Lading Model Rules',
-      url: 'https://fiata.org/transport-documents/',
-      sourceType: SourceType.INTERNATIONAL_STANDARD,
-      jurisdiction: Jurisdiction.ICC,
-      language: 'EN',
-      effectiveDate: new Date('2017-01-01'),
-      rawExcerpt: 'FIATA model rules for transport document issuance and required fields.',
-    },
-  ]
+  const adminClerkUserId = process.env['INTERNAL_ADMIN_CLERK_USER_ID']?.trim()
+  if (adminClerkUserId) {
+    const adminEmail = process.env['INTERNAL_ADMIN_EMAIL']?.trim() ?? 'admin@gumrukyz.local'
+    await prisma.user.upsert({
+      where: {
+        clerkUserId_tenantId: {
+          clerkUserId: adminClerkUserId,
+          tenantId: internalTenant.id,
+        },
+      },
+      update: {
+        email: adminEmail,
+        role: 'PLATFORM_ADMIN',
+      },
+      create: {
+        clerkUserId: adminClerkUserId,
+        email: adminEmail,
+        tenantId: internalTenant.id,
+        role: 'PLATFORM_ADMIN',
+      },
+    })
+    console.log('Admin user:', adminEmail)
+  } else {
+    console.warn('INTERNAL_ADMIN_CLERK_USER_ID is not set; no admin user was provisioned.')
+  }
 
-  for (const source of sources) {
-    const existing = await prisma.sourceDocument.findFirst({ where: { url: source.url } })
-    if (!existing) {
-      await prisma.sourceDocument.create({ data: source })
+  // Seed source documents from the same manifest used by regulation ingestion.
+  for (const source of REGULATION_SOURCE_MANIFEST) {
+    const existing = await prisma.sourceDocument.findFirst({
+      where: {
+        OR: [
+          { url: source.url },
+          { title: source.title },
+        ],
+      },
+    })
+    const data = {
+      title: source.title,
+      url: source.url,
+      sourceType: source.sourceType,
+      jurisdiction: source.jurisdiction,
+      language: source.language,
+      effectiveDate: source.effectiveDate ? new Date(source.effectiveDate) : null,
+      rawExcerpt: source.fallbackChunks?.join(' ').slice(0, 800) ?? `${source.title} source metadata.`,
+    }
+
+    if (existing) {
+      await prisma.sourceDocument.update({ where: { id: existing.id }, data })
+    } else {
+      await prisma.sourceDocument.create({ data })
       console.log('Source document:', source.title)
     }
   }
@@ -312,15 +309,15 @@ async function main() {
     },
     {
       ruleCode: 'CROSS-004',
-      name: 'Invoice quantity must match declaration quantity',
-      description: 'Total invoice item quantities should match declaration quantities.',
-      appliesToDocTypes: ['INVOICE', 'DECLARATION_OUTPUT'],
+      name: 'Invoice quantity must match packing list quantity',
+      description: 'Total invoice item quantities should match packing list quantities when units are comparable.',
+      appliesToDocTypes: ['INVOICE', 'PACKING_LIST'],
       fieldChecks: ['items[].quantity'],
       severity: 'ERROR',
-      explanationTemplate: 'Quantity mismatch between invoice and declaration.',
+      explanationTemplate: 'Quantity mismatch between invoice and packing list.',
       sourceDocumentId: gumrukKanunuSource?.id ?? null,
       fixturePassRef: 'fixtures/clean-import/extraction.json',
-      fixtureFailRef: 'fixtures/value-mismatch/extraction.json',
+      fixtureFailRef: 'fixtures/ambiguous-quantity-unit/extraction.json',
     },
     {
       ruleCode: 'CROSS-005',
@@ -369,6 +366,18 @@ async function main() {
       sourceDocumentId: gumrukKanunuSource?.id ?? null,
       fixturePassRef: 'fixtures/clean-import/extraction.json',
       fixtureFailRef: 'fixtures/weight-mismatch/extraction.json',
+    },
+    {
+      ruleCode: 'CROSS-009',
+      name: 'Trade flow must match party and route evidence',
+      description: 'Validated import/export direction should be supported by seller, buyer, shipper, consignee, and route evidence.',
+      appliesToDocTypes: ['INVOICE', 'DECLARATION_OUTPUT', 'LOADING_INSTRUCTION', 'TRANSPORT_DOC'],
+      fieldChecks: ['seller_address', 'buyer_address', 'exporter', 'importer', 'shipper', 'consignee', 'destination'],
+      severity: 'WARNING',
+      explanationTemplate: 'Trade direction is weakly supported or conflicts with extracted party/route evidence.',
+      sourceDocumentId: gumrukKanunuSource?.id ?? null,
+      fixturePassRef: 'fixtures/gtip-prefix-compatible/extraction.json',
+      fixtureFailRef: 'fixtures/missing-invoice/extraction.json',
     },
     // Presence rules (new)
     {

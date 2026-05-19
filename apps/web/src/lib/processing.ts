@@ -5,11 +5,11 @@
  * Sprint 2: replace with Trigger.dev durable job.
  *
  * Pipeline steps:
- * CLASSIFYING → EXTRACTING → NORMALIZING → RUNNING_RULES → GENERATING_REPORT → COMPLETED
+ * CLASSIFYING → EXTRACTING → NORMALIZING → RUNNING_RULES → AI_RULE_VALIDATING → EXPERT_REVIEWING → GENERATING_REPORT → COMPLETED
  */
 import { prisma, searchRegulations } from '@gumrukyz/db'
 import { Prisma } from '@gumrukyz/db'
-import { RuleEvaluator, ALL_RULES } from '@gumrukyz/rules'
+import { RuleEvaluator, ALL_RULES, LOW_CONFIDENCE_THRESHOLD as RULES_LOW_CONFIDENCE_THRESHOLD } from '@gumrukyz/rules'
 import type { SubmissionContext, ExtractionData } from '@gumrukyz/rules'
 import { OpenAIProvider } from '@gumrukyz/ai'
 import {
@@ -36,9 +36,21 @@ import {
   runOpenAIDocumentReader,
   shouldRunOpenAIDocumentReader,
 } from './openai-document-reader'
+import { runExpertReviewForSubmission } from './expert-review'
+import { runAiRuleValidationForSubmission } from './ai-rule-validation'
 
-const LOW_CONFIDENCE_THRESHOLD = 0.5
+const LOW_CONFIDENCE_THRESHOLD = RULES_LOW_CONFIDENCE_THRESHOLD
 type DocumentReaderMode = 'hybrid' | 'managed' | 'native'
+const ACTIVE_PROCESSING_JOB_STATUSES = [
+  'PENDING',
+  'CLASSIFYING',
+  'EXTRACTING',
+  'NORMALIZING',
+  'RUNNING_RULES',
+  'AI_RULE_VALIDATING',
+  'EXPERT_REVIEWING',
+  'GENERATING_REPORT',
+]
 
 async function updateJobStatus(
   jobId: string,
@@ -70,6 +82,20 @@ export async function processSubmission(
   logger.info('processSubmission.start', { submissionId, jobId })
 
   try {
+    const activeJob = await prisma.processingJob.findFirst({
+      where: {
+        id: jobId,
+        submissionId,
+        tenantId,
+        status: { in: ACTIVE_PROCESSING_JOB_STATUSES },
+      },
+      select: { id: true },
+    })
+    if (!activeJob) {
+      logger.warn('processSubmission.lock_missing', { submissionId, tenantId, jobId })
+      return
+    }
+
     // Fetch submission with documents
     const submission = await prisma.submission.findUnique({
       where: { id: submissionId },
@@ -515,14 +541,20 @@ export async function processSubmission(
         : null,
     }
 
-    // Also handle low-confidence documents by adding REVIEW_NEEDED results
+    // Quality + presence rules run on the full document set (they explicitly
+    // reason about extraction confidence). Content rules only see documents
+    // with confidence ≥ LOW_CONFIDENCE_THRESHOLD to avoid spurious FAILs from
+    // unreliable extractions.
     const lowConfidenceDocs = extractionResults.filter((e) => e.confidence < LOW_CONFIDENCE_THRESHOLD)
     const ruleUsableDocs = extractionResults.filter((e) => e.confidence >= LOW_CONFIDENCE_THRESHOLD)
 
-    const presenceRules = ALL_RULES.filter((rule) => rule.code.startsWith('PRES-'))
-    const contentRules = ALL_RULES.filter((rule) => !rule.code.startsWith('PRES-'))
+    const isQualityOrPresence = (code: string) =>
+      code.startsWith('QUAL-') || code.startsWith('PRES-') || code === 'OCR-001'
+    const qualityAndPresenceRules = ALL_RULES.filter((r) => isQualityOrPresence(r.code))
+    const contentRules = ALL_RULES.filter((r) => !isQualityOrPresence(r.code))
+
     const ruleResults = [
-      ...new RuleEvaluator(presenceRules).evaluate(ctx),
+      ...new RuleEvaluator(qualityAndPresenceRules).evaluate(ctx),
       ...new RuleEvaluator(contentRules).evaluate({
         ...ctx,
         documents: ruleUsableDocs,
@@ -539,6 +571,8 @@ export async function processSubmission(
           select: {
             id: true,
             articleLabel: true,
+            excerpt: true,
+            url: true,
             sourceDocument: { select: { title: true } },
           },
         },
@@ -547,6 +581,17 @@ export async function processSubmission(
     const ruleIdMap = new Map(activeRules.map((r) => [r.ruleCode, r.id]))
     const ruleCitationIdsMap = new Map(
       activeRules.map((r) => [r.ruleCode, r.legalCitations.map((citation) => citation.id)]),
+    )
+    const ruleCitationDetailsMap = new Map(
+      activeRules.map((r) => [
+        r.ruleCode,
+        r.legalCitations.map((citation) => ({
+          sourceTitle: citation.sourceDocument.title,
+          articleLabel: citation.articleLabel,
+          excerpt: citation.excerpt,
+          url: citation.url,
+        })),
+      ]),
     )
     const ruleCitationLabelsMap = new Map(
       activeRules.map((r) => [
@@ -568,19 +613,25 @@ export async function processSubmission(
       ruleId: ruleIdMap.get(r.ruleCode) ?? null,
     }))
 
-    // Add REVIEW_NEEDED for low-confidence documents
-    for (const lowDoc of lowConfidenceDocs) {
-      resultRows.push({
-        submissionId,
-        tenantId,
-        ruleCode: 'OCR-001',
-        severity: 'WARNING',
-        result: 'REVIEW_NEEDED',
-        message: `${lowDoc.docType} belgesinde veri çıkarma güven skoru düşük (${(lowDoc.confidence * 100).toFixed(0)}%). Manuel inceleme önerilir.`,
-        sourceRefsJson: [{ docType: lowDoc.docType, field: 'confidence', value: lowDoc.confidence }] as Prisma.InputJsonValue,
-        ruleId: null,
-      })
-    }
+    // Low-confidence handling is now covered by the OCR-001 RuleDefinition
+    // (see packages/rules/src/rules/quality.ts) which is included in
+    // ALL_RULES. We keep `lowConfidenceDocs` only for downstream reporting.
+    void lowConfidenceDocs
+
+    const persistedRuleResults: Array<{
+      id: string
+      ruleCode: string
+      severity: string
+      result: string
+      message: string
+      sourceRefsJson: unknown
+      legalCitations: Array<{
+        sourceTitle: string
+        articleLabel: string | null
+        excerpt: string
+        url: string
+      }>
+    }> = []
 
     if (resultRows.length > 0) {
       await prisma.$transaction(async (tx) => {
@@ -596,38 +647,97 @@ export async function processSubmission(
               skipDuplicates: true,
             })
           }
+          persistedRuleResults.push({
+            id: created.id,
+            ruleCode: row.ruleCode,
+            severity: row.severity,
+            result: row.result,
+            message: row.message,
+            sourceRefsJson: row.sourceRefsJson,
+            legalCitations: ruleCitationDetailsMap.get(row.ruleCode) ?? [],
+          })
         }
       })
     }
+
+    // ─── AI_RULE_VALIDATING ───────────────────────────────────────────────────
+    await updateJobStatus(jobId, submissionId, 'AI_RULE_VALIDATING', 'AI_RULE_VALIDATING')
+
+    const aiRuleValidation = await runAiRuleValidationForSubmission({
+      submissionId,
+      tenantId,
+      tradeFlow: submission.tradeFlow,
+      documents: extractionResults,
+      ruleResults: persistedRuleResults,
+    }).catch((validationErr) => {
+      logger.warn('AI rule validation failed outside guarded runner, continuing processing', {
+        error: validationErr instanceof Error ? validationErr.message : String(validationErr),
+      })
+      return null
+    })
+
+    // ─── EXPERT_REVIEWING ─────────────────────────────────────────────────────
+    await updateJobStatus(jobId, submissionId, 'EXPERT_REVIEWING', 'EXPERT_REVIEWING')
+
+    const expertReview = await runExpertReviewForSubmission({
+      submissionId,
+      tenantId,
+      tradeFlow: submission.tradeFlow,
+      documents: extractionResults,
+      ruleResults: resultRows,
+    }).catch((expertErr) => {
+      logger.warn('Expert review failed outside guarded runner, continuing report generation', {
+        error: expertErr instanceof Error ? expertErr.message : String(expertErr),
+      })
+      return null
+    })
 
     // ─── GENERATING_REPORT ─────────────────────────────────────────────────────
     await updateJobStatus(jobId, submissionId, 'GENERATING_REPORT', 'GENERATING_REPORT')
 
     const errors = resultRows.filter((r) => r.result === 'FAIL').length
-    const warnings = resultRows.filter((r) => r.result === 'WARN').length
-    const reviewNeeded = resultRows.filter((r) => r.result === 'REVIEW_NEEDED').length
+    const warnings = resultRows.filter((r) => r.result === 'WARN').length + (expertReview?.warningCount ?? 0)
+    const reviewNeeded =
+      resultRows.filter((r) => r.result === 'REVIEW_NEEDED').length + (expertReview?.reviewNeededCount ?? 0)
 
     let summaryText: string | null = null
-    if (ai.isEnabled() && resultRows.some((r) => r.result !== 'PASS')) {
-      try {
-        const findings = resultRows
-          .filter((r) => r.result !== 'PASS' && r.result !== 'SKIP')
-          .map((r) => ({
-            ruleCode: r.ruleCode,
-            severity: r.severity,
-            message: [
-              formatRuleResultMessage(r),
-              ruleCitationLabelsMap.get(r.ruleCode)
-                ? `Mevzuat kaynağı: ${ruleCitationLabelsMap.get(r.ruleCode)}`
-                : null,
-            ].filter(Boolean).join(' '),
-          }))
+    const expertFindingsForSummary = (expertReview?.findings ?? []).map((finding) => ({
+      ruleCode: `AI-${finding.area}`,
+      severity: finding.severity,
+      message: `${finding.title}: ${finding.explanation}`,
+    }))
+    const aiRuleValidationFindingsForSummary = (aiRuleValidation?.findings ?? [])
+      .filter((finding) => finding.status !== 'LIKELY_CORRECT')
+      .map((finding) => ({
+        ruleCode: `AI-RULE-${finding.ruleCode}`,
+        severity: finding.status,
+        message: `${finding.explanation} Öneri: ${finding.recommendation}`,
+      }))
+    const nonPassRuleFindings = resultRows
+      .filter((r) => r.result !== 'PASS' && r.result !== 'SKIP')
+      .map((r) => ({
+        ruleCode: r.ruleCode,
+        severity: r.severity,
+        message: [
+          formatRuleResultMessage(r),
+          ruleCitationLabelsMap.get(r.ruleCode)
+            ? `Mevzuat kaynağı: ${ruleCitationLabelsMap.get(r.ruleCode)}`
+            : null,
+        ].filter(Boolean).join(' '),
+      }))
+    const summaryFindings = [
+      ...nonPassRuleFindings,
+      ...aiRuleValidationFindingsForSummary,
+      ...expertFindingsForSummary,
+    ]
 
+    if (ai.isEnabled() && summaryFindings.length > 0) {
+      try {
         // RAG: retrieve relevant regulation chunks to enrich the AI summary
         let regulationContext: Array<{ title: string; excerpt: string }> | undefined
-        if (ai.embedText && findings.length > 0) {
+        if (ai.embedText) {
           try {
-            const queryText = findings.map((f) => f.message).join(' ').slice(0, 4000)
+            const queryText = summaryFindings.map((f) => f.message).join(' ').slice(0, 4000)
             const embedding = await ai.embedText(queryText)
             const chunks = await searchRegulations(prisma, embedding, 3, 0.55)
             if (chunks.length > 0) {
@@ -643,7 +753,7 @@ export async function processSubmission(
           }
         }
 
-        const { result } = await ai.generateRiskSummary(findings, submission.tradeFlow, regulationContext)
+        const { result } = await ai.generateRiskSummary(summaryFindings, submission.tradeFlow, regulationContext)
         summaryText = result.summary
       } catch (err) {
         logger.warn('Risk summary generation failed', {
@@ -802,6 +912,7 @@ async function clearGeneratedArtifacts(
       },
     })
     await tx.ruleResult.deleteMany({ where: { submissionId, tenantId } })
+    await tx.expertReview.deleteMany({ where: { submissionId, tenantId } })
     await tx.riskReport.deleteMany({ where: { submissionId, tenantId } })
     await tx.declarationItem.deleteMany({
       where: {

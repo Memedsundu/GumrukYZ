@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
-import { prisma } from '@gumrukyz/db'
 import { buildReportPayload } from '@/lib/report-data'
 import { renderReportPdf } from '@/lib/report-pdf'
 import { reportFilename } from '@/lib/report-format'
+import { requireApiUser } from '@/lib/auth'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -15,17 +14,15 @@ export async function GET(req: NextRequest, { params }: Params) {
     const format = req.nextUrl.searchParams.get('format') ?? 'pdf'
 
     if (format !== 'pdf' && format !== 'json') {
-      return NextResponse.json({ error: 'Unsupported format' }, { status: 400 })
+      return NextResponse.json({ error: 'Desteklenmeyen format' }, { status: 400 })
     }
 
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const user = await prisma.user.findUnique({ where: { clerkUserId: userId } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const authResult = await requireApiUser()
+    if (authResult.response) return authResult.response
+    const { user } = authResult
 
     const payload = await buildReportPayload(submissionId, user.tenantId)
-    if (!payload) return NextResponse.json({ error: 'Report not found' }, { status: 404 })
+    if (!payload) return NextResponse.json({ error: 'Rapor bulunamadı' }, { status: 404 })
 
     const filename = reportFilename(payload.submission.title, format)
     const disposition = `attachment; filename="${filename}"`
@@ -48,6 +45,6 @@ export async function GET(req: NextRequest, { params }: Params) {
     })
   } catch (err) {
     console.error('GET /api/submissions/[id]/report/download error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
 }
