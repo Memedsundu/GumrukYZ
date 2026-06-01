@@ -1,7 +1,7 @@
 import { DataClassification, TenantPlan } from '@gumrukyz/domain'
 
-/** Default classification for new pilot submissions (REAL requires explicit opt-in). */
-export const PILOT_DEFAULT_DATA_CLASSIFICATION = DataClassification.REDACTED
+/** Default classification for new pilot submissions. */
+export const PILOT_DEFAULT_DATA_CLASSIFICATION = DataClassification.REAL
 
 export const PILOT_TENANT_CLASSIFICATIONS = [
   DataClassification.SYNTHETIC,

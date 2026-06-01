@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const isPublicRoute = createRouteMatcher([
+  '/beta',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
@@ -23,6 +24,7 @@ const RATE_WINDOW_MS = 60_000 // 1 minute
 const LIMITS: Record<string, number> = {
   '/api/submissions': 30,         // POST new submission
   '/api/submissions/.*/process': 10, // POST process trigger
+  '/api/submissions/.*/expert-review': 6,
   '/api/clients': 60,
 }
 

@@ -143,6 +143,9 @@ Rules:
 - Do not invent values that are not visible in the document.
 - Preserve document numbers, tax IDs, currency codes, dates, totals, weights, package counts, HS/GTIP codes, and party names exactly where possible.
 - For tables, read item rows and totals carefully.
+- Do not infer net_weight from quantity, package count, or gross_weight. Use net_weight only when a visible label says Net Weight, Net Kg, Net Ağırlık, or Toplam Net.
+- For packing lists with only Brüt Ağırlık/Gross Weight columns, return net_weight as null at both document and item level.
+- For invoices, return country_of_origin only when an origin/menşe field is visible; do not copy seller country or address country into country_of_origin.
 - extracted_text must be a compact Turkish/English evidence summary with the key raw values you used, not a full transcript.
 - confidence must reflect document legibility and extraction certainty. Use below 0.65 if key fields are uncertain.`
 }

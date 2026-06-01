@@ -53,11 +53,15 @@ function normalizeUnit(value: unknown): string {
 }
 
 function isPackageUnit(value: unknown): boolean {
-  return /^(package|packages|pkg|koli|koliler|carton|ctn|pallet|palet|kap|case|box)$/.test(normalizeUnit(value))
+  const normalized = normalizeUnit(value)
+  if (!normalized) return false
+  return /(package|packages|pkg|koli|koliler|carton|ctn|pallet|palet|pallete|kap|case|box|woodenbox)/.test(normalized)
 }
 
 function isPieceUnit(value: unknown): boolean {
-  return /^(pcs|pc|piece|pieces|adet|unit|units|ea)$/.test(normalizeUnit(value))
+  const normalized = normalizeUnit(value)
+  if (!normalized) return false
+  return /^(pcs|pc|piece|pieces|adet|unit|units|ea)$/.test(normalized)
 }
 
 function hasAmbiguousQuantityUnits(
@@ -66,9 +70,13 @@ function hasAmbiguousQuantityUnits(
 ): boolean {
   const invoiceUnits = invoiceItems.map((item) => item.unit).filter(Boolean)
   const packingUnit = packingList['package_type']
-  if (invoiceUnits.length === 0 && !packingUnit) return true
+  const packingItems = Array.isArray(packingList['items'])
+    ? packingList['items'] as Array<{ unit?: unknown; package_type?: unknown }>
+    : []
+  const packingItemUnits = packingItems.flatMap((item) => [item.unit, item.package_type]).filter(Boolean)
+  if (invoiceUnits.length === 0 && !packingUnit && packingItemUnits.length === 0) return true
   const invoiceLooksPieceBased = invoiceUnits.some(isPieceUnit)
-  const packingLooksPackageBased = isPackageUnit(packingUnit)
+  const packingLooksPackageBased = isPackageUnit(packingUnit) || packingItemUnits.some(isPackageUnit)
   return invoiceLooksPieceBased && packingLooksPackageBased
 }
 
@@ -215,7 +223,7 @@ export const CROSS_004: RuleDefinition = {
       message: pass
         ? `Fatura toplam miktarı (${invTotal}) çeki listesi toplam miktarıyla (${plTotal}) eşleşiyor.`
         : ambiguousUnits
-          ? `Miktar değerleri farklı (${invTotal} ↔ ${plTotal}) ancak birimler (adet vs koli) belirsiz. Hard fail yerine manuel inceleme önerilir.`
+          ? `Miktar değerleri farklı (${invTotal} ↔ ${plTotal}) ancak fatura adet, çeki listesi ambalaj/kap sayısı gösteriyor olabilir. Manuel inceleme önerilir.`
         : `Miktar uyuşmazlığı: fatura ${invTotal} birim, çeki listesi ${plTotal} birim. Fark %1'i aşıyor.`,
       sourceRefs: pass
         ? []

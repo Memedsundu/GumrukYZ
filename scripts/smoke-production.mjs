@@ -8,7 +8,8 @@
 const baseUrl = process.env.PRODUCTION_URL ?? 'https://gumrukyz.vercel.app'
 
 async function main() {
-  const url = `${baseUrl.replace(/\/$/, '')}/api/health`
+  const root = baseUrl.replace(/\/$/, '')
+  const url = `${root}/api/health`
   console.log(`Checking ${url} ...`)
 
   const res = await fetch(url, { signal: AbortSignal.timeout(15_000) })
@@ -41,11 +42,23 @@ async function main() {
   }
 
   console.log('\nHealth check OK')
+
+  const betaUrl = `${root}/beta`
+  console.log(`\nChecking ${betaUrl} ...`)
+  const betaRes = await fetch(betaUrl, { signal: AbortSignal.timeout(15_000) })
+  const betaHtml = await betaRes.text()
+  if (!betaRes.ok || !betaHtml.includes('Beta kullanıma başla')) {
+    console.error('\nBeta page smoke check FAILED')
+    process.exit(1)
+  }
+  console.log('Beta page OK')
+
   console.log('\nManual E2E (per firm org):')
-  console.log('  1. Clerk org invite → sign in')
-  console.log('  2. Accept pilot consent')
-  console.log('  3. New submission (REDACTED) → upload PDFs → validate → process → report')
-  console.log('  4. Second org: dashboard must not show first org submissions')
+  console.log('  1. Open /beta → sign up by email')
+  console.log('  2. Create/select firm → accept pilot consent')
+  console.log('  3. New submission (REAL) → upload PDFs → validate → process → report')
+  console.log('  4. Run optional expert AI review and confirm firm quota decreases')
+  console.log('  5. Second firm: dashboard must not show first firm submissions')
 }
 
 main().catch((err) => {

@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server'
 import { forbidden, redirect } from 'next/navigation'
 import {
   classificationsForOrg,
-  isInternalOrg,
   tenantPlanForOrg,
 } from '@/lib/pilot'
 
@@ -16,10 +15,6 @@ export type AuthenticatedUser = Prisma.UserGetPayload<{
 
 export function canManageTenant(user: Pick<AuthenticatedUser, 'role'>): boolean {
   return ADMIN_ROLES.includes(user.role as (typeof ADMIN_ROLES)[number])
-}
-
-function isClerkOrgAdmin(orgRole: string | null | undefined): boolean {
-  return orgRole === 'org:admin' || orgRole === 'admin'
 }
 
 async function findUserByClerkAndTenant(
@@ -60,7 +55,6 @@ async function resolveOrgName(clerkOrgId: string): Promise<string> {
 async function provisionUserForOrg(
   clerkUserId: string,
   clerkOrgId: string,
-  orgRole: string | null | undefined,
 ): Promise<AuthenticatedUser> {
   const clerkUser = await currentUser()
   const email = clerkUser?.primaryEmailAddress?.emailAddress
@@ -73,20 +67,6 @@ async function provisionUserForOrg(
   const orgName = await resolveOrgName(clerkOrgId)
   const tenant = await ensureTenantForOrg(clerkOrgId, orgName)
 
-  const existingCount = await prisma.user.count({ where: { tenantId: tenant.id } })
-  const role = isClerkOrgAdmin(orgRole) || existingCount === 0
-    ? 'TENANT_MANAGER'
-    : 'TENANT_USER'
-
-  const platformAdminIds = process.env['PLATFORM_ADMIN_CLERK_USER_IDS']
-    ?.split(',')
-    .map((id) => id.trim())
-    .filter(Boolean) ?? []
-
-  const resolvedRole = platformAdminIds.includes(clerkUserId) && isInternalOrg(clerkOrgId)
-    ? 'PLATFORM_ADMIN'
-    : role
-
   return prisma.user.upsert({
     where: {
       clerkUserId_tenantId: { clerkUserId, tenantId: tenant.id },
@@ -96,7 +76,7 @@ async function provisionUserForOrg(
       clerkUserId,
       email,
       tenantId: tenant.id,
-      role: resolvedRole,
+      role: 'TENANT_USER',
     },
     include: { tenant: true },
   })
@@ -105,7 +85,6 @@ async function provisionUserForOrg(
 async function findOrProvisionUser(
   clerkUserId: string,
   clerkOrgId: string,
-  orgRole: string | null | undefined,
 ): Promise<AuthenticatedUser> {
   const tenant = await prisma.tenant.findUnique({ where: { clerkOrgId } })
   if (tenant) {
@@ -113,7 +92,7 @@ async function findOrProvisionUser(
     if (existing) return existing
   }
 
-  return provisionUserForOrg(clerkUserId, clerkOrgId, orgRole)
+  return provisionUserForOrg(clerkUserId, clerkOrgId)
 }
 
 export function userRoleLabel(role: string): string {
@@ -125,14 +104,13 @@ export function userRoleLabel(role: string): string {
 export type AuthSession = {
   userId: string
   orgId: string
-  orgRole: string | null
 }
 
 export async function getAuthSession(): Promise<AuthSession | null> {
-  const { userId, orgId, orgRole } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) return null
   if (!orgId) return null
-  return { userId, orgId, orgRole: orgRole ?? null }
+  return { userId, orgId }
 }
 
 export async function getAuthenticatedUser(): Promise<AuthenticatedUser> {
@@ -144,7 +122,7 @@ export async function getAuthenticatedUser(): Promise<AuthenticatedUser> {
   }
 
   try {
-    const user = await findOrProvisionUser(session.userId, session.orgId, session.orgRole)
+    const user = await findOrProvisionUser(session.userId, session.orgId)
     if (!user.pilotConsentAt) {
       redirect('/pilot-consent')
     }
@@ -163,7 +141,7 @@ export type ApiAuthResult =
 
 /** API auth without pilot consent (for consent endpoint only). */
 export async function requireProvisionedApiUser(): Promise<ApiAuthResult> {
-  const { userId, orgId, orgRole } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) {
     return { response: NextResponse.json({ error: 'Oturum açmanız gerekiyor' }, { status: 401 }) }
   }
@@ -177,7 +155,7 @@ export async function requireProvisionedApiUser(): Promise<ApiAuthResult> {
   }
 
   try {
-    const user = await findOrProvisionUser(userId, orgId, orgRole ?? null)
+    const user = await findOrProvisionUser(userId, orgId)
     return { user }
   } catch (err) {
     console.error('API user provisioning failed:', err)
@@ -191,7 +169,7 @@ export async function requireProvisionedApiUser(): Promise<ApiAuthResult> {
 }
 
 export async function requireApiUser(): Promise<ApiAuthResult> {
-  const { userId, orgId, orgRole } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) {
     return { response: NextResponse.json({ error: 'Oturum açmanız gerekiyor' }, { status: 401 }) }
   }
@@ -205,7 +183,7 @@ export async function requireApiUser(): Promise<ApiAuthResult> {
   }
 
   try {
-    const user = await findOrProvisionUser(userId, orgId, orgRole ?? null)
+    const user = await findOrProvisionUser(userId, orgId)
     if (!user.pilotConsentAt) {
       return {
         response: NextResponse.json(
@@ -236,7 +214,7 @@ export async function getProvisioningUser(): Promise<AuthenticatedUser> {
   }
 
   try {
-    return await findOrProvisionUser(session.userId, session.orgId, session.orgRole)
+    return await findOrProvisionUser(session.userId, session.orgId)
   } catch (err) {
     console.error('User provisioning failed:', err)
     forbidden()

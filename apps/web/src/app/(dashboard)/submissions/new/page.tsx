@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 export default function NewSubmissionPage() {
   const router = useRouter()
   const [title, setTitle] = useState('')
-  const [dataClassification, setDataClassification] = useState<'REDACTED' | 'SYNTHETIC' | 'REAL'>('REDACTED')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -19,7 +18,7 @@ export default function NewSubmissionPage() {
       const res = await fetch('/api/submissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, dataClassification }),
+        body: JSON.stringify({ title }),
       })
 
       if (!res.ok) {
@@ -42,7 +41,7 @@ export default function NewSubmissionPage() {
         <h1 className="text-2xl font-bold text-gray-900">Yeni dosya oluştur</h1>
       </div>
 
-      <div className="max-w-lg rounded-lg border border-gray-200 bg-white p-6">
+      <div className="max-w-lg rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700">
@@ -58,46 +57,6 @@ export default function NewSubmissionPage() {
               required
             />
           </div>
-
-          <fieldset className="space-y-2">
-            <legend className="block text-sm font-medium text-gray-700">Veri türü</legend>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="dataClassification"
-                checked={dataClassification === 'REDACTED'}
-                onChange={() => setDataClassification('REDACTED')}
-                className="mt-0.5"
-              />
-              <span>
-                <strong>Anonimleştirilmiş</strong> (önerilen)
-              </span>
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="dataClassification"
-                checked={dataClassification === 'SYNTHETIC'}
-                onChange={() => setDataClassification('SYNTHETIC')}
-                className="mt-0.5"
-              />
-              <span>
-                <strong>Sentetik</strong> — test belgeleri
-              </span>
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="dataClassification"
-                checked={dataClassification === 'REAL'}
-                onChange={() => setDataClassification('REAL')}
-                className="mt-0.5"
-              />
-              <span>
-                <strong>Gerçek müşteri belgesi</strong> — yalnızca hukuki dayanağınız varsa
-              </span>
-            </label>
-          </fieldset>
 
           {error && (
             <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>

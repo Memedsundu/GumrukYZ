@@ -5,11 +5,16 @@
  * Sprint 2: replace with Trigger.dev durable job.
  *
  * Pipeline steps:
- * CLASSIFYING → EXTRACTING → NORMALIZING → RUNNING_RULES → AI_RULE_VALIDATING → EXPERT_REVIEWING → GENERATING_REPORT → COMPLETED
+ * CLASSIFYING → EXTRACTING → NORMALIZING → RUNNING_RULES → AI_RULE_VALIDATING → GENERATING_REPORT → COMPLETED
  */
 import { prisma, searchRegulations } from '@gumrukyz/db'
 import { Prisma } from '@gumrukyz/db'
-import { RuleEvaluator, ALL_RULES, LOW_CONFIDENCE_THRESHOLD as RULES_LOW_CONFIDENCE_THRESHOLD } from '@gumrukyz/rules'
+import {
+  RuleEvaluator,
+  ALL_RULES,
+  LOW_CONFIDENCE_THRESHOLD as RULES_LOW_CONFIDENCE_THRESHOLD,
+  isPlaceholderValue,
+} from '@gumrukyz/rules'
 import type { SubmissionContext, ExtractionData } from '@gumrukyz/rules'
 import { OpenAIProvider } from '@gumrukyz/ai'
 import {
@@ -36,7 +41,6 @@ import {
   runOpenAIDocumentReader,
   shouldRunOpenAIDocumentReader,
 } from './openai-document-reader'
-import { runExpertReviewForSubmission } from './expert-review'
 import { runAiRuleValidationForSubmission } from './ai-rule-validation'
 
 const LOW_CONFIDENCE_THRESHOLD = RULES_LOW_CONFIDENCE_THRESHOLD
@@ -48,7 +52,6 @@ const ACTIVE_PROCESSING_JOB_STATUSES = [
   'NORMALIZING',
   'RUNNING_RULES',
   'AI_RULE_VALIDATING',
-  'EXPERT_REVIEWING',
   'GENERATING_REPORT',
 ]
 
@@ -264,7 +267,6 @@ export async function processSubmission(
               docType,
               readerResult.structuredData,
               rawText,
-              submission.tradeFlow as TradeFlow,
             )
             structuredDataAlreadyExtracted = !openAIDocumentReaderNeedsOcr
 
@@ -415,7 +417,6 @@ export async function processSubmission(
               docType,
               result as Record<string, unknown>,
               rawText,
-              submission.tradeFlow as TradeFlow,
             )
             aiConfidence = 0.85
 
@@ -676,36 +677,14 @@ export async function processSubmission(
       return null
     })
 
-    // ─── EXPERT_REVIEWING ─────────────────────────────────────────────────────
-    await updateJobStatus(jobId, submissionId, 'EXPERT_REVIEWING', 'EXPERT_REVIEWING')
-
-    const expertReview = await runExpertReviewForSubmission({
-      submissionId,
-      tenantId,
-      tradeFlow: submission.tradeFlow,
-      documents: extractionResults,
-      ruleResults: resultRows,
-    }).catch((expertErr) => {
-      logger.warn('Expert review failed outside guarded runner, continuing report generation', {
-        error: expertErr instanceof Error ? expertErr.message : String(expertErr),
-      })
-      return null
-    })
-
     // ─── GENERATING_REPORT ─────────────────────────────────────────────────────
     await updateJobStatus(jobId, submissionId, 'GENERATING_REPORT', 'GENERATING_REPORT')
 
     const errors = resultRows.filter((r) => r.result === 'FAIL').length
-    const warnings = resultRows.filter((r) => r.result === 'WARN').length + (expertReview?.warningCount ?? 0)
-    const reviewNeeded =
-      resultRows.filter((r) => r.result === 'REVIEW_NEEDED').length + (expertReview?.reviewNeededCount ?? 0)
+    const warnings = resultRows.filter((r) => r.result === 'WARN').length
+    const reviewNeeded = resultRows.filter((r) => r.result === 'REVIEW_NEEDED').length
 
     let summaryText: string | null = null
-    const expertFindingsForSummary = (expertReview?.findings ?? []).map((finding) => ({
-      ruleCode: `AI-${finding.area}`,
-      severity: finding.severity,
-      message: `${finding.title}: ${finding.explanation}`,
-    }))
     const aiRuleValidationFindingsForSummary = (aiRuleValidation?.findings ?? [])
       .filter((finding) => finding.status !== 'LIKELY_CORRECT')
       .map((finding) => ({
@@ -728,7 +707,6 @@ export async function processSubmission(
     const summaryFindings = [
       ...nonPassRuleFindings,
       ...aiRuleValidationFindingsForSummary,
-      ...expertFindingsForSummary,
     ]
 
     if (ai.isEnabled() && summaryFindings.length > 0) {
@@ -837,9 +815,8 @@ function enhanceStructuredDataFromText(
   docType: DocumentType,
   data: Record<string, unknown>,
   rawText: string,
-  tradeFlow: TradeFlow,
 ): Record<string, unknown> {
-  const next = { ...data }
+  const next = sanitizePlaceholderValues(data)
 
   if (docType === 'INVOICE') {
     const invoiceNumber = firstMatch(rawText, /Invoice Number:\s*([A-Z0-9]+)/i)
@@ -847,12 +824,8 @@ function enhanceStructuredDataFromText(
     if (invoiceNumber) next['invoice_number'] = invoiceNumber
     if (invoiceDate) next['invoice_date'] = invoiceDate
     if (/FREE OF CHARGE|BEDELS[İI]Z/i.test(rawText)) next['free_of_charge'] = true
-    if (
-      tradeFlow === 'EXPORT' &&
-      !next['country_of_origin'] &&
-      /(?:T[ÜU]RK[İI]YE|TURKEY)\s+TR/i.test(rawText)
-    ) {
-      next['country_of_origin'] = 'TR'
+    if (!hasExplicitNetWeightEvidence(rawText)) {
+      next['net_weight'] = null
     }
   }
 
@@ -861,6 +834,15 @@ function enhanceStructuredDataFromText(
     if (totalLine) {
       next['package_count'] = parseLocaleNumber(totalLine[1])
       next['gross_weight'] = parseLocaleNumber(totalLine[2])
+    }
+    if (!hasExplicitNetWeightEvidence(rawText)) {
+      next['net_weight'] = null
+      if (Array.isArray(next['items'])) {
+        next['items'] = next['items'].map((item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return item
+          return { ...item, net_weight: null }
+        })
+      }
     }
   }
 
@@ -882,6 +864,26 @@ function enhanceStructuredDataFromText(
   }
 
   return next
+}
+
+function sanitizePlaceholderValues(data: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeJsonValue(data) as Record<string, unknown>
+}
+
+function sanitizeJsonValue(value: unknown): unknown {
+  if (typeof value === 'string') return isPlaceholderValue(value) ? null : value
+  if (Array.isArray(value)) return value.map(sanitizeJsonValue)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+      key,
+      sanitizeJsonValue(nestedValue),
+    ]),
+  )
+}
+
+function hasExplicitNetWeightEvidence(rawText: string): boolean {
+  return /\b(net\s*(weight|wt|kg)|netto|net ağırlık|net agirlik|toplam\s+net)\b/i.test(rawText)
 }
 
 function firstMatch(text: string, pattern: RegExp): string | null {

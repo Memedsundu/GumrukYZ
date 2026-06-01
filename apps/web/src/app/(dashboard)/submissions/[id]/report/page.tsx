@@ -12,7 +12,16 @@ import {
   recommendedActionForRuleResult,
   resultLabel,
 } from '@/lib/report-format'
+import {
+  countIntegratedExpertFindings,
+  mergeReportSummaryText,
+  parseExpertEvidenceRefs,
+  parseExpertGtipCandidates,
+  shouldIntegrateExpertReview,
+} from '@/lib/expert-review-display'
+import { getExpertReviewQuota } from '@/lib/expert-review-quota'
 import OverrideButton from './override-button'
+import ExpertReviewButton from './expert-review-button'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -80,10 +89,35 @@ export default async function ReportPage({ params }: Props) {
   const reviewNeeded = submission.ruleResults.filter((r) => r.result === 'REVIEW_NEEDED')
   const passes = submission.ruleResults.filter((r) => r.result === 'PASS')
   const expertReview = submission.expertReviews[0] ?? null
-  const expertWarnings = expertReview?.findings.filter((finding) => finding.severity === 'WARN') ?? []
-  const expertReviewNeeded =
-    expertReview?.findings.filter((finding) => finding.severity === 'REVIEW_NEEDED') ?? []
-  const actionItems = [...errors, ...reviewNeeded, ...warnings].slice(0, 6)
+  const expertCounts = countIntegratedExpertFindings(expertReview)
+  const mergedSummaryText = mergeReportSummaryText(report.summaryText, expertReview)
+  const mergedWarnings = warnings.length + expertCounts.warnings
+  const mergedReviewNeeded = reviewNeeded.length + expertCounts.reviewNeeded
+  const ruleActionItems = [...errors, ...reviewNeeded, ...warnings].map((result) => {
+    const meta = getRuleDisplayMetadata(result.ruleCode)
+    return {
+      id: result.id,
+      code: result.ruleCode,
+      result: result.result,
+      title: meta.turkishTitle,
+      description: formatRuleResultMessage(result),
+      action: recommendedActionForRuleResult(result.ruleCode, result.result),
+    }
+  })
+  const expertActionItems = shouldIntegrateExpertReview(expertReview)
+    ? expertReview.findings.map((finding, index) => ({
+        id: finding.id,
+        code: `AI-UZMAN-${index + 1}`,
+        result: finding.severity,
+        title: `Uzman AI: ${finding.title}`,
+        description: finding.explanation,
+        action: finding.recommendation,
+      }))
+    : []
+  const actionItems = [...ruleActionItems, ...expertActionItems]
+    .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
+    .slice(0, 8)
+  const expertQuota = await getExpertReviewQuota(user.tenantId)
 
   const canOverride = canManageTenant(user)
 
@@ -119,19 +153,27 @@ export default async function ReportPage({ params }: Props) {
               <Download className="mr-2 h-4 w-4" />
               JSON indir
             </Link>
-            <RiskBadge errors={report.totalErrors} warnings={report.totalWarnings} />
+            <RiskBadge errors={errors.length} warnings={mergedWarnings} reviewNeeded={mergedReviewNeeded} />
           </div>
         </div>
       </div>
 
+      <div className="mb-6">
+        <ExpertReviewButton
+          submissionId={id}
+          quota={expertQuota}
+          hasCompletedExpertReview={expertReview?.status === 'COMPLETED'}
+        />
+      </div>
+
       {/* AI Summary */}
-      {report.summaryText && (
+      {mergedSummaryText && (
         <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-5">
           <div className="flex items-start gap-3">
             <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
             <div>
               <h3 className="text-sm font-semibold text-blue-900">Yapay zeka özeti</h3>
-              <p className="mt-1 text-sm text-blue-800">{report.summaryText}</p>
+              <p className="mt-1 text-sm text-blue-800">{mergedSummaryText}</p>
               <p className="mt-2 text-xs text-blue-600">
                 Not: Bu özet bilgilendirme amaçlıdır. Hukuki karar yerine geçmez.
               </p>
@@ -164,7 +206,10 @@ export default async function ReportPage({ params }: Props) {
               )}
               {expertReview.findings.length > 0 && (
                 <div className="mt-4 space-y-3">
-                  {expertReview.findings.map((finding) => (
+                  {expertReview.findings.map((finding) => {
+                    const evidenceRefs = parseExpertEvidenceRefs(finding.evidenceRefsJson)
+                    const gtipCandidates = parseExpertGtipCandidates(finding.evidenceRefsJson)
+                    return (
                     <div key={finding.id} className="rounded-md border border-gray-100 bg-slate-50 p-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-mono text-gray-500">{expertAreaLabel(finding.area)}</span>
@@ -178,9 +223,32 @@ export default async function ReportPage({ params }: Props) {
                       <p className="mt-2 text-sm text-gray-700">
                         <span className="font-medium">Öneri:</span> {finding.recommendation}
                       </p>
-                      {formatExpertEvidence(finding.evidenceRefsJson).length > 0 && (
+                      {gtipCandidates.length > 0 && (
+                        <div className="mt-3 rounded-md border border-indigo-100 bg-white px-3 py-2">
+                          <p className="text-xs font-semibold text-indigo-900">GTİP aday yorumu</p>
+                          <div className="mt-2 space-y-2">
+                            {gtipCandidates.map((candidate) => (
+                              <div key={candidate.code} className="text-xs text-gray-700">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-mono font-semibold text-gray-900">{candidate.code}</span>
+                                  <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">
+                                    Güven %{Math.round(candidate.confidence * 100)}
+                                  </span>
+                                </div>
+                                <p className="mt-1">{candidate.rationale}</p>
+                                {candidate.requiredEvidence.length > 0 && (
+                                  <p className="mt-1 text-gray-500">
+                                    Gerekli kanıt: {candidate.requiredEvidence.join(', ')}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {formatExpertEvidence(evidenceRefs).length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {formatExpertEvidence(finding.evidenceRefsJson).map((ref, i) => (
+                          {formatExpertEvidence(evidenceRefs).map((ref, i) => (
                             <span key={i} className="rounded bg-white px-2 py-0.5 text-xs text-gray-600">
                               {ref}
                             </span>
@@ -210,7 +278,8 @@ export default async function ReportPage({ params }: Props) {
                         </div>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
               <p className="mt-3 text-xs text-gray-500">
@@ -225,26 +294,23 @@ export default async function ReportPage({ params }: Props) {
         <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
           <h2 className="text-sm font-semibold text-gray-900">Aksiyon Özeti</h2>
           <div className="mt-3 space-y-3">
-            {actionItems.map((result) => {
-              const meta = getRuleDisplayMetadata(result.ruleCode)
-              return (
-                <div key={result.id} className="flex items-start gap-3 rounded-md bg-slate-50 px-3 py-3">
-                  <ResultIcon result={result.result} />
+            {actionItems.map((item) => (
+                <div key={item.id} className="flex items-start gap-3 rounded-md bg-slate-50 px-3 py-3">
+                  <ResultIcon result={item.result} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-mono text-gray-500">{result.ruleCode}</span>
-                      <span className="text-xs font-medium text-gray-700">{meta.turkishTitle}</span>
-                      <ResultBadge result={result.result} />
+                      <span className="text-xs font-mono text-gray-500">{item.code}</span>
+                      <span className="text-xs font-medium text-gray-700">{item.title}</span>
+                      <ResultBadge result={item.result} />
                     </div>
-                    <p className="mt-1 text-sm text-gray-700">{formatRuleResultMessage(result)}</p>
+                    <p className="mt-1 text-sm text-gray-700">{item.description}</p>
                     <p className="mt-1 text-sm text-gray-900">
                       <span className="font-medium">Ne yapmalı?</span>{' '}
-                      {recommendedActionForRuleResult(result.ruleCode, result.result)}
+                      {item.action}
                     </p>
                   </div>
                 </div>
-              )
-            })}
+            ))}
           </div>
         </div>
       )}
@@ -260,13 +326,13 @@ export default async function ReportPage({ params }: Props) {
         <StatCard
           icon={<AlertCircle className="h-6 w-6 text-yellow-500" />}
           label="Uyarı"
-          count={warnings.length + expertWarnings.length}
+          count={mergedWarnings}
           color="yellow"
         />
         <StatCard
           icon={<Clock className="h-6 w-6 text-blue-500" />}
           label="İnceleme Gerekli"
-          count={reviewNeeded.length + expertReviewNeeded.length}
+          count={mergedReviewNeeded}
           color="blue"
         />
         <StatCard
@@ -421,11 +487,18 @@ function StatCard({ icon, label, count, color }: { icon: React.ReactNode; label:
   )
 }
 
-function RiskBadge({ errors, warnings }: { errors: number; warnings: number }) {
+function RiskBadge({ errors, warnings, reviewNeeded }: { errors: number; warnings: number; reviewNeeded: number }) {
   if (errors > 0) {
     return (
       <span className="inline-flex items-center rounded-full bg-red-100 px-4 py-1 text-sm font-bold text-red-700">
-        ⚠ {errors} Hata
+        {errors} hata
+      </span>
+    )
+  }
+  if (reviewNeeded > 0) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-blue-100 px-4 py-1 text-sm font-bold text-blue-700">
+        {reviewNeeded} inceleme
       </span>
     )
   }
@@ -438,9 +511,16 @@ function RiskBadge({ errors, warnings }: { errors: number; warnings: number }) {
   }
   return (
     <span className="inline-flex items-center rounded-full bg-green-100 px-4 py-1 text-sm font-bold text-green-700">
-      ✓ Temiz
+      Temiz
     </span>
   )
+}
+
+function resultPriority(result: string): number {
+  if (result === 'FAIL') return 0
+  if (result === 'REVIEW_NEEDED') return 1
+  if (result === 'WARN') return 2
+  return 3
 }
 
 function ResultIcon({ result }: { result: string }) {
@@ -490,6 +570,8 @@ function legalContextStatusLabel(status: string): string {
     MISSING_REQUIRED_SOURCE: 'Zorunlu kaynak eksik',
     EMPTY_CONTEXT: 'Mevzuat bağlamı boş',
     DISABLED: 'Devre dışı',
+    NOT_RUN: 'Çalıştırılmadı',
+    LEGAL_CONTEXT_INCOMPLETE: 'Mevzuat bağlamı eksik',
   }
   return map[status] ?? status
 }

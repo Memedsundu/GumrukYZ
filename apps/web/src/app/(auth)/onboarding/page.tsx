@@ -17,8 +17,8 @@ export default async function OnboardingPage() {
         </div>
         <h1 className="text-lg font-semibold text-gray-900">Firmanızı seçin</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Pilot erişimi organizasyon davetiyesi ile verilir. E-postanıza gelen daveti kabul edin veya
-          aşağıdan organizasyonunuzu seçin.
+          Beta kullanımına başlamak için mevcut firmanızı seçin veya yeni firma oluşturun.
+          Dosyalar yalnızca seçtiğiniz firma alanında görünür.
         </p>
         <div className="mt-6">
           <OrganizationList

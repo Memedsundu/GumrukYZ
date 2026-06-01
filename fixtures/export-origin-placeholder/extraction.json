@@ -1,0 +1,36 @@
+{
+  "_fixture": "export-origin-placeholder",
+  "_description": "Placeholder origin on an export invoice should be one export-origin warning, not duplicate DECL-002 hard failure",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "DECL-002": null,
+    "EXP-004": "WARN"
+  },
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.95,
+      "data": {
+        "invoice_number": "EXP-ORIGIN-1",
+        "invoice_date": "2026-05-01",
+        "seller_name": "Turkish Exporter A.S.",
+        "seller_address": "Istanbul Turkiye",
+        "buyer_name": "Poland Buyer",
+        "buyer_address": "Warsaw Poland",
+        "currency": "EUR",
+        "total_amount": 1000,
+        "country_of_origin": ":",
+        "items": [
+          {
+            "description": "Automotive part",
+            "quantity": 1,
+            "unit": "PCS",
+            "unit_price": 1000,
+            "total_price": 1000
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

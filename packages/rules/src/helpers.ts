@@ -102,6 +102,53 @@ export function hasValue(value: unknown): boolean {
   return true
 }
 
+export function isPlaceholderValue(value: unknown): boolean {
+  if (value == null) return true
+  if (typeof value !== 'string') return false
+  const normalized = value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[İIı]/g, 'i')
+    .toLowerCase()
+  if (!normalized) return true
+  return /^[:.;,\-–—_/\\]+$/.test(normalized) ||
+    ['n/a', 'na', 'null', 'none', 'yok', 'belirsiz', 'okunamadi', 'okunamadi.'].includes(normalized)
+}
+
+export function normalizeCountryCode(raw: unknown): string | null {
+  if (isPlaceholderValue(raw)) return null
+  const value = String(raw ?? '').trim()
+  if (!value) return null
+  const upper = value.toUpperCase().replace(/\./g, '').trim()
+  if (/^[A-Z]{2}$/.test(upper)) return upper
+  const normalized = upper
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[İIı]/g, 'I')
+    .replace(/[^A-Z]+/g, ' ')
+    .trim()
+  const aliases: Record<string, string> = {
+    TURKIYE: 'TR',
+    TURKEY: 'TR',
+    'REPUBLIC OF TURKEY': 'TR',
+    'TURKIYE CUMHURIYETI': 'TR',
+    POLONYA: 'PL',
+    POLAND: 'PL',
+    ALMANYA: 'DE',
+    GERMANY: 'DE',
+    FRANSA: 'FR',
+    FRANCE: 'FR',
+    ITALYA: 'IT',
+    ITALY: 'IT',
+    ROMANYA: 'RO',
+    ROMANIA: 'RO',
+    BULGARISTAN: 'BG',
+    BULGARIA: 'BG',
+  }
+  return aliases[normalized] ?? null
+}
+
 /** Parse a flexible date string (dd-mm-yyyy, ISO, etc.) — null on failure. */
 export function parseFlexibleDate(raw: unknown): Date | null {
   if (raw == null) return null

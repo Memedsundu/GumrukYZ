@@ -88,6 +88,12 @@ type ClassificationResponse = {
   clientMatches: ClientMatch[]
 }
 
+type ProcessingProgressState = {
+  percent: number
+  label: string
+  description: string
+}
+
 export default function DocumentUploadClient({
   submissionId,
   tradeFlow,
@@ -116,6 +122,7 @@ export default function DocumentUploadClient({
   const [validating, setValidating] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
+  const [processingProgress, setProcessingProgress] = useState<ProcessingProgressState | null>(null)
   const [processError, setProcessError] = useState<string | null>(null)
 
   const needsValidation = documents.length > 0 && (
@@ -298,8 +305,24 @@ export default function DocumentUploadClient({
       if (!res.ok) {
         throw new Error('İşlem durumu alınamadı')
       }
-      const data = await res.json() as { status: string; job?: { errorMessage?: string | null } }
+      const data = await res.json() as {
+        status: string
+        progressPercent?: number
+        progressLabel?: string
+        progressDescription?: string
+        job?: { errorMessage?: string | null }
+      }
+      setProcessingProgress({
+        percent: data.progressPercent ?? 0,
+        label: data.progressLabel ?? 'İşlem sürüyor',
+        description: data.progressDescription ?? 'Tahmini ilerleme alınıyor.',
+      })
       if (data.status === 'COMPLETED') {
+        setProcessingProgress({
+          percent: 100,
+          label: 'Tamamlandı',
+          description: 'Analiz tamamlandı; dosya sayfası açılıyor.',
+        })
         router.push(`/submissions/${submissionId}`)
         return
       }
@@ -314,6 +337,11 @@ export default function DocumentUploadClient({
   async function handleProcess() {
     setProcessing(true)
     setProcessError(null)
+    setProcessingProgress({
+      percent: 8,
+      label: 'Analiz başlatılıyor',
+      description: 'İş kuyruğu hazırlanıyor. İlerleme tahmini olarak gösterilir.',
+    })
 
     try {
       const res = await fetch(`/api/submissions/${submissionId}/process`, { method: 'POST' })
@@ -325,6 +353,11 @@ export default function DocumentUploadClient({
         await pollSubmissionStatus()
         return
       }
+      setProcessingProgress({
+        percent: 100,
+        label: 'Tamamlandı',
+        description: 'Analiz tamamlandı; dosya sayfası açılıyor.',
+      })
       router.push(`/submissions/${submissionId}`)
     } catch (err) {
       setProcessError(err instanceof Error ? err.message : 'İşleme başarısız')
@@ -601,6 +634,9 @@ export default function DocumentUploadClient({
             </button>
           </div>
           {processError && <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{processError}</div>}
+          {(processing || processingProgress) && (
+            <ProgressBar progress={processingProgress} />
+          )}
         </div>
       )}
     </div>
@@ -613,6 +649,34 @@ function StatusIcon({ status, validated }: { status: string; validated: boolean 
   if (status === 'PROCESSING') return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
   if (validated) return <CheckCircle className="h-5 w-5 text-blue-500" />
   return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />
+}
+
+function ProgressBar({ progress }: { progress: ProcessingProgressState | null }) {
+  const percent = Math.max(0, Math.min(100, progress?.percent ?? 8))
+  return (
+    <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-blue-950">
+            {progress?.label ?? 'İşlem sürüyor'}
+          </p>
+          <p className="mt-0.5 text-xs text-blue-800">
+            {progress?.description ?? 'Tahmini ilerleme hazırlanıyor.'}
+          </p>
+        </div>
+        <span className="font-mono text-sm font-semibold text-blue-800">%{Math.round(percent)}</span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+        <div
+          className="h-full rounded-full bg-blue-600 transition-all duration-500"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs text-blue-700">
+        Bu gösterge tahminidir; büyük PDF dosyalarında bazı adımlar daha uzun sürebilir.
+      </p>
+    </div>
+  )
 }
 
 function getNextAction(params: {
@@ -673,7 +737,7 @@ function getNextAction(params: {
 
   return {
     title: 'Analizi başlatın',
-    description: 'Doğrulanan belgeler üzerinden okuma, kurallar, yapay zeka kural kontrolü ve uzman incelemesi çalışacak.',
+    description: 'Doğrulanan belgeler üzerinden okuma, kurallar ve hızlı yapay zeka kural kontrolü çalışacak.',
     cta: params.processing ? 'İşleniyor' : 'Analizi başlat',
     action: 'process',
     disabled: params.processing || !params.canProcess,

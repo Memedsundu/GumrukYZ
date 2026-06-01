@@ -12,6 +12,8 @@ export {
   isLowConfidence,
   isExtractionEmpty,
   hasValue,
+  isPlaceholderValue,
+  normalizeCountryCode,
 } from './helpers.js'
 
 // ── Quality / extraction sanity rules ─────────────────────────────────────────

@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@gumrukyz/db'
-import { DataClassification } from '@gumrukyz/domain'
 import { z } from 'zod'
 import { requireApiUser } from '@/lib/auth'
-import { PILOT_DEFAULT_DATA_CLASSIFICATION } from '@/lib/pilot'
 
 const CreateSubmissionSchema = z.object({
   title: z.string().min(1).max(200),
-  dataClassification: z
-    .enum([
-      DataClassification.SYNTHETIC,
-      DataClassification.REDACTED,
-      DataClassification.REAL,
-    ])
-    .optional(),
 }).strict()
 
 const DEFAULT_TRADE_FLOW = 'UNKNOWN'
+const DEFAULT_DATA_CLASSIFICATION = 'REAL'
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,12 +22,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Geçerli bir referans adı girin' }, { status: 400 })
     }
 
-    const dataClassification =
-      parsed.data.dataClassification ?? PILOT_DEFAULT_DATA_CLASSIFICATION
-
-    if (!user.tenant.dataClassificationAllowed.includes(dataClassification)) {
+    if (!user.tenant.dataClassificationAllowed.includes(DEFAULT_DATA_CLASSIFICATION)) {
       return NextResponse.json(
-        { error: 'Bu veri sınıflandırması bu organizasyon için izinli değil' },
+        { error: 'Bu organizasyon gerçek dosya oluşturmak için hazır değil' },
         { status: 403 },
       )
     }
@@ -46,7 +35,7 @@ export async function POST(req: NextRequest) {
         createdBy: user.id,
         title: parsed.data.title,
         tradeFlow: DEFAULT_TRADE_FLOW,
-        dataClassification,
+        dataClassification: DEFAULT_DATA_CLASSIFICATION,
         status: 'PENDING',
         classificationStatus: 'PENDING',
         classificationValidatedAt: null,

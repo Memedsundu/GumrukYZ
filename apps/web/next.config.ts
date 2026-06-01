@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
     '/*': [
       '../../node_modules/.pnpm/@prisma+client@6.19.3*/node_modules/.prisma/client/query_compiler_bg.wasm',
       '../../node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      '../../node_modules/.pnpm/@fontsource+noto-sans@*/node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-400-normal.woff',
+      '../../node_modules/.pnpm/@fontsource+noto-sans@*/node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-700-normal.woff',
     ],
   },
   typescript: {

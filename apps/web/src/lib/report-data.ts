@@ -8,6 +8,13 @@ import {
   resultLabel,
   severityLabel,
 } from './report-format'
+import {
+  countIntegratedExpertFindings,
+  mergeReportSummaryText,
+  parseExpertEvidenceRefs,
+  parseExpertGtipCandidates,
+  shouldIntegrateExpertReview,
+} from './expert-review-display'
 
 export type ReportPayload = NonNullable<Awaited<ReturnType<typeof buildReportPayload>>>
 
@@ -62,21 +69,35 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
   const report = submission.riskReports[0]
   if (!report) return null
   const expertReview = submission.expertReviews[0] ?? null
-  const expertWarnings = expertReview?.findings.filter((finding) => finding.severity === 'WARN').length ?? 0
-  const expertReviewNeeded =
-    expertReview?.findings.filter((finding) => finding.severity === 'REVIEW_NEEDED').length ?? 0
+  const expertCounts = countIntegratedExpertFindings(expertReview)
+  const mergedSummaryText = mergeReportSummaryText(report.summaryText, expertReview)
+  const mergedWarnings = report.totalWarnings + expertCounts.warnings
+  const mergedReviewNeeded = report.totalReviewNeeded + expertCounts.reviewNeeded
 
-  const actionSummary = submission.ruleResults
+  const deterministicActionSummary = submission.ruleResults
     .filter((result) => result.result !== 'PASS' && result.result !== 'SKIP')
     .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
-    .slice(0, 6)
     .map((result) => ({
       ruleCode: result.ruleCode,
       result: result.result,
       title: getRuleDisplayMetadata(result.ruleCode).turkishTitle,
       description: formatRuleResultMessage(result),
       action: recommendedActionForRuleResult(result.ruleCode, result.result),
+      source: 'RULE' as const,
     }))
+  const expertActionSummary = shouldIntegrateExpertReview(expertReview)
+    ? expertReview.findings.map((finding, index) => ({
+        ruleCode: `AI-UZMAN-${index + 1}`,
+        result: finding.severity,
+        title: `Uzman AI: ${finding.title}`,
+        description: finding.explanation,
+        action: finding.recommendation,
+        source: 'EXPERT_REVIEW' as const,
+      }))
+    : []
+  const actionSummary = [...deterministicActionSummary, ...expertActionSummary]
+    .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
+    .slice(0, 8)
 
   return {
     generatedAt: new Date().toISOString(),
@@ -92,10 +113,16 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
     report: {
       id: report.id,
       generatedAt: report.generatedAt.toISOString(),
-      summaryText: report.summaryText,
+      summaryText: mergedSummaryText,
       totalErrors: report.totalErrors,
-      totalWarnings: report.totalWarnings,
-      totalReviewNeeded: report.totalReviewNeeded,
+      totalWarnings: mergedWarnings,
+      totalReviewNeeded: mergedReviewNeeded,
+      deterministicTotals: {
+        totalErrors: report.totalErrors,
+        totalWarnings: report.totalWarnings,
+        totalReviewNeeded: report.totalReviewNeeded,
+      },
+      expertIncluded: shouldIntegrateExpertReview(expertReview),
     },
     documents: submission.documents.map((document) => ({
       id: document.id,
@@ -108,8 +135,8 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
     })),
     counts: {
       errors: submission.ruleResults.filter((result) => result.result === 'FAIL').length,
-      warnings: submission.ruleResults.filter((result) => result.result === 'WARN').length + expertWarnings,
-      reviewNeeded: submission.ruleResults.filter((result) => result.result === 'REVIEW_NEEDED').length + expertReviewNeeded,
+      warnings: submission.ruleResults.filter((result) => result.result === 'WARN').length + expertCounts.warnings,
+      reviewNeeded: submission.ruleResults.filter((result) => result.result === 'REVIEW_NEEDED').length + expertCounts.reviewNeeded,
       passes: submission.ruleResults.filter((result) => result.result === 'PASS').length,
     },
     actionSummary,
@@ -130,7 +157,8 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
             title: finding.title,
             explanation: finding.explanation,
             recommendation: finding.recommendation,
-            evidenceRefs: finding.evidenceRefsJson,
+            evidenceRefs: parseExpertEvidenceRefs(finding.evidenceRefsJson),
+            gtipCandidates: parseExpertGtipCandidates(finding.evidenceRefsJson),
             citations: finding.citations.map((citation) => ({
               id: citation.id,
               chunkId: citation.regulationChunk.id,

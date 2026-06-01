@@ -46,6 +46,8 @@ export const REGULATION_SOURCE_MANIFEST: RegulationSourceManifestEntry[] = [
       'Türk Gümrük Tarife Cetveli: GTİP kodu, eşyanın Türk Gümrük Tarife Cetvelindeki tarife pozisyonunu gösterir. Sınıflandırma ürün tanımı, materyal, kullanım amacı, teknik özellikler ve ilgili bölüm/fasıl notları dikkate alınarak değerlendirilmelidir.',
       'Türk Gümrük Tarife Cetveli: GTİP kodunun doğru seçimi gümrük vergisi, dış ticaret politikası önlemleri, izinler, ürün güvenliği kontrolleri ve istatistik beyanı açısından önemlidir. Belge verileri kodla uyumsuzsa manuel uzman incelemesi gerekir.',
       'Türk Gümrük Tarife Cetveli: GTİP doğrulaması yalnızca sekiz haneli format kontrolü değildir; eşya açıklaması, ticari tanım, miktar birimi ve ürünün esas niteliği de kontrol edilmelidir.',
+      'Türk Gümrük Tarife Cetveli / HS 87.08: 8708 pozisyonu, 8701-8705 pozisyonlarındaki motorlu taşıtlara ait aksam, parça ve aksesuarları kapsar. 8708.29 alt pozisyonu, tampon ve emniyet kemeri gibi daha özel alt pozisyonlara girmeyen karoseri/gövde aksam ve aksesuarları için değerlendirilir.',
+      'Türk Gümrük Tarife Cetveli / HS 8708.29: Otobüs veya benzeri motorlu taşıtlarda yalnız veya esasen kullanılan gövde, iç kapak, kanal, kaplama veya karoseriyle ilişkili parçalar için 8708.29 ailesi aday olabilir; parça mekanik, elektrikli veya iklimlendirme cihazının esas parçasıysa alternatif fasıllar ayrıca incelenmelidir.',
     ],
   },
   {
@@ -74,6 +76,7 @@ export const REGULATION_SOURCE_MANIFEST: RegulationSourceManifestEntry[] = [
       'GTİP Arama Motoru: Eşyanın GTİP kodu, ürün tanımı, materyali, kullanım amacı ve teknik özellikleri dikkate alınarak belirlenir. GTİP kodu vergi, izin, gözetim, ürün güvenliği ve dış ticaret politikası önlemlerini etkileyebilir.',
       'GTİP Arama Motoru: Belge üzerindeki GTİP kodu ile eşya tanımı arasında tereddüt varsa, sınıflandırma otomatik olarak doğru kabul edilmemeli; Türk Gümrük Tarife Cetveli ve ilgili açıklama notları kapsamında manuel uzman incelemesi gerekir.',
       'GTİP Arama Motoru: Aynı eşya için fatura, beyanname, çeki listesi ve taşıma belgelerinde yer alan ürün açıklamaları GTİP değerlendirmesinde birlikte dikkate alınmalıdır.',
+      'GTİP Arama Motoru: Aday GTİP yorumu yapılırken beyan edilen kod, eşya tanımı, üretici parça kodu, araçta kullanım yeri, materyal, teknik çizim ve fonksiyon birlikte değerlendirilmelidir. Yetersiz teknik veri varsa aday kod güven düzeyi düşük tutulmalı ve eksik kanıt açıkça istenmelidir.',
     ],
   },
   {
@@ -95,6 +98,10 @@ export const REGULATION_SOURCE_MANIFEST: RegulationSourceManifestEntry[] = [
     effectiveDate: '2022-01-01',
     category: 'standard',
     allowSnapshotStorage: false,
+    fallbackChunks: [
+      'WCO HS Nomenclature 2022 Chapter 87: Heading 87.08 covers parts and accessories of motor vehicles of headings 87.01 to 87.05. Within that heading, subheading 8708.29 is the other category for parts and accessories of bodies including cabs.',
+      'WCO HS Nomenclature 2022 Chapter 87: GTİP/HS review should first confirm whether the item is suitable for use solely or principally with vehicles of headings 87.01 to 87.05, and then whether a more specific subheading applies before using an other category.',
+    ],
   },
   {
     title: 'FIATA Bill of Lading Model Rules',

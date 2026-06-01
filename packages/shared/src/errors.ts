@@ -25,14 +25,14 @@ export class ValidationError extends AppError {
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(message = 'Unauthorized') {
+  constructor(message = 'Oturum açmanız gerekiyor') {
     super(message, 'UNAUTHORIZED', 401)
     this.name = 'UnauthorizedError'
   }
 }
 
 export class ForbiddenError extends AppError {
-  constructor(message = 'Forbidden') {
+  constructor(message = 'Erişim yetkiniz yok') {
     super(message, 'FORBIDDEN', 403)
     this.name = 'ForbiddenError'
   }

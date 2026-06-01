@@ -1,0 +1,57 @@
+{
+  "_fixture": "sample-export-package-vs-item",
+  "_description": "Invoice item quantity versus packing wooden-box/pallet package count should require review, not hard fail",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "CROSS-004": "REVIEW_NEEDED",
+    "CROSS-006": null
+  },
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.96,
+      "data": {
+        "invoice_number": "FI62026000000063",
+        "invoice_date": "13-03-2026",
+        "seller_name": "FARHYM OTOMOTIV",
+        "seller_address": "Turkiye",
+        "buyer_name": "MAN BUS SP Z.O.O.",
+        "buyer_address": "Poland",
+        "currency": "EUR",
+        "total_amount": 88.3,
+        "free_of_charge": true,
+        "country_of_origin": null,
+        "gtip_code": "870829909000",
+        "items": [
+          {
+            "description": "IC KAPAK KOMPLESI 1485mm TUR 22",
+            "quantity": 5,
+            "unit": "Adet",
+            "unit_price": 17.66,
+            "total_price": 88.3,
+            "hs_code": "870829909000"
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.95,
+      "data": {
+        "package_count": 9,
+        "package_type": "WOODEN BOX / PALLETE",
+        "gross_weight": 3980,
+        "net_weight": null,
+        "items": [
+          {
+            "description": "Air duct packed in wooden boxes and pallets",
+            "quantity": 9,
+            "gross_weight": 3980,
+            "net_weight": null
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

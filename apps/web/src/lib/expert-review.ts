@@ -49,6 +49,14 @@ const ExpertFindingSchema = z.object({
       value: z.string().max(180).nullable(),
     }),
   ).max(5),
+  gtip_candidates: z.array(
+    z.object({
+      code: z.string().min(4).max(20),
+      confidence: z.number().min(0).max(1),
+      rationale: z.string().min(1).max(320),
+      required_evidence: z.array(z.string().min(1).max(140)).max(4),
+    }),
+  ).max(4).optional(),
   citation_chunk_ids: z.array(z.string()).max(3),
 })
 
@@ -112,6 +120,7 @@ export function isExpertReviewEnabled(): boolean {
 export async function runExpertReviewForSubmission(params: {
   submissionId: string
   tenantId: string
+  reviewId?: string
   tradeFlow: string
   documents: ExtractionData[]
   ruleResults: RuleResultForExpertReview[]
@@ -137,16 +146,29 @@ export async function runExpertReviewForSubmission(params: {
     },
   })
 
-  const review = await prisma.expertReview.create({
-    data: {
-      submissionId: params.submissionId,
-      tenantId: params.tenantId,
-      providerRunId: providerRun.id,
-      status: 'RUNNING',
-      legalContextStatus: 'READY',
-      model,
-    },
-  })
+  const review = params.reviewId
+    ? await prisma.expertReview.update({
+        where: { id: params.reviewId },
+        data: {
+          providerRunId: providerRun.id,
+          status: 'RUNNING',
+          legalContextStatus: 'READY',
+          model,
+          overallRisk: null,
+          summary: null,
+          completedAt: null,
+        },
+      })
+    : await prisma.expertReview.create({
+        data: {
+          submissionId: params.submissionId,
+          tenantId: params.tenantId,
+          providerRunId: providerRun.id,
+          status: 'RUNNING',
+          legalContextStatus: 'READY',
+          model,
+        },
+      })
 
   try {
     const contextChunks = await retrieveLegalContext(params)
@@ -228,20 +250,29 @@ async function createSkippedExpertReview(
   params: {
     submissionId: string
     tenantId: string
+    reviewId?: string
   },
   summary: string,
 ): Promise<ExpertReviewSummary> {
-  const review = await prisma.expertReview.create({
-    data: {
-      submissionId: params.submissionId,
-      tenantId: params.tenantId,
-      status: 'SKIPPED',
-      legalContextStatus: 'NOT_RUN',
-      summary,
-      overallRisk: 'UNKNOWN',
-      completedAt: new Date(),
-    },
-  })
+  const data = {
+    status: 'SKIPPED',
+    legalContextStatus: 'NOT_RUN',
+    summary,
+    overallRisk: 'UNKNOWN',
+    completedAt: new Date(),
+  }
+  const review = params.reviewId
+    ? await prisma.expertReview.update({
+        where: { id: params.reviewId },
+        data,
+      })
+    : await prisma.expertReview.create({
+        data: {
+          submissionId: params.submissionId,
+          tenantId: params.tenantId,
+          ...data,
+        },
+      })
   return {
     id: review.id,
     status: review.status,
@@ -258,21 +289,30 @@ async function createLegalContextIncompleteReview(
   params: {
     submissionId: string
     tenantId: string
+    reviewId?: string
   },
   missingSources: string[],
 ): Promise<ExpertReviewSummary> {
-  const review = await prisma.expertReview.create({
-    data: {
-      submissionId: params.submissionId,
-      tenantId: params.tenantId,
-      status: 'LEGAL_CONTEXT_INCOMPLETE',
-      legalContextStatus: 'LEGAL_CONTEXT_INCOMPLETE',
-      overallRisk: 'UNKNOWN',
-      summary:
-        'AI uzman incelemesi için gerekli mevzuat kapsamı eksik. GTİP, ürün kontrolü veya yorum gerektiren alanlarda manuel uzman incelemesi gerekir.',
-      completedAt: new Date(),
-    },
-  })
+  const data = {
+    status: 'LEGAL_CONTEXT_INCOMPLETE',
+    legalContextStatus: 'LEGAL_CONTEXT_INCOMPLETE',
+    overallRisk: 'UNKNOWN',
+    summary:
+      'AI uzman incelemesi için gerekli mevzuat kapsamı eksik. GTİP, ürün kontrolü veya yorum gerektiren alanlarda manuel uzman incelemesi gerekir.',
+    completedAt: new Date(),
+  }
+  const review = params.reviewId
+    ? await prisma.expertReview.update({
+        where: { id: params.reviewId },
+        data,
+      })
+    : await prisma.expertReview.create({
+        data: {
+          submissionId: params.submissionId,
+          tenantId: params.tenantId,
+          ...data,
+        },
+      })
   return completeReviewWithContextFinding(review.id, params.tenantId, 'LEGAL_CONTEXT_INCOMPLETE', missingSources)
 }
 
@@ -581,6 +621,9 @@ Kesin kurallar:
 - Tüm açıklama ve önerileri Türkçe yaz.
 - Sadece legalContext içinde verilen chunkId değerlerine atıf yap. Yeni kanun, madde, URL veya kaynak uydurma.
 - GTİP veya ürün mevzuatı için yeterli bağlam yoksa açıkça "manuel uzman incelemesi gerekir" de.
+- GTİP_PLAUSIBILITY bulgusunda sadece "manuel inceleme" deme; gtip_candidates alanında beyan edilen kodu ve kanıt varsa en fazla iki alternatifi aday olarak öner.
+- GTİP adaylarında bağlayıcı karar verme. Kodun neden makul/makul olmayabileceğini ve hangi teknik kanıtın gerektiğini açıkça yaz.
+- Ürün açıklaması "otobüs", "hava kanalı", "iç kapak", "karoseri", "aksam" gibi taşıt gövde/aksesuar bağlamı veriyorsa beyan edilen 8708/870829 ailesini aday olarak değerlendir; HVAC/mekanik işlev ihtimali varsa bunu gerekli kanıt olarak belirt.
 - Kanıtı olmayan bulgu üretme.
 - En fazla ${options.maxFindings} bulgu üret.
 - Her bulguda en fazla 3 mevzuat atfı kullan.
@@ -648,7 +691,7 @@ async function persistExpertReview(params: {
           title: finding.title,
           explanation: finding.explanation,
           recommendation: finding.recommendation,
-          evidenceRefsJson: finding.evidence_refs as Prisma.InputJsonValue,
+          evidenceRefsJson: serializeExpertEvidence(finding) as Prisma.InputJsonValue,
         },
       })
 
@@ -691,6 +734,19 @@ function compactJson(value: unknown): unknown {
     if (typeof nestedValue === 'string' && nestedValue.length > 500) return `${nestedValue.slice(0, 500)}...`
     return nestedValue
   }))
+}
+
+function serializeExpertEvidence(finding: z.infer<typeof ExpertFindingSchema>) {
+  if (!finding.gtip_candidates || finding.gtip_candidates.length === 0) return finding.evidence_refs
+  return {
+    evidenceRefs: finding.evidence_refs,
+    gtipCandidates: finding.gtip_candidates.map((candidate) => ({
+      code: candidate.code,
+      confidence: normalizeConfidence(candidate.confidence),
+      rationale: candidate.rationale,
+      requiredEvidence: candidate.required_evidence,
+    })),
+  }
 }
 
 function normalizeConfidence(value: number): number {

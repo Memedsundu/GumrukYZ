@@ -24,6 +24,9 @@ model Tenant {
   name                        String
   plan                        String   @default("internal") // TenantPlan
   dataClassificationAllowed   String[] @map("data_classification_allowed")
+  expertReviewLimit           Int      @default(20) @map("expert_review_limit")
+  expertReviewUsed            Int      @default(0) @map("expert_review_used")
+  expertReviewUsedOn          DateTime? @map("expert_review_used_on") @db.Date
   createdAt                   DateTime @default(now()) @map("created_at")
   updatedAt                   DateTime @updatedAt @map("updated_at")
 

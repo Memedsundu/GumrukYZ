@@ -1,5 +1,6 @@
 import { existsSync } from 'fs'
-import path from 'path'
+import { createRequire } from 'module'
+import React from 'react'
 import {
   Document,
   Font,
@@ -12,22 +13,12 @@ import {
 import type { ReportPayload } from './report-data'
 
 let fontsRegistered = false
+const require = createRequire(import.meta.url)
+const FONT_PACKAGE = '@fontsource/noto-sans'
 
 function fontPath(filename: string) {
-  const packagePath = path.join(
-    'node_modules',
-    '@fontsource',
-    'noto-sans',
-    'files',
-    filename,
-  )
-  const candidates = [
-    path.join(process.cwd(), packagePath),
-    path.join(process.cwd(), 'apps', 'web', packagePath),
-  ]
-
-  const resolved = candidates.find((candidate) => existsSync(candidate))
-  if (!resolved) {
+  const resolved = require.resolve(`${FONT_PACKAGE}/files/${filename}`)
+  if (!existsSync(resolved)) {
     throw new Error(`Report PDF font file not found: ${filename}`)
   }
 
@@ -218,6 +209,19 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
                 <Text style={styles.legalTitle}>{finding.title}</Text>
                 <Text>{finding.explanation}</Text>
                 <Text style={styles.sourceRef}>Öneri: {finding.recommendation}</Text>
+                {finding.gtipCandidates.length > 0 && (
+                  <View style={styles.legalRef}>
+                    <Text style={styles.legalTitle}>GTİP aday yorumu</Text>
+                    {finding.gtipCandidates.map((candidate) => (
+                      <Text key={candidate.code}>
+                        {candidate.code} (%{Math.round(candidate.confidence * 100)}): {candidate.rationale}
+                        {candidate.requiredEvidence.length > 0
+                          ? ` Gerekli kanıt: ${candidate.requiredEvidence.join(', ')}`
+                          : ''}
+                      </Text>
+                    ))}
+                  </View>
+                )}
                 {finding.citations.length > 0 && (
                   <View style={styles.legalRef}>
                     <Text style={styles.legalTitle}>Mevzuat dayanağı</Text>
@@ -346,6 +350,8 @@ function legalContextStatusLabel(status: string): string {
     MISSING_REQUIRED_SOURCE: 'Zorunlu kaynak eksik',
     EMPTY_CONTEXT: 'Mevzuat bağlamı boş',
     DISABLED: 'Devre dışı',
+    NOT_RUN: 'Çalıştırılmadı',
+    LEGAL_CONTEXT_INCOMPLETE: 'Mevzuat bağlamı eksik',
   }
   return map[status] ?? status
 }

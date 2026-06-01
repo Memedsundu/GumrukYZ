@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@gumrukyz/db'
 import { requireApiUser } from '@/lib/auth'
+import { getProcessingProgress } from '@/lib/processing-progress'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -36,10 +37,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 
   const job = submission.processingJobs[0] ?? null
+  const progress = getProcessingProgress(submission.status, job?.currentStep ?? null)
 
   return NextResponse.json({
     submissionId: submission.id,
     status: submission.status,
+    progressPercent: progress.percent,
+    progressLabel: progress.label,
+    progressDescription: progress.description,
     job,
   })
 }

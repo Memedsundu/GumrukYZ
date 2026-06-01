@@ -2,7 +2,8 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { prisma } from '@gumrukyz/db'
 import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
-import { Plus, FileText, AlertCircle, CheckCircle, Clock } from 'lucide-react'
+import { Plus, FileText, AlertCircle, CheckCircle, Clock, Sparkles } from 'lucide-react'
+import { getExpertReviewQuota } from '@/lib/expert-review-quota'
 
 export default async function DashboardPage() {
   const user = await getAuthenticatedUser()
@@ -31,11 +32,11 @@ export default async function DashboardPage() {
         'NORMALIZING',
         'RUNNING_RULES',
         'AI_RULE_VALIDATING',
-        'EXPERT_REVIEWING',
         'GENERATING_REPORT',
       ].includes(s.status),
     ).length,
   }
+  const expertQuota = await getExpertReviewQuota(user.tenantId)
 
   return (
     <div className="p-8">
@@ -56,7 +57,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="mb-8 grid grid-cols-4 gap-4">
+      <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-lg border border-gray-200 bg-white p-5">
           <div className="flex items-center">
             <FileText className="h-8 w-8 text-blue-500" />
@@ -90,6 +91,16 @@ export default async function DashboardPage() {
             <div className="ml-4">
               <p className="text-sm text-gray-500">Hatalı</p>
               <p className="text-2xl font-bold text-gray-900">{stats.failed}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-lg border border-indigo-100 bg-white p-5">
+          <div className="flex items-center">
+            <Sparkles className="h-8 w-8 text-indigo-500" />
+            <div className="ml-4">
+              <p className="text-sm text-gray-500">Uzman AI hakkı</p>
+              <p className="text-2xl font-bold text-gray-900">{expertQuota.remaining}</p>
+              <p className="text-xs text-gray-500">Bugün {expertQuota.used}/{expertQuota.limit} kullanıldı</p>
             </div>
           </div>
         </div>
@@ -206,7 +217,7 @@ function StatusBadge({ status }: { status: string }) {
     NORMALIZING: { label: 'Normalleştiriliyor', className: 'bg-blue-100 text-blue-600' },
     RUNNING_RULES: { label: 'Kural Çalışıyor', className: 'bg-yellow-100 text-yellow-600' },
     AI_RULE_VALIDATING: { label: 'Yapay zeka kural kontrolü', className: 'bg-purple-100 text-purple-700' },
-    EXPERT_REVIEWING: { label: 'Yapay zeka uzman incelemesi', className: 'bg-indigo-100 text-indigo-700' },
+    EXPERT_REVIEWING: { label: 'Uzman AI incelemesi', className: 'bg-indigo-100 text-indigo-700' },
     GENERATING_REPORT: { label: 'Rapor Üretiliyor', className: 'bg-yellow-100 text-yellow-600' },
     COMPLETED: { label: 'Tamamlandı', className: 'bg-green-100 text-green-600' },
     FAILED: { label: 'Başarısız', className: 'bg-red-100 text-red-600' },

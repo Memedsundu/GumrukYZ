@@ -5,41 +5,11 @@ import {
   failResult,
   findDocs,
   hasValue,
+  isPlaceholderValue,
+  normalizeCountryCode,
   parseFlexibleDate,
   passResult,
 } from '../helpers.js'
-
-function normalizeCountryCode(raw: unknown): string | null {
-  const value = String(raw ?? '').trim()
-  if (!value) return null
-  const upper = value.toUpperCase().replace(/\./g, '').trim()
-  if (/^[A-Z]{2}$/.test(upper)) return upper
-  const normalized = upper
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[İIı]/g, 'I')
-    .replace(/[^A-Z]+/g, ' ')
-    .trim()
-  const aliases: Record<string, string> = {
-    TURKIYE: 'TR',
-    TURKEY: 'TR',
-    'REPUBLIC OF TURKEY': 'TR',
-    'TURKIYE CUMHURIYETI': 'TR',
-    POLONYA: 'PL',
-    POLAND: 'PL',
-    ALMANYA: 'DE',
-    GERMANY: 'DE',
-    FRANSA: 'FR',
-    FRANCE: 'FR',
-    ITALYA: 'IT',
-    ITALY: 'IT',
-    ROMANYA: 'RO',
-    ROMANIA: 'RO',
-    BULGARISTAN: 'BG',
-    BULGARIA: 'BG',
-  }
-  return aliases[normalized] ?? null
-}
 
 /** DECL-001 — Rejim kodu 4 haneli sayısal olmalı. */
 export const DECL_001: RuleDefinition = {
@@ -89,7 +59,9 @@ export const DECL_002: RuleDefinition = {
     const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
     if (!invoice) return null
     const country = invoice.data['country_of_origin']
-    if (!hasValue(country)) {
+    const normalized = normalizeCountryCode(country)
+    if (ctx.tradeFlow === 'EXPORT' && !normalized) return null
+    if (!hasValue(country) || isPlaceholderValue(country)) {
       return failOrReview(
         this.code,
         this.severity,
@@ -99,7 +71,6 @@ export const DECL_002: RuleDefinition = {
         [{ docType: DocumentType.INVOICE, field: 'country_of_origin' }],
       )
     }
-    const normalized = normalizeCountryCode(country)
     if (normalized) {
       return passResult(
         this.code,

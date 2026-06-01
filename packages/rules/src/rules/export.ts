@@ -7,7 +7,14 @@
  */
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
 import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
-import { failOrReview, failResult, hasValue, passResult } from '../helpers.js'
+import {
+  failOrReview,
+  failResult,
+  hasValue,
+  isPlaceholderValue,
+  normalizeCountryCode,
+  passResult,
+} from '../helpers.js'
 
 /** EXP-001 — İhracat faturasında fatura numarası bulunmalı. */
 export const EXP_001: RuleDefinition = {
@@ -115,8 +122,19 @@ export const EXP_004: RuleDefinition = {
     if (!invoice) return null
 
     const coo = invoice.data['country_of_origin']
-    if (hasValue(coo) && String(coo).trim().length >= 2) {
-      return passResult(this.code, this.severity, `Faturada menşe ülke belirtilmiş: ${coo}.`)
+    const normalized = normalizeCountryCode(coo)
+    if (normalized) {
+      return passResult(this.code, this.severity, `Faturada menşe ülke belirtilmiş: ${coo} (${normalized}).`)
+    }
+    if (hasValue(coo) && !isPlaceholderValue(coo)) {
+      return failOrReview(
+        this.code,
+        this.severity,
+        [invoice],
+        `İhracat faturasında menşe ülke "${coo}" geçerli ISO ülke koduna normalize edilemedi. Tercihli tarife ve A.TR/EUR.1 menşe beyanlarını kontrol edin.`,
+        'Menşe ülke faturadan güvenle doğrulanamadı. Manuel kontrol gerekli.',
+        [{ docType: DocumentType.INVOICE, field: 'country_of_origin', value: coo }],
+      )
     }
     return failOrReview(
       this.code,

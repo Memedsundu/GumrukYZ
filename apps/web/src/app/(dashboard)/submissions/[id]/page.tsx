@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
 import { FileText, Upload, BarChart2, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { getProcessingProgress } from '@/lib/processing-progress'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -205,6 +206,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
 }
 
 function ProcessingTimeline({ status, job }: { status: string; job: { status: string; currentStep: string | null; errorMessage: string | null; updatedAt: Date } | null }) {
+  const progress = getProcessingProgress(status, job?.currentStep ?? null)
   const steps = [
     { key: 'UPLOADED', label: 'Belgeler Yüklendi' },
     { key: 'CLASSIFYING', label: 'Belge Türü Belirleniyor' },
@@ -213,14 +215,13 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
     { key: 'NORMALIZING', label: 'Normalleştiriliyor' },
     { key: 'RUNNING_RULES', label: 'Kurallar Çalışıyor' },
     { key: 'AI_RULE_VALIDATING', label: 'Yapay zeka kural kontrolü' },
-    { key: 'EXPERT_REVIEWING', label: 'Yapay zeka uzman incelemesi' },
     { key: 'GENERATING_REPORT', label: 'Rapor Üretiliyor' },
     { key: 'COMPLETED', label: 'Tamamlandı' },
   ]
 
   const statusOrder = [
     'PENDING', 'UPLOADED', 'CLASSIFYING', 'AWAITING_VALIDATION', 'EXTRACTING', 'NORMALIZING',
-    'RUNNING_RULES', 'AI_RULE_VALIDATING', 'EXPERT_REVIEWING', 'GENERATING_REPORT', 'COMPLETED',
+    'RUNNING_RULES', 'AI_RULE_VALIDATING', 'GENERATING_REPORT', 'COMPLETED',
   ]
 
   const currentIndex = statusOrder.indexOf(status)
@@ -228,6 +229,24 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
 
   return (
     <div>
+      <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-blue-950">{progress.label}</p>
+            <p className="mt-0.5 text-xs text-blue-800">{progress.description}</p>
+          </div>
+          <span className="font-mono text-sm font-semibold text-blue-800">
+            %{Math.round(progress.percent)}
+          </span>
+        </div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+          <div
+            className="h-full rounded-full bg-blue-600"
+            style={{ width: `${progress.percent}%` }}
+          />
+        </div>
+      </div>
+
       <ol className="space-y-3">
         {steps.map((step, i) => {
           const stepIndex = statusOrder.indexOf(step.key)
