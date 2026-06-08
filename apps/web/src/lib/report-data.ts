@@ -45,7 +45,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       },
       expertReviews: {
         orderBy: { createdAt: 'desc' },
-        take: 1,
+        take: 5,
         include: {
           findings: {
             orderBy: { createdAt: 'asc' },
@@ -68,7 +68,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
 
   const report = submission.riskReports[0]
   if (!report) return null
-  const expertReview = submission.expertReviews[0] ?? null
+  const expertReview = submission.expertReviews.find(shouldIntegrateExpertReview) ?? submission.expertReviews[0] ?? null
   const expertCounts = countIntegratedExpertFindings(expertReview)
   const mergedSummaryText = mergeReportSummaryText(report.summaryText, expertReview)
   const mergedWarnings = report.totalWarnings + expertCounts.warnings
@@ -87,9 +87,9 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
     }))
   const expertActionSummary = shouldIntegrateExpertReview(expertReview)
     ? expertReview.findings.map((finding, index) => ({
-        ruleCode: `AI-UZMAN-${index + 1}`,
+        ruleCode: `YAPAY-ZEKA-${index + 1}`,
         result: finding.severity,
-        title: `Uzman AI: ${finding.title}`,
+        title: `Uzman yapay zeka: ${finding.title}`,
         description: finding.explanation,
         action: finding.recommendation,
         source: 'EXPERT_REVIEW' as const,

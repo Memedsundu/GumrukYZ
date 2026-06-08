@@ -18,10 +18,14 @@ import type {
   SubmissionContext,
 } from '../types.js'
 import {
+  EXTRACTION_FILENAME_FIELD,
+  FINAL_EXTRACTION_CONFIDENCE_FIELD,
   LOW_CONFIDENCE_THRESHOLD,
+  NATIVE_TEXT_CONFIDENCE_FIELD,
   hasValue,
   isExtractionEmpty,
   reviewResult,
+  toFiniteNumber,
 } from '../helpers.js'
 
 /**
@@ -75,7 +79,50 @@ function hasAnySignal(data: Record<string, unknown>, signals: string[]): boolean
 }
 
 function describeDoc(doc: ExtractionData): string {
-  return `${doc.docType}`
+  const filename = getStringSignal(doc.data, EXTRACTION_FILENAME_FIELD)
+  return filename ? `${doc.docType} (${filename})` : `${doc.docType}`
+}
+
+function getStringSignal(data: Record<string, unknown>, field: string): string | null {
+  const raw = data[field]
+  if (!hasValue(raw)) return null
+  return String(raw).trim()
+}
+
+function normalizedFilename(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[İIı]/g, 'i')
+    .toLowerCase()
+}
+
+function inferDocTypeFromFilename(filename: string): DocumentType | null {
+  const normalized = normalizedFilename(filename)
+  const base = normalized.split('/').pop() ?? normalized
+
+  if (/\b(packing|ceki|paket|koli|ambalaj)\b/.test(base)) return DocumentType.PACKING_LIST
+  if (/\b(yukleme|loading|talimat)\b/.test(base)) return DocumentType.LOADING_INSTRUCTION
+  if (/\b(beyanname|declaration)\b/.test(base)) return DocumentType.DECLARATION_OUTPUT
+  if (/\b(cmr|kon[sş]imento|konsimento|bill-of-lading|bill_of_lading|awb)\b/.test(base)) {
+    return DocumentType.TRANSPORT_DOC
+  }
+  if (/\b(mense|origin|coo|atr|eur1)\b/.test(base)) return DocumentType.ORIGIN_DOC
+  if (/\b(invoice|fatura)\b/.test(base) || /^fi\d{4,}/.test(base) || /^inv[-_\d]/.test(base)) {
+    return DocumentType.INVOICE
+  }
+
+  return null
+}
+
+function formatConfidence(value: number): string {
+  return `%${Math.round(value * 100)}`
+}
+
+function shouldFlagNativeConfidence(nativeConfidence: number | null, finalConfidence: number): boolean {
+  if (nativeConfidence == null) return false
+  if (nativeConfidence <= 0 && finalConfidence >= LOW_CONFIDENCE_THRESHOLD) return false
+  return nativeConfidence < LOW_CONFIDENCE_THRESHOLD
 }
 
 /**
@@ -111,38 +158,65 @@ export const QUAL_001: RuleDefinition = {
  */
 export const QUAL_002: RuleDefinition = {
   code: 'QUAL-002',
-  name: 'Belge türü içerikle uyuşmuyor',
+  name: 'Belge türü veya dosya adı içerikle uyuşmuyor',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const mismatches: Array<{ docType: string; missing: string[] }> = []
+    const mismatches: Array<{
+      docType: string
+      filename?: string
+      expectedDocType?: string
+      missing?: string[]
+      reason: 'filename' | 'content'
+    }> = []
 
     for (const doc of ctx.documents) {
       if (doc.confidence < LOW_CONFIDENCE_THRESHOLD) continue
+      const data = doc.data as Record<string, unknown>
+      const filename = getStringSignal(data, EXTRACTION_FILENAME_FIELD)
+      const filenameDocType = filename ? inferDocTypeFromFilename(filename) : null
+      if (filenameDocType && filenameDocType !== doc.docType) {
+        mismatches.push({
+          docType: doc.docType,
+          filename: filename ?? undefined,
+          expectedDocType: filenameDocType,
+          reason: 'filename',
+        })
+      }
+
       const signals = DOC_TYPE_SIGNALS[doc.docType]
       if (!signals) continue
       if (isExtractionEmpty(doc)) continue // QUAL-001 handles this
-      if (hasAnySignal(doc.data as Record<string, unknown>, signals)) continue
+      if (hasAnySignal(data, signals)) continue
 
       const populatedKeys = Object.keys(doc.data ?? {}).filter((key) =>
-        hasValue((doc.data as Record<string, unknown>)[key]),
+        !key.startsWith('_') && hasValue(data[key]),
       )
       if (populatedKeys.length < 2) continue
-      mismatches.push({ docType: doc.docType, missing: signals.slice(0, 4) })
+      mismatches.push({ docType: doc.docType, missing: signals.slice(0, 4), reason: 'content' })
     }
 
     if (mismatches.length === 0) return null
 
     const detail = mismatches
-      .map((m) => `${m.docType} (beklenen alanlar: ${m.missing.join(', ')})`)
+      .map((m) => {
+        if (m.reason === 'filename') {
+          return `${m.filename} dosya adı ${m.expectedDocType} izlenimi veriyor, içerik ${m.docType} olarak okundu`
+        }
+        return `${m.docType} (beklenen alanlar: ${m.missing?.join(', ')})`
+      })
       .join('; ')
 
     return reviewResult(
       this.code,
       this.severity,
-      `${mismatches.length} belge yanlış türde sınıflandırılmış olabilir. Beklenen alanlar bulunamadı: ${detail}. Belge türlerini kontrol edin.`,
-      mismatches.map((m) => ({ docType: m.docType, field: 'doc_type' })),
+      `${mismatches.length} belgede tür/dosya adı uyumsuzluğu olabilir: ${detail}. Belge türünü ve dosya adını kontrol edin.`,
+      mismatches.map((m) => ({
+        docType: m.docType,
+        field: m.reason === 'filename' ? EXTRACTION_FILENAME_FIELD : 'doc_type',
+        value: m.filename,
+      })),
     )
   },
 }
@@ -207,16 +281,44 @@ export const OCR_001: RuleDefinition = {
   appliesToDocTypes: [],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const lowDocs = ctx.documents.filter((d) => d.confidence < LOW_CONFIDENCE_THRESHOLD)
+    const lowDocs = ctx.documents.filter((d) => {
+      const nativeConfidence = toFiniteNumber(d.data[NATIVE_TEXT_CONFIDENCE_FIELD])
+      const finalConfidence =
+        toFiniteNumber(d.data[FINAL_EXTRACTION_CONFIDENCE_FIELD]) ?? d.confidence
+      return d.confidence < LOW_CONFIDENCE_THRESHOLD ||
+        shouldFlagNativeConfidence(nativeConfidence, finalConfidence)
+    })
     if (lowDocs.length === 0) return null
     const list = lowDocs
-      .map((d) => `${d.docType} (%${(d.confidence * 100).toFixed(0)})`)
+      .map((d) => {
+        const filename = getStringSignal(d.data, EXTRACTION_FILENAME_FIELD)
+        const nativeConfidence = toFiniteNumber(d.data[NATIVE_TEXT_CONFIDENCE_FIELD])
+        const finalConfidence =
+          toFiniteNumber(d.data[FINAL_EXTRACTION_CONFIDENCE_FIELD]) ?? d.confidence
+        if (shouldFlagNativeConfidence(nativeConfidence, finalConfidence) && finalConfidence >= LOW_CONFIDENCE_THRESHOLD) {
+          const displayNativeConfidence = nativeConfidence ?? d.confidence
+          return `${filename ?? d.docType} (ilk okuma ${formatConfidence(displayNativeConfidence)}, son çıkarma ${formatConfidence(finalConfidence)})`
+        }
+        return `${filename ?? d.docType} (${formatConfidence(d.confidence)})`
+      })
       .join(', ')
     return reviewResult(
       this.code,
       this.severity,
-      `${lowDocs.length} belge düşük güven skoru ile çıkarıldı: ${list}. Sonuçlar manuel olarak doğrulanmalıdır.`,
-      lowDocs.map((d) => ({ docType: d.docType, field: 'confidence', value: d.confidence })),
+      `${lowDocs.length} belgede okuma/OCR kalitesi düşük görünüyor: ${list}. AI/OCR alanları toparlamış olsa bile kaynak belge ve kritik alanlar manuel doğrulanmalıdır.`,
+      lowDocs.map((d) => {
+        const finalConfidence =
+          toFiniteNumber(d.data[FINAL_EXTRACTION_CONFIDENCE_FIELD]) ?? d.confidence
+        const nativeConfidence = toFiniteNumber(d.data[NATIVE_TEXT_CONFIDENCE_FIELD])
+        const useNativeConfidence = shouldFlagNativeConfidence(nativeConfidence, finalConfidence)
+        return {
+          docType: d.docType,
+          field: useNativeConfidence
+            ? NATIVE_TEXT_CONFIDENCE_FIELD
+            : 'confidence',
+          value: useNativeConfidence ? nativeConfidence : d.confidence,
+        }
+      }),
     )
   },
 }

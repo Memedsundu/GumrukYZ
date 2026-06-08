@@ -229,6 +229,7 @@ Kesin kurallar:
 - En fazla ${maxFindings} doğrulama döndür.
 - Yalnızca anlamlı bulgu döndür; her geçen kontrol için gereksiz yorum yazma.
 - Mevzuat atfı uydurma; sadece payload içindeki legalCitations bağlamını kullan.
+- Ağırlık, kıymet veya miktar farkı 980.00/98000, 1,185.00/1.185 veya 33,600.00/33.600 gibi ondalık-binlik ayırıcı farkına benziyorsa POTENTIAL_FALSE_POSITIVE kullan ve kaynak belgedeki sayı formatının doğrulanmasını öner.
 - Eğer emin değilsen NEEDS_HUMAN_REVIEW kullan.
 
 Veri:

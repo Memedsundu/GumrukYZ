@@ -49,6 +49,9 @@ export const PackingListExtractionSchema = z.object({
       z.object({
         description: z.string().nullable(),
         quantity: z.number().nullable(),
+        package_count: z.number().nullable(),
+        package_type: z.string().nullable(),
+        unit: z.string().nullable(),
         net_weight: z.number().nullable(),
         gross_weight: z.number().nullable(),
       }),

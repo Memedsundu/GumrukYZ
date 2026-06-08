@@ -24,9 +24,9 @@ const RULE_METADATA: Record<string, RuleDisplayMetadata> = {
   },
   'QUAL-002': {
     category: 'Belge kalitesi',
-    turkishTitle: 'Belge türü uyumsuz',
-    operationalExplanation: 'Belge yüklenen türe ait alanları içermiyor; muhtemelen yanlış kategoride yüklenmiş.',
-    recommendedAction: 'Belge türünü doğrulayın ve gerekirse doğru kategoride tekrar yükleyin.',
+    turkishTitle: 'Belge türü/dosya adı uyumsuz',
+    operationalExplanation: 'Belge yüklenen türe ait alanları içermiyor veya dosya adı farklı bir belge türü izlenimi veriyor.',
+    recommendedAction: 'Belge türünü, dosya adını ve çıkarılan alanları doğrulayın; gerekirse doğru belgeyle tekrar yükleyin.',
     blocking: false,
   },
   'QUAL-003': {
@@ -123,15 +123,15 @@ const RULE_METADATA: Record<string, RuleDisplayMetadata> = {
   'PL-001': {
     category: 'Çeki listesi',
     turkishTitle: 'Kap sayısı',
-    operationalExplanation: 'Kap sayısı beyanname ve taşıma bilgileriyle uyumlu olmalıdır.',
-    recommendedAction: 'Kap sayısını çeki listesi ve beyannameden karşılaştırın.',
+    operationalExplanation: 'Kap sayısı çeki listesi satırları, beyanname ve taşıma bilgileriyle uyumlu olmalıdır.',
+    recommendedAction: 'Toplam kap sayısını satır ambalaj adetleri, çeki listesi özeti ve beyannameyle karşılaştırın.',
     blocking: true,
   },
   'PL-002': {
     category: 'Çeki listesi',
     turkishTitle: 'Brüt ağırlık',
-    operationalExplanation: 'Brüt ağırlık lojistik ve beyan kontrolünün temel alanıdır.',
-    recommendedAction: 'Brüt ağırlığı çeki listesi ve beyannameyle doğrulayın.',
+    operationalExplanation: 'Brüt/net ağırlık toplamları çeki listesi satırları ve toplam alanlarıyla tutarlı olmalıdır.',
+    recommendedAction: 'Satır ağırlık toplamlarını çeki listesi toplam brüt/net ağırlık alanları ve beyannameyle doğrulayın.',
     blocking: false,
   },
   'GTIP-001': {

@@ -143,6 +143,8 @@ Rules:
 - Do not invent values that are not visible in the document.
 - Preserve document numbers, tax IDs, currency codes, dates, totals, weights, package counts, HS/GTIP codes, and party names exactly where possible.
 - For tables, read item rows and totals carefully.
+- Parse locale number formats carefully: "980.00" and "980,00" mean 980; "1,185.00" and "1.185,00" mean 1185. Do not drop decimal separators in a way that turns 980.00 into 98000.
+- For packing-list item rows, separate package_count from product quantity. If a row says "4 boxes" and "Quantity Inside 53 pcs", set item.package_count=4 and item.quantity=53.
 - Do not infer net_weight from quantity, package count, or gross_weight. Use net_weight only when a visible label says Net Weight, Net Kg, Net Ağırlık, or Toplam Net.
 - For packing lists with only Brüt Ağırlık/Gross Weight columns, return net_weight as null at both document and item level.
 - For invoices, return country_of_origin only when an origin/menşe field is visible; do not copy seller country or address country into country_of_origin.

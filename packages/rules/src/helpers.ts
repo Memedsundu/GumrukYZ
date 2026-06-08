@@ -23,6 +23,12 @@ export const LOW_CONFIDENCE_THRESHOLD = 0.5
  */
 export const MEDIUM_CONFIDENCE_THRESHOLD = 0.7
 
+export const EXTRACTION_FILENAME_FIELD = '_filename'
+export const NATIVE_TEXT_CONFIDENCE_FIELD = '_native_text_confidence'
+export const NATIVE_TEXT_LENGTH_FIELD = '_native_text_length'
+export const FINAL_EXTRACTION_CONFIDENCE_FIELD = '_final_extraction_confidence'
+export const EXTRACTION_METHOD_FIELD = '_extraction_method'
+
 export type SourceRef = NonNullable<RuleEvaluationResult['sourceRefs']>[number]
 
 export function isLowConfidence(doc: ExtractionData | null | undefined): boolean {
@@ -131,6 +137,8 @@ export function normalizeCountryCode(raw: unknown): string | null {
   const aliases: Record<string, string> = {
     TURKIYE: 'TR',
     TURKEY: 'TR',
+    'TURKIYE TURKEY': 'TR',
+    'TURKEY TURKIYE': 'TR',
     'REPUBLIC OF TURKEY': 'TR',
     'TURKIYE CUMHURIYETI': 'TR',
     POLONYA: 'PL',
@@ -146,6 +154,7 @@ export function normalizeCountryCode(raw: unknown): string | null {
     BULGARISTAN: 'BG',
     BULGARIA: 'BG',
   }
+  if (normalized.includes('TURKIYE') && normalized.includes('TURKEY')) return 'TR'
   return aliases[normalized] ?? null
 }
 
@@ -167,8 +176,54 @@ export function parseFlexibleDate(raw: unknown): Date | null {
 /** Coerce to finite number; returns null otherwise. */
 export function toFiniteNumber(value: unknown): number | null {
   if (value == null || value === '') return null
-  const n = Number(value)
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value !== 'string') {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : null
+  }
+
+  const cleaned = value
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[^\d,.\-+]/g, '')
+
+  if (!cleaned || cleaned === '-' || cleaned === '+') return null
+
+  const n = Number(normalizeNumericString(cleaned))
   return Number.isFinite(n) ? n : null
+}
+
+function normalizeNumericString(value: string): string {
+  const lastComma = value.lastIndexOf(',')
+  const lastDot = value.lastIndexOf('.')
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimalSeparator = lastComma > lastDot ? ',' : '.'
+    const thousandsSeparator = decimalSeparator === ',' ? '.' : ','
+    return value
+      .replace(new RegExp(`\\${thousandsSeparator}`, 'g'), '')
+      .replace(decimalSeparator, '.')
+  }
+
+  const separator = lastComma >= 0 ? ',' : lastDot >= 0 ? '.' : null
+  if (!separator) return value
+
+  const parts = value.split(separator)
+  if (parts.length === 2) {
+    const integerPart = parts[0] ?? ''
+    const fractionalPart = parts[1] ?? ''
+    if (fractionalPart.length === 0) return integerPart
+    if (fractionalPart.length <= 2) return `${integerPart}.${fractionalPart}`
+    if (fractionalPart.length === 3 && /^\d{1,3}$/.test(integerPart.replace(/^[+-]/, ''))) {
+      return `${integerPart}${fractionalPart}`
+    }
+    return `${integerPart}.${fractionalPart}`
+  }
+
+  const lastPart = parts[parts.length - 1] ?? ''
+  const leading = parts.slice(0, -1).join('')
+  if (lastPart.length <= 2) return `${leading}.${lastPart}`
+  return `${leading}${lastPart}`
 }
 
 /** Pick first present, non-empty string from a list of candidate fields. */
@@ -190,7 +245,7 @@ export function firstNonEmpty(
 export function isExtractionEmpty(doc: ExtractionData): boolean {
   const data = doc.data
   if (!data || typeof data !== 'object') return true
-  const keys = Object.keys(data)
+  const keys = Object.keys(data).filter((key) => !key.startsWith('_'))
   if (keys.length === 0) return true
   return keys.every((key) => {
     const value = data[key]

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck } from 'lucide-react'
+import { Upload, FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff } from 'lucide-react'
 import {
   isSupportedUploadFile,
   SUPPORTED_UPLOAD_ACCEPT,
@@ -251,7 +251,7 @@ export default function DocumentUploadClient({
         throw new Error('İthalat/ihracat yönünü seçin')
       }
       if (documents.some((doc) => !doc.isIgnored && doc.docType === 'UNCLASSIFIED')) {
-        throw new Error('Yoksayılmayan her belge için belge türünü doğrulayın')
+        throw new Error('Analize dahil edilen her belge için belge türünü doğrulayın')
       }
 
       const client = clientAction === 'existing'
@@ -463,9 +463,9 @@ export default function DocumentUploadClient({
           <div className="divide-y divide-gray-50">
             {documents.map((doc) => (
               <div key={doc.id} className="px-6 py-4">
-                <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                   <FileText className="mt-1 h-5 w-5 text-gray-400" />
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900">{doc.filename}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {doc.suggestedDocType && (
@@ -492,25 +492,36 @@ export default function DocumentUploadClient({
                       </div>
                     )}
                   </div>
-                  <select
-                    value={doc.docType === 'UNCLASSIFIED' ? '' : doc.docType}
-                    onChange={(e) => setDocuments((prev) => prev.map((item) => item.id === doc.id ? { ...item, docType: e.target.value } : item))}
-                    className="rounded-md border border-gray-300 px-2 py-1 text-sm"
-                  >
-                    <option value="">Belge türü seçin</option>
-                    {DOC_TYPES.map((type) => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
-                  </select>
-                  <label className="flex items-center gap-1 text-xs text-gray-500">
-                    <input
-                      type="checkbox"
-                      checked={doc.isIgnored}
-                      onChange={(e) => setDocuments((prev) => prev.map((item) => item.id === doc.id ? { ...item, isIgnored: e.target.checked } : item))}
-                    />
-                    Yoksay
-                  </label>
-                  <StatusIcon status={doc.status} validated={Boolean(doc.classificationValidatedAt)} />
+                  <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:shrink-0 sm:items-end">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <select
+                        value={doc.docType === 'UNCLASSIFIED' ? '' : doc.docType}
+                        onChange={(e) => setDocuments((prev) => prev.map((item) => item.id === doc.id ? { ...item, docType: e.target.value } : item))}
+                        disabled={doc.isIgnored}
+                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-100 disabled:text-gray-400 sm:min-w-44"
+                      >
+                        <option value="">Belge türü seçin</option>
+                        {DOC_TYPES.map((type) => (
+                          <option key={type.value} value={type.value}>{type.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setDocuments((prev) => prev.map((item) => item.id === doc.id ? { ...item, isIgnored: !item.isIgnored } : item))}
+                        className={`inline-flex w-full items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors sm:min-w-32 ${
+                          doc.isIgnored
+                            ? 'border-gray-300 bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                        }`}
+                        aria-pressed={doc.isIgnored}
+                        title={doc.isIgnored ? 'Bu belge analiz dışında kalır' : 'Bu belge analizde kullanılır'}
+                      >
+                        {doc.isIgnored ? <EyeOff className="mr-1.5 h-3.5 w-3.5" /> : <Eye className="mr-1.5 h-3.5 w-3.5" />}
+                        {doc.isIgnored ? 'Analiz dışı' : 'Analize dahil'}
+                      </button>
+                    </div>
+                    <DocumentStatusBadge status={doc.status} validated={Boolean(doc.classificationValidatedAt)} ignored={doc.isIgnored} />
+                  </div>
                 </div>
               </div>
             ))}
@@ -522,7 +533,7 @@ export default function DocumentUploadClient({
 
       {documents.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <h3 className="text-sm font-semibold text-gray-900">Kullanıcı Doğrulaması</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Son kontrol</h3>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700">İşlem yönü</label>
@@ -538,7 +549,7 @@ export default function DocumentUploadClient({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">Müşteri eşleştirme</label>
+              <label className="block text-sm font-medium text-gray-700">Dosyanın ait olduğu müşteri</label>
               <select
                 value={clientAction === 'existing' ? selectedClientId : clientAction}
                 onChange={(e) => {
@@ -553,7 +564,7 @@ export default function DocumentUploadClient({
                 }}
                 className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
               >
-                <option value="none">Müşteri bağlama</option>
+                <option value="none">Müşteri seçmeden devam et</option>
                 {clientMatches.map((client) => (
                   <option key={client.id} value={client.id}>
                     {client.displayName} (%{Math.round(client.confidence * 100)})
@@ -561,6 +572,9 @@ export default function DocumentUploadClient({
                 ))}
                 <option value="create">Yeni müşteri kaydı oluştur</option>
               </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Bu seçim dosyayı müşteri kayıtlarınızdaki firma ile ilişkilendirir. Emin değilseniz müşteri seçmeden devam edebilirsiniz.
+              </p>
               {clientMatches[0] && (
                 <p className="mt-1 text-xs text-gray-500">
                   En güçlü eşleşme: {clientMatches[0].displayName} · {clientMatchLabel(clientMatches[0].matchType)} · güven %{Math.round(clientMatches[0].confidence * 100)}
@@ -643,12 +657,59 @@ export default function DocumentUploadClient({
   )
 }
 
-function StatusIcon({ status, validated }: { status: string; validated: boolean }) {
-  if (status === 'DONE') return <CheckCircle className="h-5 w-5 text-green-500" />
-  if (status === 'FAILED') return <XCircle className="h-5 w-5 text-red-500" />
-  if (status === 'PROCESSING') return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-  if (validated) return <CheckCircle className="h-5 w-5 text-blue-500" />
-  return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />
+function DocumentStatusBadge({
+  status,
+  validated,
+  ignored,
+}: {
+  status: string
+  validated: boolean
+  ignored: boolean
+}) {
+  if (ignored) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500">
+        Analizde kullanılmayacak
+      </span>
+    )
+  }
+  if (status === 'FAILED') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+        <XCircle className="mr-1 h-3.5 w-3.5" />
+        Okuma hatası
+      </span>
+    )
+  }
+  if (status === 'PROCESSING') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+        Okunuyor
+      </span>
+    )
+  }
+  if (validated) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+        <CheckCircle className="mr-1 h-3.5 w-3.5" />
+        Doğrulandı
+      </span>
+    )
+  }
+  if (status === 'DONE') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+        <CheckCircle className="mr-1 h-3.5 w-3.5" />
+        Hazır
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+      Belge türü bekliyor
+    </span>
+  )
 }
 
 function ProgressBar({ progress }: { progress: ProcessingProgressState | null }) {
@@ -730,7 +791,7 @@ function getNextAction(params: {
       loading: params.validating,
       blockingReasons: [
         'İthalat/ihracat yönü seçili olmalı.',
-        'Yoksayılmayan her belge için belge türü doğrulanmalı.',
+        'Analize dahil edilen her belge için belge türü doğrulanmalı.',
       ],
     }
   }

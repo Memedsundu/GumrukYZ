@@ -24,7 +24,7 @@ export default async function BetaPage() {
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-slate-600">
               E-posta adresinizle kayıt olun, firmanızı oluşturun ve gerçek test dosyalarınızı yükleyerek
-              kural kontrolü, hızlı AI doğrulaması ve isteğe bağlı uzman AI incelemesini deneyin.
+              kural kontrolü, hızlı yapay zeka doğrulaması ve isteğe bağlı uzman yapay zeka incelemesini deneyin.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -54,12 +54,12 @@ export default async function BetaPage() {
                 {
                   icon: <Sparkles className="h-5 w-5 text-indigo-600" />,
                   title: 'Analizi çalıştır',
-                  text: 'Kurallar ve hızlı AI kural kontrolü otomatik çalışır.',
+                  text: 'Kurallar ve hızlı yapay zeka kural kontrolü otomatik çalışır.',
                 },
                 {
                   icon: <ShieldCheck className="h-5 w-5 text-emerald-600" />,
                   title: 'Raporu incele',
-                  text: 'Riskleri, önerileri ve kalan uzman AI hakkınızı aynı ekranda görün.',
+                  text: 'Riskleri, önerileri ve kalan uzman yapay zeka hakkınızı aynı ekranda görün.',
                 },
               ].map((item) => (
                 <div key={item.title} className="flex gap-3 rounded-md bg-slate-50 p-4">

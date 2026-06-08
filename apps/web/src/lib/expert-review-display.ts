@@ -43,8 +43,8 @@ export function mergeReportSummaryText(
   const expertSummary = shouldIntegrateExpertReview(review) ? review?.summary?.trim() : null
   if (!baseSummary && !expertSummary) return null
   if (!expertSummary) return baseSummary
-  if (!baseSummary) return `Uzman AI yorumu: ${expertSummary}`
-  return `${baseSummary} Uzman AI yorumu: ${expertSummary}`
+  if (!baseSummary) return `Uzman yapay zeka yorumu: ${expertSummary}`
+  return `${baseSummary} Uzman yapay zeka yorumu: ${expertSummary}`
 }
 
 export function parseExpertEvidenceRefs(value: unknown): ExpertEvidenceRef[] {

@@ -35,6 +35,11 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 
 const FIELD_LABELS: Record<string, string> = {
   confidence: 'güven skoru',
+  _filename: 'dosya adı',
+  _native_text_confidence: 'ilk metin okuma güveni',
+  _native_text_length: 'ilk metin uzunluğu',
+  _final_extraction_confidence: 'son çıkarma güveni',
+  _extraction_method: 'çıkarma yöntemi',
   doc_type: 'belge türü',
   invoice_number: 'fatura numarası',
   invoice_date: 'fatura tarihi',
@@ -129,7 +134,7 @@ const ISSUE_MESSAGES: Record<string, string> = {
   'INV-005': 'Fatura toplam tutarı eksik veya pozitif değil.',
   'INV-006': 'Faturadaki Incoterm geçerli Incoterms 2020 kodlarıyla uyumlu görünmüyor.',
   'PL-001': 'Çeki listesinde kap sayısı eksik veya geçerli pozitif tam sayı değil.',
-  'PL-002': 'Çeki listesinde brüt ağırlık eksik veya pozitif değil.',
+  'PL-002': 'Çeki listesinde brüt ağırlık eksik, pozitif değil veya satır toplamlarıyla uyuşmuyor.',
   'GTIP-001': 'GTİP kodu 8 haneli sayısal formatta görünmüyor.',
   'GTIP-002': 'Beyanname kalemlerinde eşya tanımı eksik.',
   'GTIP-003': 'Fatura ve beyanname GTİP bilgileri farklı görünüyor. Sınıflandırma manuel doğrulanmalı.',
@@ -161,7 +166,7 @@ const ISSUE_MESSAGES: Record<string, string> = {
   'EXP-001': 'İhracat faturasında fatura numarası eksik.',
   'EXP-002': 'İhracat faturası satıcı/ihracatçı bilgisi içermiyor.',
   'EXP-003': 'Beyannamedeki rejim kodu ihracat rejimleriyle uyumlu değil.',
-  'EXP-004': 'İhracat faturasında menşe ülkesi eksik.',
+  'EXP-004': 'İhracat faturasında menşe ülkesi eksik veya standart ülke adı olarak doğrulanamadı.',
   'EXP-005': 'Geçici ihracat için yükleme talimatı eksik.',
 }
 
@@ -229,6 +234,10 @@ export function formatRuleResultMessage(result: RuleResultDisplayInput): string 
 
   if (result.result === 'PASS') {
     return PASS_MESSAGES[result.ruleCode] ?? 'Kontrol geçti.'
+  }
+
+  if (result.ruleCode === 'EXP-004' && result.message && result.message.trim().length > 0) {
+    return result.message
   }
 
   // When the rule produces a REVIEW_NEEDED outcome (e.g. confidence-aware

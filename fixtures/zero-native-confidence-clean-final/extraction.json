@@ -1,0 +1,46 @@
+{
+  "_fixture": "zero-native-confidence-clean-final",
+  "_description": "Native text confidence of 0 with high final extraction should not be treated as a low-quality OCR warning by itself",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "EXP-004": "PASS"
+  },
+  "_expectedAbsentResults": [
+    "OCR-001"
+  ],
+  "_assertNoFailures": true,
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.98,
+      "data": {
+        "_filename": "commercial_invoice_FI2026-00068.pdf",
+        "_native_text_confidence": 0,
+        "_native_text_length": 0,
+        "_final_extraction_confidence": 0.98,
+        "_extraction_method": "OPENAI_VISION",
+        "invoice_number": "FI2026-00068",
+        "invoice_date": "2026-05-22",
+        "seller_name": "Ardelya Bus HVAC Parts A.S. (Fictional)",
+        "seller_address": "Istanbul, Turkiye",
+        "buyer_name": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "buyer_address": "Warszawa, Poland",
+        "currency": "EUR",
+        "total_amount": 33600,
+        "country_of_origin": "Türkiye / Turkey",
+        "net_weight": 980,
+        "items": [
+          {
+            "description": "Bus ventilation duct components",
+            "quantity": 480,
+            "unit": "pcs/adet",
+            "unit_price": 70,
+            "total_price": 33600
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

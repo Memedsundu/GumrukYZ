@@ -56,7 +56,7 @@ const ExpertFindingSchema = z.object({
       rationale: z.string().min(1).max(320),
       required_evidence: z.array(z.string().min(1).max(140)).max(4),
     }),
-  ).max(4).optional(),
+  ).max(4),
   citation_chunk_ids: z.array(z.string()).max(3),
 })
 
@@ -126,7 +126,7 @@ export async function runExpertReviewForSubmission(params: {
   ruleResults: RuleResultForExpertReview[]
 }): Promise<ExpertReviewSummary | null> {
   if (!isExpertReviewEnabled()) {
-    return createSkippedExpertReview(params, 'AI uzman incelemesi OpenAI yapılandırması olmadığı için atlandı.')
+    return createSkippedExpertReview(params, 'Uzman yapay zeka incelemesi OpenAI yapılandırması olmadığı için atlandı.')
   }
 
   const readiness = await getLegalContextReadiness()
@@ -229,7 +229,7 @@ export async function runExpertReviewForSubmission(params: {
       where: { id: review.id },
       data: {
         status: 'ERROR',
-        summary: 'AI uzman incelemesi tamamlanamadı; deterministik kontroller üzerinden rapor üretildi.',
+        summary: 'Uzman yapay zeka incelemesi tamamlanamadı; deterministik kontroller üzerinden rapor üretildi.',
         completedAt: new Date(),
       },
     })
@@ -238,7 +238,7 @@ export async function runExpertReviewForSubmission(params: {
       status: 'ERROR',
       legalContextStatus: 'READY',
       overallRisk: null,
-      summary: 'AI uzman incelemesi tamamlanamadı; deterministik kontroller üzerinden rapor üretildi.',
+      summary: 'Uzman yapay zeka incelemesi tamamlanamadı; deterministik kontroller üzerinden rapor üretildi.',
       warningCount: 0,
       reviewNeededCount: 0,
       findings: [],
@@ -298,7 +298,7 @@ async function createLegalContextIncompleteReview(
     legalContextStatus: 'LEGAL_CONTEXT_INCOMPLETE',
     overallRisk: 'UNKNOWN',
     summary:
-      'AI uzman incelemesi için gerekli mevzuat kapsamı eksik. GTİP, ürün kontrolü veya yorum gerektiren alanlarda manuel uzman incelemesi gerekir.',
+      'Uzman yapay zeka incelemesi için gerekli mevzuat kapsamı eksik. GTİP, ürün kontrolü veya yorum gerektiren alanlarda manuel uzman incelemesi gerekir.',
     completedAt: new Date(),
   }
   const review = params.reviewId
@@ -323,7 +323,7 @@ async function completeReviewWithContextFinding(
   missingSources: string[],
 ): Promise<ExpertReviewSummary> {
   const title = 'Mevzuat bağlamı eksik'
-  const explanation = `AI uzman incelemesi için gerekli kaynaklar eksik veya gömülü mevzuat parçası bulunamadı: ${missingSources.join(', ')}. Bu nedenle GTİP/ürün kontrolü gibi yoruma açık alanlarda manuel uzman incelemesi gerekir.`
+  const explanation = `Uzman yapay zeka incelemesi için gerekli kaynaklar eksik veya gömülü mevzuat parçası bulunamadı: ${missingSources.join(', ')}. Bu nedenle GTİP/ürün kontrolü gibi yoruma açık alanlarda manuel uzman incelemesi gerekir.`
   const recommendation = 'Eksik resmi mevzuat kaynaklarını içe aktarın ve analizi tekrar çalıştırın.'
 
   await prisma.expertReview.update({
@@ -354,7 +354,7 @@ async function completeReviewWithContextFinding(
     status: legalContextStatus,
     legalContextStatus,
     overallRisk: 'UNKNOWN',
-    summary: 'AI uzman incelemesi için gerekli mevzuat kapsamı eksik.',
+    summary: 'Uzman yapay zeka incelemesi için gerekli mevzuat kapsamı eksik.',
     warningCount: 0,
     reviewNeededCount: 1,
     findings: [{ area: 'LEGAL_CONTEXT', severity: 'REVIEW_NEEDED', title, explanation }],
@@ -622,8 +622,11 @@ Kesin kurallar:
 - Sadece legalContext içinde verilen chunkId değerlerine atıf yap. Yeni kanun, madde, URL veya kaynak uydurma.
 - GTİP veya ürün mevzuatı için yeterli bağlam yoksa açıkça "manuel uzman incelemesi gerekir" de.
 - GTİP_PLAUSIBILITY bulgusunda sadece "manuel inceleme" deme; gtip_candidates alanında beyan edilen kodu ve kanıt varsa en fazla iki alternatifi aday olarak öner.
+- GTİP dışı bulgularda gtip_candidates alanını boş dizi olarak gönder.
 - GTİP adaylarında bağlayıcı karar verme. Kodun neden makul/makul olmayabileceğini ve hangi teknik kanıtın gerektiğini açıkça yaz.
 - Ürün açıklaması "otobüs", "hava kanalı", "iç kapak", "karoseri", "aksam" gibi taşıt gövde/aksesuar bağlamı veriyorsa beyan edilen 8708/870829 ailesini aday olarak değerlendir; HVAC/mekanik işlev ihtimali varsa bunu gerekli kanıt olarak belirt.
+- Ağırlık, kıymet veya miktar farkı 980.00/98000, 1,185.00/1.185 veya 33,600.00/33.600 gibi ondalık-binlik ayırıcı farkına benziyorsa bunu belge tutarsızlığı gibi kesinleştirme; sayı formatı/çıkarma belirsizliği olarak REVIEW_NEEDED açıkla ve overall_risk değerini yalnızca bu nedenle HIGH yapma.
+- Beyanname, customs value veya declarationSnapshot yoksa fatura toplamı ile beyan/gümrük kıymeti uyuşmazlığı test edilemez. Böyle bir durumda kıymet bulgusunu "eksik beyanname nedeniyle test yapılamıyor" diye sınırla; var olmayan beyan kıymeti farkı üretme.
 - Kanıtı olmayan bulgu üretme.
 - En fazla ${options.maxFindings} bulgu üret.
 - Her bulguda en fazla 3 mevzuat atfı kullan.

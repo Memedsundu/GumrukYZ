@@ -16,6 +16,8 @@ interface Params {
   params: Promise<{ id: string }>
 }
 
+export const maxDuration = 300
+
 export async function POST(req: NextRequest, { params }: Params) {
   const { id: submissionId } = await params
   const authResult = await requireApiUser()
@@ -34,7 +36,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
     if (input.status !== 'COMPLETED') {
       return NextResponse.json(
-        { error: 'Uzman AI incelemesi için önce dosya analizinin tamamlanması gerekiyor' },
+        { error: 'Uzman yapay zeka incelemesi için önce dosya analizinin tamamlanması gerekiyor' },
         { status: 409 },
       )
     }
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         expertReview: await getExpertReviewSummary(reservation.reviewId, user.tenantId),
         quota: await getExpertReviewQuota(user.tenantId),
         consumed: false,
-        message: 'Uzman AI incelemesi daha önce tamamlandı.',
+        message: 'Uzman yapay zeka incelemesi daha önce tamamlandı.',
       })
     }
 
@@ -79,13 +81,13 @@ export async function POST(req: NextRequest, { params }: Params) {
   } catch (error) {
     if (error instanceof ExpertReviewQuotaExhaustedError) {
       return NextResponse.json(
-        { error: 'Uzman AI inceleme hakkınız kalmadı', quota: await getExpertReviewQuota(user.tenantId) },
+        { error: 'Uzman yapay zeka inceleme hakkınız kalmadı', quota: await getExpertReviewQuota(user.tenantId) },
         { status: 429 },
       )
     }
     if (error instanceof ExpertReviewAlreadyRunningError) {
       return NextResponse.json(
-        { error: 'Bu dosya için uzman AI incelemesi zaten devam ediyor' },
+        { error: 'Bu dosya için uzman yapay zeka incelemesi zaten devam ediyor' },
         { status: 409 },
       )
     }
@@ -97,7 +99,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           where: { id: reservedReviewId },
           data: {
             status: 'ERROR',
-            summary: 'Uzman AI incelemesi tamamlanamadı. Lütfen daha sonra tekrar deneyin.',
+            summary: 'Uzman yapay zeka incelemesi tamamlanamadı. Lütfen daha sonra tekrar deneyin.',
             completedAt: new Date(),
           },
         }).catch(() => null),
@@ -105,7 +107,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     console.error('POST /api/submissions/[id]/expert-review error:', error)
-    return NextResponse.json({ error: 'Uzman AI incelemesi başlatılamadı' }, { status: 500 })
+    return NextResponse.json({ error: 'Uzman yapay zeka incelemesi başlatılamadı' }, { status: 500 })
   }
 }
 

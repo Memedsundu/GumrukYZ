@@ -42,8 +42,8 @@ const PROGRESS_BY_STATUS: Record<string, ProgressDefinition> = {
   },
   AI_RULE_VALIDATING: {
     percent: 84,
-    label: 'Hızlı AI kural kontrolü',
-    description: 'Kural sonuçları hızlı ve düşük maliyetli AI modeliyle gözden geçiriliyor.',
+    label: 'Hızlı yapay zeka kural kontrolü',
+    description: 'Kural sonuçları hızlı ve düşük maliyetli yapay zeka modeliyle gözden geçiriliyor.',
   },
   GENERATING_REPORT: {
     percent: 94,
@@ -62,8 +62,8 @@ const PROGRESS_BY_STATUS: Record<string, ProgressDefinition> = {
   },
   EXPERT_REVIEWING: {
     percent: 92,
-    label: 'Uzman AI incelemesi',
-    description: 'Önceki bir işlem uzman AI incelemesi aşamasında görünüyor.',
+    label: 'Uzman yapay zeka incelemesi',
+    description: 'Önceki bir işlem uzman yapay zeka incelemesi aşamasında görünüyor.',
   },
 }
 

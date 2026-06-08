@@ -1,0 +1,54 @@
+{
+  "_fixture": "decimal-scale-net-weight",
+  "_description": "A 980 vs 98000 net-weight mismatch looks like a decimal-separator extraction error and should not hard FAIL",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "CROSS-006": "REVIEW_NEEDED"
+  },
+  "_assertNoFailures": true,
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.98,
+      "data": {
+        "invoice_number": "FI2026-00068",
+        "invoice_date": "2026-05-22",
+        "seller_name": "Ardelya Bus HVAC Parts A.S. (Fictional)",
+        "buyer_name": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "currency": "EUR",
+        "total_amount": 33600,
+        "country_of_origin": "TR",
+        "net_weight": 980,
+        "items": [
+          {
+            "description": "Bus ventilation duct components",
+            "quantity": 480,
+            "unit": "pcs/adet",
+            "unit_price": 70,
+            "total_price": 33600
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.98,
+      "data": {
+        "package_count": 12,
+        "package_type": "wooden boxes on 3 pallets",
+        "net_weight": 98000,
+        "gross_weight": 1185,
+        "items": [
+          {
+            "description": "Bus ventilation duct components",
+            "quantity": 480,
+            "package_count": 12,
+            "net_weight": 98000,
+            "gross_weight": 1185
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

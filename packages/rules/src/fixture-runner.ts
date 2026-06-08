@@ -16,6 +16,7 @@ interface FixtureFile {
   _description: string
   _tradeFlow: TradeFlow
   _expectedResults: Record<string, string | null>
+  _expectedAbsentResults?: string[]
   _assertNoFailures?: boolean
   _notes?: string
   documents: Array<{
@@ -115,6 +116,18 @@ function runFixture(fixturePath: string): { passed: number; failed: number; erro
       errors.push(`${ruleCode}: expected ${expectedResult}, got ${actual}`)
       failed++
       console.log(`  ✗ ${ruleCode}: expected ${expectedResult}, got ${actual}`)
+    }
+  }
+
+  for (const ruleCode of fixture._expectedAbsentResults ?? []) {
+    const actual = resultMap.get(ruleCode)
+    if (actual === undefined || actual === 'SKIP') {
+      console.log(`  ✓ ${ruleCode}: absent`)
+      passed++
+    } else {
+      errors.push(`${ruleCode}: expected absent but got ${actual}`)
+      failed++
+      console.log(`  ✗ ${ruleCode}: expected absent, got ${actual}`)
     }
   }
 

@@ -63,6 +63,9 @@ type ClassificationReadResult = {
   providerRunId: string | null
 }
 
+const MIN_CLASSIFICATION_TEXT_LENGTH = 120
+const MIN_CLASSIFICATION_READ_CONFIDENCE = 0.55
+
 type ClassificationDecision = {
   detectedType: string
   confidence: number
@@ -319,7 +322,16 @@ async function readForClassification(
           durationMs: Date.now() - startedAt,
         },
       })
-      return { text: result.text, confidence: result.confidence, providerRunId: providerRun.id }
+      const azureRead = { text: result.text, confidence: result.confidence, providerRunId: providerRun.id }
+      if (isUsableClassificationRead(azureRead)) return azureRead
+
+      logger.warn('Azure classification read was weak, trying native PDF text', {
+        documentId: document.id,
+        confidence: result.confidence,
+        textLength: result.text.trim().length,
+      })
+      const nativeRead = await readNativeTextForClassification(document)
+      return chooseBestClassificationRead(azureRead, nativeRead)
     } catch (error) {
       await prisma.providerRun.update({
         where: { id: providerRun.id },
@@ -336,12 +348,38 @@ async function readForClassification(
     }
   }
 
+  return readNativeTextForClassification(document)
+}
+
+async function readNativeTextForClassification(
+  document: DocumentForClassification,
+): Promise<ClassificationReadResult> {
+  if (!document.latestVersion) return { text: '', confidence: 0, providerRunId: null }
   const result = await extractTextFromPdf(
     document.latestVersion.fileUrl,
     document.latestVersion.originalFilename,
     document.latestVersion.mimeType,
   )
   return { text: result.text, confidence: result.confidence, providerRunId: null }
+}
+
+function isUsableClassificationRead(read: ClassificationReadResult): boolean {
+  return read.confidence >= MIN_CLASSIFICATION_READ_CONFIDENCE &&
+    read.text.trim().length >= MIN_CLASSIFICATION_TEXT_LENGTH
+}
+
+function chooseBestClassificationRead(
+  primary: ClassificationReadResult,
+  fallback: ClassificationReadResult,
+): ClassificationReadResult {
+  if (isUsableClassificationRead(fallback) && !isUsableClassificationRead(primary)) return fallback
+  const primaryUsefulChars = primary.text.trim().length
+  const fallbackUsefulChars = fallback.text.trim().length
+  if (fallback.confidence > primary.confidence && fallbackUsefulChars > primaryUsefulChars * 1.2) {
+    return fallback
+  }
+  if (fallbackUsefulChars >= primaryUsefulChars + 300) return fallback
+  return primary
 }
 
 async function classifyText(params: {
@@ -566,6 +604,7 @@ function normalizeClassificationText(value: string): string {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/[_-]+/g, ' ')
 }
 
 function confidenceFromSignalScore(score: number): number {
@@ -598,10 +637,11 @@ const DOCUMENT_TYPE_SIGNAL_SETS: Array<{
     docType: DocumentType.INVOICE,
     reasoning: 'Fatura/e-Fatura göstergeleri tespit edildi.',
     signals: [
+      { pattern: /\bcommercial invoice\b|\bticari fatura\b/, weight: 5, field: 'filename', label: 'commercial invoice/ticari fatura dosya adı veya başlığı' },
       { pattern: /\be fatura\b|\befatura\b|\bfatura\b|\binvoice\b/, weight: 4, field: 'text', label: 'fatura/invoice başlığı' },
       { pattern: /\binvoice number\b|\binvoice date\b|\bpayable amount\b|\btotal price of goods\b/, weight: 2, field: 'text', label: 'fatura alanları' },
       { pattern: /\bmal hizmet toplam\b|\btoplam tutar\b|\bkdv\b|\bett?n\b/, weight: 2, field: 'text', label: 'e-Fatura alanları' },
-      { pattern: /\bfi\d{8,}\b/, weight: 3, field: 'filename', label: 'FI fatura numarası' },
+      { pattern: /\bfi\s*\d{4}\s*\d{4,}\b|\bfi\d{8,}\b/, weight: 4, field: 'filename', label: 'FI fatura numarası' },
     ],
   },
   {

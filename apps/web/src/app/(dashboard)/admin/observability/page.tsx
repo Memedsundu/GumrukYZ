@@ -5,16 +5,32 @@ import { Activity, TrendingUp, AlertCircle, DollarSign } from 'lucide-react'
 
 interface ProviderStats {
   provider: string
-  total: bigint
-  errors: bigint
+  total: number
+  errors: number
   totalCostUsd: number | null
   avgDurationMs: number | null
 }
 
 interface DailyRun {
   day: Date
-  count: bigint
-  errors: bigint
+  count: number
+  errors: number
+}
+
+interface RawProviderStats {
+  provider: string
+  total: unknown
+  errors: unknown
+  totalCostUsd?: unknown
+  totalcostusd?: unknown
+  avgDurationMs?: unknown
+  avgdurationms?: unknown
+}
+
+interface RawDailyRun {
+  day: Date | string
+  count: unknown
+  errors: unknown
 }
 
 function formatCost(usd: number | null): string {
@@ -29,6 +45,50 @@ function formatMs(ms: number | null): string {
   return `${Math.round(ms)}ms`
 }
 
+function toNumber(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (typeof value === 'bigint') return Number(value)
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if (value && typeof value === 'object') {
+    const decimalLike = value as { toNumber?: () => number; toString?: () => string }
+    if (typeof decimalLike.toNumber === 'function') {
+      const parsed = decimalLike.toNumber()
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    if (typeof decimalLike.toString === 'function') {
+      const parsed = Number(decimalLike.toString())
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+  }
+  return 0
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value == null) return null
+  return toNumber(value)
+}
+
+function normalizeProviderStats(rows: RawProviderStats[]): ProviderStats[] {
+  return rows.map((row) => ({
+    provider: row.provider,
+    total: toNumber(row.total),
+    errors: toNumber(row.errors),
+    totalCostUsd: toNullableNumber(row.totalCostUsd ?? row.totalcostusd),
+    avgDurationMs: toNullableNumber(row.avgDurationMs ?? row.avgdurationms),
+  }))
+}
+
+function normalizeDailyRuns(rows: RawDailyRun[]): DailyRun[] {
+  return rows.map((row) => ({
+    day: row.day instanceof Date ? row.day : new Date(row.day),
+    count: toNumber(row.count),
+    errors: toNumber(row.errors),
+  }))
+}
+
 export default async function ObservabilityPage() {
   const user = await getAuthenticatedUser()
 
@@ -36,15 +96,15 @@ export default async function ObservabilityPage() {
     redirect('/dashboard')
   }
 
-  const [providerStats, last7Days, recentErrors, totalJobStats] = await Promise.all([
+  const [providerStatsRaw, last7DaysRaw, recentErrors, totalJobStats] = await Promise.all([
     // Provider-level aggregates
-    prisma.$queryRaw<ProviderStats[]>`
+    prisma.$queryRaw<RawProviderStats[]>`
       SELECT
         provider,
-        COUNT(*)::bigint AS total,
-        SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END)::bigint AS errors,
-        SUM(estimated_cost_usd) AS "totalCostUsd",
-        AVG(duration_ms) AS "avgDurationMs"
+        COUNT(*)::integer AS total,
+        SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END)::integer AS errors,
+        COALESCE(SUM(estimated_cost_usd), 0)::double precision AS "totalCostUsd",
+        AVG(duration_ms)::double precision AS "avgDurationMs"
       FROM provider_runs
       WHERE tenant_id = ${user.tenantId}
       GROUP BY provider
@@ -52,11 +112,11 @@ export default async function ObservabilityPage() {
     `,
 
     // Daily run counts for last 7 days
-    prisma.$queryRaw<DailyRun[]>`
+    prisma.$queryRaw<RawDailyRun[]>`
       SELECT
         date_trunc('day', created_at) AS day,
-        COUNT(*)::bigint AS count,
-        SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END)::bigint AS errors
+        COUNT(*)::integer AS count,
+        SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END)::integer AS errors
       FROM provider_runs
       WHERE tenant_id = ${user.tenantId}
         AND created_at >= NOW() - INTERVAL '7 days'
@@ -91,9 +151,12 @@ export default async function ObservabilityPage() {
     }),
   ])
 
+  const providerStats = normalizeProviderStats(providerStatsRaw)
+  const last7Days = normalizeDailyRuns(last7DaysRaw)
+
   const totalCost = providerStats.reduce((sum, s) => sum + (s.totalCostUsd ?? 0), 0)
-  const totalRuns = providerStats.reduce((sum, s) => sum + Number(s.total), 0)
-  const totalErrors = providerStats.reduce((sum, s) => sum + Number(s.errors), 0)
+  const totalRuns = providerStats.reduce((sum, s) => sum + s.total, 0)
+  const totalErrors = providerStats.reduce((sum, s) => sum + s.errors, 0)
   const errorRate = totalRuns > 0 ? ((totalErrors / totalRuns) * 100).toFixed(1) : '0'
 
   const jobCounts = Object.fromEntries(totalJobStats.map((s) => [s.status, s._count.id]))
@@ -171,11 +234,11 @@ export default async function ObservabilityPage() {
                       {stat.provider}
                     </td>
                     <td className="px-6 py-3 text-right text-sm text-gray-600">
-                      {Number(stat.total).toLocaleString('tr')}
+                      {stat.total.toLocaleString('tr')}
                     </td>
                     <td className="px-6 py-3 text-right text-sm">
-                      <span className={Number(stat.errors) > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}>
-                        {Number(stat.errors)}
+                      <span className={stat.errors > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}>
+                        {stat.errors}
                       </span>
                     </td>
                     <td className="px-6 py-3 text-right text-sm text-gray-600">
@@ -210,7 +273,7 @@ export default async function ObservabilityPage() {
                         {run.provider} · {run.operation}
                       </p>
                       <p className="mt-0.5 truncate text-xs text-red-600">
-                        {run.errorMessage ?? 'Unknown error'}
+                        {run.errorMessage ?? 'Bilinmeyen hata'}
                       </p>
                     </div>
                     <time className="flex-shrink-0 text-xs text-gray-400">
@@ -247,8 +310,8 @@ export default async function ObservabilityPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {last7Days.map((row) => {
-                  const count = Number(row.count)
-                  const errors = Number(row.errors)
+                  const count = row.count
+                  const errors = row.errors
                   const successRate = count > 0 ? (((count - errors) / count) * 100).toFixed(0) : '—'
                   return (
                     <tr key={row.day.toISOString()}>

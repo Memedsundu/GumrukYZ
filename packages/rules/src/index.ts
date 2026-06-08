@@ -9,11 +9,17 @@ export { RuleEvaluator } from './evaluator.js'
 export {
   LOW_CONFIDENCE_THRESHOLD,
   MEDIUM_CONFIDENCE_THRESHOLD,
+  EXTRACTION_FILENAME_FIELD,
+  NATIVE_TEXT_CONFIDENCE_FIELD,
+  NATIVE_TEXT_LENGTH_FIELD,
+  FINAL_EXTRACTION_CONFIDENCE_FIELD,
+  EXTRACTION_METHOD_FIELD,
   isLowConfidence,
   isExtractionEmpty,
   hasValue,
   isPlaceholderValue,
   normalizeCountryCode,
+  toFiniteNumber,
 } from './helpers.js'
 
 // ── Quality / extraction sanity rules ─────────────────────────────────────────

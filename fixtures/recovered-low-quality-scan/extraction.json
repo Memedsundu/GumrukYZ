@@ -1,0 +1,45 @@
+{
+  "_fixture": "recovered-low-quality-scan",
+  "_description": "A scanned invoice was initially low-confidence, then AI/OCR recovered structured fields; OCR-001 must still require manual review",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "OCR-001": "REVIEW_NEEDED",
+    "EXP-004": "PASS"
+  },
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.95,
+      "data": {
+        "_filename": "low_quality_scanned_invoice_FI2026-00078.pdf",
+        "_native_text_confidence": 0.48,
+        "_native_text_length": 69,
+        "_final_extraction_confidence": 0.95,
+        "_extraction_method": "OPENAI_VISION",
+        "invoice_number": "FI2026-00078",
+        "invoice_date": "2026-05-27",
+        "seller_name": "Ardelya Bus HVAC Parts A.S. (Fictional)",
+        "seller_address": "Istanbul, Turkiye",
+        "buyer_name": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "buyer_address": "Warszawa, Poland",
+        "currency": "EUR",
+        "total_amount": 12480,
+        "incoterm": "DAP",
+        "country_of_origin": "Turkiye / Turkey",
+        "gtip_code": "870829909000",
+        "items": [
+          {
+            "description": "Bus ventilation duct components",
+            "quantity": 160,
+            "unit": "pcs/adet",
+            "unit_price": 78,
+            "total_price": 12480,
+            "hs_code": "870829909000"
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

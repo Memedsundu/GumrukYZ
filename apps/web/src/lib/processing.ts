@@ -13,7 +13,13 @@ import {
   RuleEvaluator,
   ALL_RULES,
   LOW_CONFIDENCE_THRESHOLD as RULES_LOW_CONFIDENCE_THRESHOLD,
+  EXTRACTION_FILENAME_FIELD,
+  EXTRACTION_METHOD_FIELD,
+  FINAL_EXTRACTION_CONFIDENCE_FIELD,
+  NATIVE_TEXT_CONFIDENCE_FIELD,
+  NATIVE_TEXT_LENGTH_FIELD,
   isPlaceholderValue,
+  toFiniteNumber,
 } from '@gumrukyz/rules'
 import type { SubmissionContext, ExtractionData } from '@gumrukyz/rules'
 import { OpenAIProvider } from '@gumrukyz/ai'
@@ -139,6 +145,8 @@ export async function processSubmission(
         const extractionSchema = getExtractionSchema(docType)
         let rawText = textResult.text
         let extractionConfidence = textResult.confidence
+        const nativeTextConfidence = textResult.confidence
+        const nativeTextLength = textResult.text.trim().length
         let extractionMethod: string = textResult.method
         let lastReaderProviderRunId: string | null = null
         let structuredData: Record<string, unknown> = {}
@@ -363,10 +371,21 @@ export async function processSubmission(
           }
 
           if (extractionConfidence < LOW_CONFIDENCE_THRESHOLD) {
+            const lowConfidenceData = attachExtractionQualitySignals(
+              {},
+              {
+                filename,
+                nativeTextConfidence,
+                nativeTextLength,
+                finalExtractionConfidence: extractionConfidence,
+                extractionMethod,
+              },
+            )
             await prisma.documentExtraction.update({
               where: { id: extraction.id },
               data: {
                 extractionStatus: 'LOW_CONFIDENCE',
+                structuredJson: lowConfidenceData as Prisma.InputJsonValue,
                 providerRunId: lastReaderProviderRunId,
               },
             })
@@ -376,7 +395,7 @@ export async function processSubmission(
             })
             extractionResults.push({
               docType,
-              data: {},
+              data: lowConfidenceData,
               confidence: extractionConfidence,
             })
             continue
@@ -444,6 +463,7 @@ export async function processSubmission(
               docType,
               error: aiErr instanceof Error ? aiErr.message : String(aiErr),
             })
+            aiConfidence = extractionConfidence * 0.7
             await prisma.providerRun.update({
               where: { id: providerRun.id },
               data: {
@@ -453,7 +473,7 @@ export async function processSubmission(
             })
             await prisma.documentExtraction.update({
               where: { id: extraction.id },
-              data: { extractionStatus: 'DONE', confidence: extractionConfidence * 0.7 },
+              data: { extractionStatus: 'DONE', confidence: aiConfidence },
             })
           }
         } else {
@@ -462,6 +482,25 @@ export async function processSubmission(
             data: { extractionStatus: 'DONE' },
           })
         }
+
+        structuredData = attachExtractionQualitySignals(
+          structuredData,
+          {
+            filename,
+            nativeTextConfidence,
+            nativeTextLength,
+            finalExtractionConfidence: aiConfidence,
+            extractionMethod,
+          },
+        )
+
+        await prisma.documentExtraction.update({
+          where: { id: extraction.id },
+          data: {
+            structuredJson: structuredData as Prisma.InputJsonValue,
+            confidence: aiConfidence,
+          },
+        })
 
         await prisma.document.update({
           where: { id: doc.id },
@@ -830,11 +869,23 @@ function enhanceStructuredDataFromText(
   }
 
   if (docType === 'PACKING_LIST') {
-    const totalLine = rawText.match(/(?:TOPLAM|TOTAL)[\s\S]{0,120}?\b(\d+)\s+([\d.,]+)/i)
-    if (totalLine) {
-      next['package_count'] = parseLocaleNumber(totalLine[1])
-      next['gross_weight'] = parseLocaleNumber(totalLine[2])
+    const totalPackages = firstMatch(rawText, /(?:Total Packages|Toplam\s+(?:Paket|Kap))\s+(\d+)/i)
+    const totalGrossWeight = firstMatch(rawText, /(?:Total Gross Weight|Toplam\s+Br[üu]t(?:\s+A[ğg][ıi]rl[ıi]k)?)\s+([\d.,]+)/i)
+    const totalNetWeight = firstMatch(rawText, /(?:Total Net Weight|Toplam\s+Net(?:\s+A[ğg][ıi]rl[ıi]k)?)\s+([\d.,]+)/i)
+    if (totalPackages) next['package_count'] = parseLocaleNumber(totalPackages)
+    if (totalGrossWeight) next['gross_weight'] = parseLocaleNumber(totalGrossWeight)
+    if (totalNetWeight) next['net_weight'] = parseLocaleNumber(totalNetWeight)
+
+    const itemPackageCounts = parsePackingListItemPackageCounts(rawText)
+    if (itemPackageCounts.length > 0 && Array.isArray(next['items'])) {
+      next['items'] = next['items'].map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return item
+        const packageCount = itemPackageCounts[index]
+        if (packageCount == null) return item
+        return { ...item, package_count: packageCount }
+      })
     }
+
     if (!hasExplicitNetWeightEvidence(rawText)) {
       next['net_weight'] = null
       if (Array.isArray(next['items'])) {
@@ -866,6 +917,28 @@ function enhanceStructuredDataFromText(
   return next
 }
 
+type ExtractionQualitySignals = {
+  filename: string
+  nativeTextConfidence: number
+  nativeTextLength: number
+  finalExtractionConfidence: number
+  extractionMethod: string
+}
+
+function attachExtractionQualitySignals(
+  data: Record<string, unknown>,
+  signals: ExtractionQualitySignals,
+): Record<string, unknown> {
+  return {
+    ...data,
+    [EXTRACTION_FILENAME_FIELD]: signals.filename,
+    [NATIVE_TEXT_CONFIDENCE_FIELD]: roundConfidence(signals.nativeTextConfidence),
+    [NATIVE_TEXT_LENGTH_FIELD]: signals.nativeTextLength,
+    [FINAL_EXTRACTION_CONFIDENCE_FIELD]: roundConfidence(signals.finalExtractionConfidence),
+    [EXTRACTION_METHOD_FIELD]: signals.extractionMethod,
+  }
+}
+
 function sanitizePlaceholderValues(data: Record<string, unknown>): Record<string, unknown> {
   return sanitizeJsonValue(data) as Record<string, unknown>
 }
@@ -886,15 +959,31 @@ function hasExplicitNetWeightEvidence(rawText: string): boolean {
   return /\b(net\s*(weight|wt|kg)|netto|net ağırlık|net agirlik|toplam\s+net)\b/i.test(rawText)
 }
 
+function parsePackingListItemPackageCounts(rawText: string): number[] {
+  const tableSection =
+    rawText.match(/Package Details[\s\S]*?(?=Total Quantity|Total Packages|Not:|Haz[ıi]rlayan|$)/i)?.[0] ??
+    rawText.match(/Ambalaj Bilgileri[\s\S]*?(?=Total Quantity|Total Packages|Not:|Haz[ıi]rlayan|$)/i)?.[0]
+
+  if (!tableSection) return []
+  const matches = Array.from(
+    tableSection.matchAll(/\b(\d+)\s+(?:wooden\s+)?(?:boxes|box|packages?|pkg|koli|kap|sand[ıi]k)\b/gi),
+  )
+  return matches
+    .map((match) => parseLocaleNumber(match[1]))
+    .filter((value): value is number => value != null && value > 0)
+}
+
+function roundConfidence(value: number): number {
+  return Math.max(0, Math.min(1, Math.round(value * 100) / 100))
+}
+
 function firstMatch(text: string, pattern: RegExp): string | null {
   const match = text.match(pattern)
   return match?.[1]?.trim() ?? null
 }
 
 function parseLocaleNumber(value: string): number | null {
-  const normalized = value.replace(/\./g, '').replace(',', '.')
-  const parsed = Number(normalized)
-  return Number.isFinite(parsed) ? parsed : null
+  return toFiniteNumber(value)
 }
 
 async function clearGeneratedArtifacts(

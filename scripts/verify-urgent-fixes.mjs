@@ -36,6 +36,11 @@ const uploadClient = read('apps/web/src/app/(dashboard)/submissions/[id]/documen
 assert(uploadClient.includes('Belgeleri yükleyin; sistem belge türünü ve ithalat/ihracat yönünü otomatik önerecek.'), 'Upload step must show auto-classification guidance')
 assert(uploadClient.includes('ProgressBar'), 'Upload/process screen must show a processing progress bar')
 
+const classification = read('apps/web/src/lib/classification.ts')
+assert(classification.includes('isUsableClassificationRead'), 'Classification must fallback when managed text extraction is weak')
+assert(classification.includes('commercial invoice'), 'Classification must recognize commercial invoice filenames/headings')
+assert(classification.includes('fi\\s*\\d{4}'), 'Classification must recognize FI invoice numbers with separators')
+
 const processRoute = read('apps/web/src/app/api/submissions/[id]/process/route.ts')
 assert(processRoute.includes('tx.submission.updateMany'), 'Process route must claim submissions atomically')
 assert(processRoute.includes("status: { in: PROCESSABLE_STATUSES }"), 'Process route must restrict claimable statuses')
@@ -48,11 +53,30 @@ assert(!processing.includes("from './expert-review'"), 'Processing pipeline must
 assert(processing.includes("from './ai-rule-validation'"), 'Processing pipeline must keep fast AI rule validation')
 assert(processing.includes('sanitizePlaceholderValues'), 'Processing must sanitize placeholder extracted values before rules run')
 assert(processing.includes('hasExplicitNetWeightEvidence'), 'Processing must drop inferred net weights without source evidence')
+assert(processing.includes('attachExtractionQualitySignals'), 'Processing must preserve extraction quality signals for quality rules')
+assert(processing.includes('parsePackingListItemPackageCounts'), 'Processing must parse packing-list row package counts from readable text')
 
 const openAiDocumentReader = read('apps/web/src/lib/openai-document-reader.ts')
 assert(openAiDocumentReader.includes('Do not infer net_weight'), 'Document reader prompt must forbid inferred net_weight values')
+assert(openAiDocumentReader.includes('item.package_count'), 'Document reader prompt must separate package_count from product quantity')
+assert(openAiDocumentReader.includes('980.00'), 'Document reader prompt must warn about decimal separator parsing')
+
+const qualityRules = read('packages/rules/src/rules/quality.ts')
+assert(qualityRules.includes('NATIVE_TEXT_CONFIDENCE_FIELD'), 'OCR-001 must inspect native text confidence, not only final confidence')
+assert(qualityRules.includes('EXTRACTION_FILENAME_FIELD'), 'QUAL-002 must inspect filename/content mismatch signals')
+assert(qualityRules.includes('shouldFlagNativeConfidence'), 'OCR-001 must not treat zero native confidence plus high final confidence as low-quality by itself')
+
+const packingListRules = read('packages/rules/src/rules/packing-list.ts')
+assert(packingListRules.includes('items[].package_count'), 'PL-001 must compare row package-count totals when present')
+assert(packingListRules.includes('items[].${m.field}'), 'PL-002 must report row weight totals when present')
 
 const crossDocumentRules = read('packages/rules/src/rules/cross-document.ts')
+assert(crossDocumentRules.includes('looksLikeDecimalScaleMismatch'), 'CROSS-006 must downgrade obvious decimal scale mismatches to review')
+
+const ruleHelpers = read('packages/rules/src/helpers.ts')
+assert(ruleHelpers.includes('TURKIYE TURKEY'), 'Country normalization must accept Turkiye / Turkey values')
+assert(ruleHelpers.includes('normalizeNumericString'), 'Rule number parsing must handle locale decimal/thousands separators')
+
 assert(crossDocumentRules.includes('woodenbox'), 'CROSS-004 must recognize wooden box/package labels as package units')
 
 const declarationRules = read('packages/rules/src/rules/declaration.ts')
@@ -104,6 +128,7 @@ assert(expertReviewRoute.includes('refundExpertReviewSlot'), 'Manual expert revi
 assert(expertReviewRoute.includes('{ status: 429 }'), 'Manual expert review API must return 429 when quota is exhausted')
 assert(expertReviewRoute.includes("input.status !== 'COMPLETED'"), 'Manual expert review API must require completed processing')
 assert(expertReviewRoute.includes('body.force === true'), 'Manual expert review API must support explicit refresh requests')
+assert(expertReviewRoute.includes('maxDuration = 300'), 'Manual expert review API must allow a long enough function window')
 
 const statusRoute = read('apps/web/src/app/api/submissions/[id]/status/route.ts')
 assert(statusRoute.includes('progressPercent'), 'Status API must expose progressPercent')
@@ -120,6 +145,9 @@ assert(!onboardingPage.includes('davetiyesi'), 'Onboarding copy must not be invi
 const expertReview = read('apps/web/src/lib/expert-review.ts')
 assert(expertReview.includes('gtip_candidates'), 'Expert review schema must support concrete GTIP candidate suggestions')
 assert(expertReview.includes('8708/870829'), 'Expert review prompt must ask for 8708/870829 candidate handling')
+const gtipCandidatesSchema = expertReview.match(/gtip_candidates:[\s\S]*?citation_chunk_ids:/)
+assert(gtipCandidatesSchema, 'Expert review schema must define gtip_candidates before citations')
+assert(!gtipCandidatesSchema[0].includes('optional()'), 'gtip_candidates must be required; OpenAI structured outputs reject optional fields')
 for (const requiredSource of [
   '4458 Sayılı Gümrük Kanunu',
   'Gümrük Yönetmeliği',
@@ -137,6 +165,12 @@ assert(packageJson.includes('db:bootstrap-regulations'), 'Root bootstrap-regulat
 const reportData = read('apps/web/src/lib/report-data.ts')
 assert(reportData.includes('expertIncluded'), 'Report payload must expose whether expert review is integrated')
 assert(reportData.includes('AI-UZMAN'), 'Report action summary must include expert review items')
+assert(reportData.includes('take: 5'), 'Report payload must inspect recent expert reviews, not only the latest row')
+assert(reportData.includes('find(shouldIntegrateExpertReview)'), 'Report payload must prefer a completed expert review over a newer failed retry')
+
+const reportPage = read('apps/web/src/app/(dashboard)/submissions/[id]/report/page.tsx')
+assert(reportPage.includes('take: 5'), 'Report page must inspect recent expert reviews, not only the latest row')
+assert(reportPage.includes('find(shouldIntegrateExpertReview)'), 'Report page must prefer a completed expert review over a newer failed retry')
 
 const reportPdf = read('apps/web/src/lib/report-pdf.tsx')
 assert(reportPdf.includes('createRequire'), 'Report PDF renderer must resolve font files through package resolution')
@@ -148,5 +182,12 @@ assert(regulationManifest.includes('8708.29'), 'Regulation manifest must include
 read('fixtures/sample-export-package-vs-item/extraction.json')
 read('fixtures/export-origin-placeholder/extraction.json')
 read('fixtures/gross-only-no-net-weight/extraction.json')
+read('fixtures/recovered-low-quality-scan/extraction.json')
+read('fixtures/filename-content-mismatch/extraction.json')
+read('fixtures/packing-list-internal-totals/extraction.json')
+read('fixtures/country-normalization-slash/extraction.json')
+read('fixtures/locale-number-formats/extraction.json')
+read('fixtures/decimal-scale-net-weight/extraction.json')
+read('fixtures/zero-native-confidence-clean-final/extraction.json')
 
 console.log('Urgent fix invariants verified.')

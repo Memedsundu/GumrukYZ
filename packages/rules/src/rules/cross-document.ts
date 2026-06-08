@@ -1,12 +1,21 @@
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
 import type { RuleDefinition, SubmissionContext, RuleEvaluationResult } from '../types.js'
+import { toFiniteNumber } from '../helpers.js'
 
 const TOLERANCE = 0.01 // 1%
+const DECIMAL_SCALE_FACTORS = [10, 100, 1000]
 
 function withinTolerance(a: number, b: number): boolean {
   if (a === 0 && b === 0) return true
   const base = Math.max(Math.abs(a), Math.abs(b))
   return Math.abs(a - b) / base <= TOLERANCE
+}
+
+function looksLikeDecimalScaleMismatch(a: number, b: number): boolean {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return false
+  return DECIMAL_SCALE_FACTORS.some(
+    (factor) => withinTolerance(a * factor, b) || withinTolerance(a, b * factor),
+  )
 }
 
 function normalizedWords(value: unknown): Set<string> {
@@ -93,8 +102,9 @@ export const CROSS_001: RuleDefinition = {
     if (!invoice || !snap) return null
     if (!invoice.data['total_amount'] || !snap.totalValue) return null
 
-    const invAmt = Number(invoice.data['total_amount'])
-    const declAmt = Number(snap.totalValue)
+    const invAmt = toFiniteNumber(invoice.data['total_amount'])
+    const declAmt = toFiniteNumber(snap.totalValue)
+    if (invAmt == null || declAmt == null) return null
 
     const pass = withinTolerance(invAmt, declAmt)
     const isFreeOfChargeExport = ctx.tradeFlow === 'EXPORT' && invoice.data['free_of_charge'] === true
@@ -131,8 +141,9 @@ export const CROSS_002: RuleDefinition = {
     if (!pl || !snap) return null
     if (!pl.data['gross_weight'] || !snap.totalGrossWeight) return null
 
-    const plWeight = Number(pl.data['gross_weight'])
-    const declWeight = Number(snap.totalGrossWeight)
+    const plWeight = toFiniteNumber(pl.data['gross_weight'])
+    const declWeight = toFiniteNumber(snap.totalGrossWeight)
+    if (plWeight == null || declWeight == null) return null
 
     const pass = withinTolerance(plWeight, declWeight)
 
@@ -208,8 +219,8 @@ export const CROSS_004: RuleDefinition = {
     if (!invoiceItems || invoiceItems.length === 0) return null
     if (!plItems || plItems.length === 0) return null
 
-    const invTotal = invoiceItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
-    const plTotal = plItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+    const invTotal = invoiceItems.reduce((sum, item) => sum + (toFiniteNumber(item.quantity) || 0), 0)
+    const plTotal = plItems.reduce((sum, item) => sum + (toFiniteNumber(item.quantity) || 0), 0)
 
     if (invTotal === 0 || plTotal === 0) return null
 
@@ -300,19 +311,22 @@ export const CROSS_006: RuleDefinition = {
     if (!invoice || !pl) return null
     if (!invoice.data['net_weight'] || !pl.data['net_weight']) return null
 
-    const invWeight = Number(invoice.data['net_weight'])
-    const plWeight = Number(pl.data['net_weight'])
+    const invWeight = toFiniteNumber(invoice.data['net_weight'])
+    const plWeight = toFiniteNumber(pl.data['net_weight'])
 
-    if (isNaN(invWeight) || isNaN(plWeight) || invWeight === 0 || plWeight === 0) return null
+    if (invWeight == null || plWeight == null || invWeight === 0 || plWeight === 0) return null
 
     const pass = withinTolerance(invWeight, plWeight)
+    const decimalScaleMismatch = !pass && looksLikeDecimalScaleMismatch(invWeight, plWeight)
 
     return {
       ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'FAIL',
+      severity: pass || decimalScaleMismatch ? RuleSeverity.WARNING : this.severity,
+      result: pass ? 'PASS' : decimalScaleMismatch ? 'REVIEW_NEEDED' : 'FAIL',
       message: pass
         ? `Net ağırlık eşleşiyor: fatura (${invWeight} kg) ≈ çeki listesi (${plWeight} kg).`
+        : decimalScaleMismatch
+          ? `Net ağırlık farkı ondalık/binlik ayırıcı okuma hatası olabilir: fatura (${invWeight} kg) ↔ çeki listesi (${plWeight} kg). Kaynak belgede ağırlık alanları manuel doğrulanmalı.`
         : `Net ağırlık uyuşmazlığı: fatura (${invWeight} kg) ↔ çeki listesi (${plWeight} kg), fark %1'i aşıyor.`,
       sourceRefs: pass
         ? []
@@ -376,10 +390,10 @@ export const CROSS_008: RuleDefinition = {
     if (!pl || !snap) return null
     if (!pl.data['package_count'] || !snap.packageCount) return null
 
-    const plCount = Number(pl.data['package_count'])
-    const declCount = Number(snap.packageCount)
+    const plCount = toFiniteNumber(pl.data['package_count'])
+    const declCount = toFiniteNumber(snap.packageCount)
 
-    if (isNaN(plCount) || isNaN(declCount)) return null
+    if (plCount == null || declCount == null) return null
 
     if (plCount === declCount) {
       return {

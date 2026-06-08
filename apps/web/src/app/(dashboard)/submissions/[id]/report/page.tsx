@@ -3,8 +3,8 @@ import { prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
-import { AlertCircle, CheckCircle, XCircle, Clock, ChevronLeft, Info, Download } from 'lucide-react'
 import {
+  docTypeLabel,
   formatRuleResultMessage,
   formatSourceRef,
   getRuleDisplayMetadata,
@@ -20,8 +20,13 @@ import {
   shouldIntegrateExpertReview,
 } from '@/lib/expert-review-display'
 import { getExpertReviewQuota } from '@/lib/expert-review-quota'
-import OverrideButton from './override-button'
-import ExpertReviewButton from './expert-review-button'
+import ReportWorkspace, {
+  type ReportAiValidationItem,
+  type ReportCitationItem,
+  type ReportDocumentItem,
+  type ReportFindingItem,
+  type ReportGtipCandidate,
+} from './report-workspace'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -34,6 +39,16 @@ export default async function ReportPage({ params }: Props) {
   const submission = await prisma.submission.findFirst({
     where: { id, tenantId: user.tenantId },
     include: {
+      documents: {
+        orderBy: { createdAt: 'asc' },
+        include: {
+          latestVersion: {
+            include: {
+              extractions: { orderBy: { createdAt: 'desc' }, take: 1 },
+            },
+          },
+        },
+      },
       riskReports: { orderBy: { generatedAt: 'desc' }, take: 1 },
       ruleResults: {
         orderBy: [{ severity: 'asc' }, { ruleCode: 'asc' }],
@@ -51,7 +66,7 @@ export default async function ReportPage({ params }: Props) {
       },
       expertReviews: {
         orderBy: { createdAt: 'desc' },
-        take: 1,
+        take: 5,
         include: {
           findings: {
             orderBy: { createdAt: 'asc' },
@@ -84,436 +99,176 @@ export default async function ReportPage({ params }: Props) {
     )
   }
 
-  const errors = submission.ruleResults.filter((r) => r.result === 'FAIL')
-  const warnings = submission.ruleResults.filter((r) => r.result === 'WARN')
-  const reviewNeeded = submission.ruleResults.filter((r) => r.result === 'REVIEW_NEEDED')
-  const passes = submission.ruleResults.filter((r) => r.result === 'PASS')
-  const expertReview = submission.expertReviews[0] ?? null
+  const errors = submission.ruleResults.filter((result) => result.result === 'FAIL')
+  const warnings = submission.ruleResults.filter((result) => result.result === 'WARN')
+  const reviewNeeded = submission.ruleResults.filter((result) => result.result === 'REVIEW_NEEDED')
+  const passes = submission.ruleResults.filter((result) => result.result === 'PASS')
+  const expertReview = submission.expertReviews.find(shouldIntegrateExpertReview) ?? submission.expertReviews[0] ?? null
   const expertCounts = countIntegratedExpertFindings(expertReview)
-  const mergedSummaryText = mergeReportSummaryText(report.summaryText, expertReview)
-  const mergedWarnings = warnings.length + expertCounts.warnings
-  const mergedReviewNeeded = reviewNeeded.length + expertCounts.reviewNeeded
-  const ruleActionItems = [...errors, ...reviewNeeded, ...warnings].map((result) => {
-    const meta = getRuleDisplayMetadata(result.ruleCode)
-    return {
-      id: result.id,
-      code: result.ruleCode,
-      result: result.result,
-      title: meta.turkishTitle,
-      description: formatRuleResultMessage(result),
-      action: recommendedActionForRuleResult(result.ruleCode, result.result),
-    }
-  })
-  const expertActionItems = shouldIntegrateExpertReview(expertReview)
-    ? expertReview.findings.map((finding, index) => ({
-        id: finding.id,
-        code: `AI-UZMAN-${index + 1}`,
-        result: finding.severity,
-        title: `Uzman AI: ${finding.title}`,
-        description: finding.explanation,
-        action: finding.recommendation,
-      }))
-    : []
-  const actionItems = [...ruleActionItems, ...expertActionItems]
-    .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
-    .slice(0, 8)
   const expertQuota = await getExpertReviewQuota(user.tenantId)
-
   const canOverride = canManageTenant(user)
 
+  const documents: ReportDocumentItem[] = submission.documents.map((document) => ({
+    id: document.id,
+    filename: document.latestVersion?.originalFilename ?? document.label,
+    label: document.label,
+    docType: docTypeLabel(document.docType),
+    status: document.status,
+    isIgnored: document.isIgnored,
+    extractionConfidence: document.latestVersion?.extractions[0]?.confidence ?? null,
+    classificationConfidence: document.suggestedDocTypeConfidence,
+  }))
+
+  const ruleFindings: ReportFindingItem[] = submission.ruleResults.map((result) => {
+    const metadata = getRuleDisplayMetadata(result.ruleCode)
+    const override = result.overrides[0]
+
+    return {
+      id: result.id,
+      kind: 'rule',
+      code: result.ruleCode,
+      result: result.result,
+      resultLabel: resultLabel(result.result),
+      category: normalizeReportCategory(metadata.category, result.ruleCode),
+      sourceType: 'Kural sonucu',
+      title: metadata.turkishTitle,
+      explanation: metadata.operationalExplanation,
+      message: formatRuleResultMessage(result),
+      action: recommendedActionForRuleResult(result.ruleCode, result.result),
+      blocking: metadata.blocking,
+      confidence: null,
+      sourceRefs: parseSourceRefs(result.sourceRefsJson).map(formatSourceRef),
+      citations: result.citations.map((citation): ReportCitationItem => {
+        const legal = citation.ruleLegalCitation
+        return {
+          id: citation.id,
+          title: legal.sourceDocument.title,
+          label: legal.articleLabel,
+          excerpt: truncate(legal.excerpt, 360),
+          url: legal.url,
+        }
+      }),
+      aiValidations: result.aiValidations.map((validation): ReportAiValidationItem => ({
+        id: validation.id,
+        statusLabel: aiRuleValidationLabel(validation.status),
+        confidence: validation.confidence,
+        explanation: validation.explanation,
+        recommendation: validation.recommendation,
+      })),
+      gtipCandidates: [],
+      overrideReason: override?.reason ?? null,
+      canOverride: canOverride && result.result !== 'PASS' && !override,
+      defaultOpen: result.result === 'FAIL' || result.result === 'REVIEW_NEEDED',
+    }
+  })
+
+  const expertFindings: ReportFindingItem[] = shouldIntegrateExpertReview(expertReview)
+    ? expertReview.findings.map((finding, index) => {
+        const evidenceRefs = parseExpertEvidenceRefs(finding.evidenceRefsJson)
+        const gtipCandidates = parseExpertGtipCandidates(finding.evidenceRefsJson)
+        return {
+          id: finding.id,
+          kind: 'expert',
+          code: `YAPAY-ZEKA-${index + 1}`,
+          result: finding.severity,
+          resultLabel: resultLabel(finding.severity),
+          category: expertFindingCategory(finding.area),
+          sourceType: 'Yapay zeka yorumu',
+          title: finding.title,
+          explanation: expertAreaLabel(finding.area),
+          message: finding.explanation,
+          action: finding.recommendation,
+          blocking: false,
+          confidence: finding.confidence,
+          sourceRefs: formatExpertEvidence(evidenceRefs),
+          citations: finding.citations.map((citation): ReportCitationItem => {
+            const chunk = citation.regulationChunk
+            return {
+              id: citation.id,
+              title: chunk.sourceDocument.title,
+              label: chunk.articleLabel,
+              excerpt: truncate(chunk.chunkText, 360),
+              url: chunk.sourceUrl ?? chunk.sourceDocument.url,
+            }
+          }),
+          aiValidations: [],
+          gtipCandidates: gtipCandidates.map((candidate): ReportGtipCandidate => ({
+            code: candidate.code,
+            confidence: candidate.confidence,
+            rationale: candidate.rationale,
+            requiredEvidence: candidate.requiredEvidence,
+          })),
+          overrideReason: null,
+          canOverride: false,
+          defaultOpen: true,
+        }
+      })
+    : []
+
+  const findings = [...ruleFindings, ...expertFindings].sort(sortFindings)
+
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <Link
-          href={`/submissions/${id}`}
-          className="flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
-        >
-          <ChevronLeft className="mr-1 h-4 w-4" />
-          {submission.title}
-        </Link>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Risk Raporu</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Üretilme: {formatDateTime(report.generatedAt)}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/api/submissions/${id}/report/download?format=pdf`}
-              className="inline-flex items-center rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              PDF indir
-            </Link>
-            <Link
-              href={`/api/submissions/${id}/report/download?format=json`}
-              className="inline-flex items-center rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              JSON indir
-            </Link>
-            <RiskBadge errors={errors.length} warnings={mergedWarnings} reviewNeeded={mergedReviewNeeded} />
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-6">
-        <ExpertReviewButton
-          submissionId={id}
-          quota={expertQuota}
-          hasCompletedExpertReview={expertReview?.status === 'COMPLETED'}
-        />
-      </div>
-
-      {/* AI Summary */}
-      {mergedSummaryText && (
-        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-5">
-          <div className="flex items-start gap-3">
-            <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
-            <div>
-              <h3 className="text-sm font-semibold text-blue-900">Yapay zeka özeti</h3>
-              <p className="mt-1 text-sm text-blue-800">{mergedSummaryText}</p>
-              <p className="mt-2 text-xs text-blue-600">
-                Not: Bu özet bilgilendirme amaçlıdır. Hukuki karar yerine geçmez.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* AI Expert Review */}
-      {expertReview && (
-        <div className="mb-6 rounded-lg border border-indigo-200 bg-white p-5">
-          <div className="flex items-start gap-3">
-            <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-indigo-600" />
-            <div className="flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-semibold text-gray-900">Yapay zeka uzman incelemesi</h3>
-                {expertReview.overallRisk && (
-                  <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                    Genel risk: {riskLevelLabel(expertReview.overallRisk)}
-                  </span>
-                )}
-                {expertReview.legalContextStatus !== 'READY' && (
-                  <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                    {legalContextStatusLabel(expertReview.legalContextStatus)}
-                  </span>
-                )}
-              </div>
-              {expertReview.summary && (
-                <p className="mt-1 text-sm text-gray-700">{expertReview.summary}</p>
-              )}
-              {expertReview.findings.length > 0 && (
-                <div className="mt-4 space-y-3">
-                  {expertReview.findings.map((finding) => {
-                    const evidenceRefs = parseExpertEvidenceRefs(finding.evidenceRefsJson)
-                    const gtipCandidates = parseExpertGtipCandidates(finding.evidenceRefsJson)
-                    return (
-                    <div key={finding.id} className="rounded-md border border-gray-100 bg-slate-50 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-mono text-gray-500">{expertAreaLabel(finding.area)}</span>
-                        <ResultBadge result={finding.severity} />
-                        <span className="text-xs text-gray-500">
-                          Güven: %{Math.round(finding.confidence * 100)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm font-medium text-gray-900">{finding.title}</p>
-                      <p className="mt-1 text-sm text-gray-700">{finding.explanation}</p>
-                      <p className="mt-2 text-sm text-gray-700">
-                        <span className="font-medium">Öneri:</span> {finding.recommendation}
-                      </p>
-                      {gtipCandidates.length > 0 && (
-                        <div className="mt-3 rounded-md border border-indigo-100 bg-white px-3 py-2">
-                          <p className="text-xs font-semibold text-indigo-900">GTİP aday yorumu</p>
-                          <div className="mt-2 space-y-2">
-                            {gtipCandidates.map((candidate) => (
-                              <div key={candidate.code} className="text-xs text-gray-700">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-mono font-semibold text-gray-900">{candidate.code}</span>
-                                  <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">
-                                    Güven %{Math.round(candidate.confidence * 100)}
-                                  </span>
-                                </div>
-                                <p className="mt-1">{candidate.rationale}</p>
-                                {candidate.requiredEvidence.length > 0 && (
-                                  <p className="mt-1 text-gray-500">
-                                    Gerekli kanıt: {candidate.requiredEvidence.join(', ')}
-                                  </p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {formatExpertEvidence(evidenceRefs).length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {formatExpertEvidence(evidenceRefs).map((ref, i) => (
-                            <span key={i} className="rounded bg-white px-2 py-0.5 text-xs text-gray-600">
-                              {ref}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {finding.citations.length > 0 && (
-                        <div className="mt-3 space-y-2 rounded bg-white px-3 py-2 text-xs text-slate-700">
-                          <p className="font-medium text-slate-900">Mevzuat dayanağı</p>
-                          {finding.citations.map((citation) => {
-                            const chunk = citation.regulationChunk
-                            return (
-                              <div key={citation.id}>
-                                <a
-                                  href={chunk.sourceUrl ?? chunk.sourceDocument.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="font-medium text-blue-700 hover:text-blue-800"
-                                >
-                                  {chunk.sourceDocument.title}
-                                  {chunk.articleLabel ? ` - ${chunk.articleLabel}` : ''}
-                                </a>
-                                <p className="mt-0.5 text-slate-600">{chunk.chunkText.slice(0, 360)}</p>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    )
-                  })}
-                </div>
-              )}
-              <p className="mt-3 text-xs text-gray-500">
-                Not: Yapay zeka uzman incelemesi danışma amaçlıdır; bağlayıcı hukuki görüş veya gümrük müşavirliği kararı yerine geçmez.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {actionItems.length > 0 && (
-        <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-900">Aksiyon Özeti</h2>
-          <div className="mt-3 space-y-3">
-            {actionItems.map((item) => (
-                <div key={item.id} className="flex items-start gap-3 rounded-md bg-slate-50 px-3 py-3">
-                  <ResultIcon result={item.result} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-mono text-gray-500">{item.code}</span>
-                      <span className="text-xs font-medium text-gray-700">{item.title}</span>
-                      <ResultBadge result={item.result} />
-                    </div>
-                    <p className="mt-1 text-sm text-gray-700">{item.description}</p>
-                    <p className="mt-1 text-sm text-gray-900">
-                      <span className="font-medium">Ne yapmalı?</span>{' '}
-                      {item.action}
-                    </p>
-                  </div>
-                </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Summary stats */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
-        <StatCard
-          icon={<XCircle className="h-6 w-6 text-red-500" />}
-          label="Hata"
-          count={errors.length}
-          color="red"
-        />
-        <StatCard
-          icon={<AlertCircle className="h-6 w-6 text-yellow-500" />}
-          label="Uyarı"
-          count={mergedWarnings}
-          color="yellow"
-        />
-        <StatCard
-          icon={<Clock className="h-6 w-6 text-blue-500" />}
-          label="İnceleme Gerekli"
-          count={mergedReviewNeeded}
-          color="blue"
-        />
-        <StatCard
-          icon={<CheckCircle className="h-6 w-6 text-green-500" />}
-          label="Geçti"
-          count={passes.length}
-          color="green"
-        />
-      </div>
-
-      {/* Rule results */}
-      <div className="space-y-6">
-        {[
-          { title: 'Hata', results: errors },
-          { title: 'İnceleme Gerekli', results: reviewNeeded },
-          { title: 'Uyarı', results: warnings },
-          { title: 'Geçti', results: passes },
-        ].filter((group) => group.results.length > 0).map((group) => (
-          <section key={group.title}>
-            <h2 className="mb-3 text-sm font-semibold text-gray-900">{group.title}</h2>
-            <div className="space-y-3">
-              {group.results.map((result) => {
-          const override = result.overrides[0]
-          const sourceRefs = parseSourceRefs(result.sourceRefsJson)
-          const meta = getRuleDisplayMetadata(result.ruleCode)
-
-          return (
-            <div
-              key={result.id}
-              className={`rounded-lg border bg-white p-5 ${
-                result.result === 'FAIL' ? 'border-red-200' :
-                result.result === 'WARN' ? 'border-yellow-200' :
-                result.result === 'REVIEW_NEEDED' ? 'border-blue-200' :
-                'border-gray-100'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3 flex-1">
-                  <ResultIcon result={result.result} />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-gray-400">{result.ruleCode}</span>
-                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">{meta.category}</span>
-                      <ResultBadge result={result.result} />
-                    </div>
-                    <p className="mt-1 text-sm font-semibold text-gray-900">{meta.turkishTitle}</p>
-                    <p className="mt-1 text-xs text-gray-500">{meta.operationalExplanation}</p>
-                    <p className={`mt-1 text-sm font-medium ${
-                      result.result === 'FAIL' ? 'text-red-900' :
-                      result.result === 'WARN' ? 'text-yellow-900' :
-                      result.result === 'PASS' ? 'text-green-900' :
-                      'text-gray-900'
-                    }`}>
-                      {formatRuleResultMessage(result)}
-                    </p>
-                    <p className="mt-2 rounded bg-white px-3 py-2 text-sm text-gray-700">
-                      <span className="font-medium text-gray-900">Ne yapmalı?</span>{' '}
-                      {recommendedActionForRuleResult(result.ruleCode, result.result)}
-                    </p>
-
-                    {sourceRefs.length > 0 && result.result !== 'PASS' && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {sourceRefs.map((ref, i) => (
-                          <span key={i} className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                            {formatSourceRef(ref)}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {result.citations.length > 0 && result.result !== 'PASS' && (
-                      <div className="mt-3 space-y-2 rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                        <p className="font-medium text-slate-900">Mevzuat dayanağı</p>
-                        {result.citations.map((citation) => {
-                          const legal = citation.ruleLegalCitation
-                          return (
-                            <div key={citation.id}>
-                              <a
-                                href={legal.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-medium text-blue-700 hover:text-blue-800"
-                              >
-                                {legal.sourceDocument.title}
-                                {legal.articleLabel ? ` - ${legal.articleLabel}` : ''}
-                              </a>
-                              <p className="mt-0.5 text-slate-600">{legal.excerpt}</p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {result.aiValidations.length > 0 && (
-                      <div className="mt-3 space-y-2 rounded bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
-                        <p className="font-medium">Yapay zeka kural kontrolü</p>
-                        {result.aiValidations.map((validation) => (
-                          <div key={validation.id}>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded bg-white px-1.5 py-0.5 font-medium">
-                                {aiRuleValidationLabel(validation.status)}
-                              </span>
-                              <span className="text-indigo-700">Güven: %{Math.round(validation.confidence * 100)}</span>
-                            </div>
-                            <p className="mt-1">{validation.explanation}</p>
-                            <p className="mt-1"><span className="font-medium">Öneri:</span> {validation.recommendation}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {override && (
-                      <div className="mt-2 rounded bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                        <span className="font-medium">Geçersiz kılındı:</span> {override.reason}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {canOverride && result.result !== 'PASS' && !override && (
-                  <OverrideButton ruleResultId={result.id} />
-                )}
-              </div>
-            </div>
-          )
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
-    </div>
+    <ReportWorkspace
+      submissionId={id}
+      submissionTitle={submission.title}
+      generatedAt={formatDateTime(report.generatedAt)}
+      summaryText={mergeReportSummaryText(report.summaryText, expertReview)}
+      counts={{
+        errors: errors.length,
+        warnings: warnings.length + expertCounts.warnings,
+        reviewNeeded: reviewNeeded.length + expertCounts.reviewNeeded,
+        passes: passes.length,
+      }}
+      expertQuota={expertQuota}
+      hasCompletedExpertReview={expertReview?.status === 'COMPLETED'}
+      documents={documents}
+      findings={findings}
+    />
   )
 }
 
-function StatCard({ icon, label, count, color }: { icon: React.ReactNode; label: string; count: number; color: string }) {
-  const colorMap: Record<string, string> = {
-    red: 'bg-red-50 border-red-100',
-    yellow: 'bg-yellow-50 border-yellow-100',
-    blue: 'bg-blue-50 border-blue-100',
-    green: 'bg-green-50 border-green-100',
+function normalizeReportCategory(category: string, ruleCode: string): string {
+  if (ruleCode.startsWith('QUAL-') || ruleCode === 'OCR-001') return 'Belge kalitesi'
+  if (category === 'Belge varlığı') return 'Belge seti'
+  if (category === 'Belge kalitesi' || category === 'Belge okuma') return 'Belge kalitesi'
+  if (ruleCode.startsWith('INV-')) return 'Fatura'
+  if (ruleCode.startsWith('PL-')) return 'Çeki listesi'
+  if (ruleCode.startsWith('GTIP-')) return 'GTİP'
+  if (ruleCode.startsWith('DECL-002') || ruleCode.startsWith('COO-')) return 'Menşe'
+  if (ruleCode.startsWith('DECL-')) return 'Beyanname'
+  if (ruleCode.startsWith('BL-')) return 'Taşıma'
+  if (ruleCode.startsWith('VAL-')) return 'Kıymet'
+  if (ruleCode.startsWith('EXP-004')) return 'Menşe'
+  if (ruleCode.startsWith('EXP-')) return 'Beyanname'
+  if (category === 'Kıymet' || category === 'Teslim şekli') return 'Kıymet'
+  if (category === 'Paketleme' || category === 'Miktar' || category === 'Ağırlık') return 'Çeki listesi'
+  if (category === 'Taşıma' || category === 'Ticaret akışı') return 'Taşıma'
+  if (category === 'Fatura' || category === 'Çeki listesi' || category === 'Beyanname' || category === 'GTİP' || category === 'Menşe') {
+    return category
   }
-  return (
-    <div className={`rounded-lg border p-4 ${colorMap[color] ?? 'bg-gray-50 border-gray-100'}`}>
-      <div className="flex items-center gap-3">
-        {icon}
-        <div>
-          <p className="text-xs text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900">{count}</p>
-        </div>
-      </div>
-    </div>
-  )
+  return 'Diğer'
 }
 
-function RiskBadge({ errors, warnings, reviewNeeded }: { errors: number; warnings: number; reviewNeeded: number }) {
-  if (errors > 0) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-red-100 px-4 py-1 text-sm font-bold text-red-700">
-        {errors} hata
-      </span>
-    )
+function expertFindingCategory(area: string): string {
+  const map: Record<string, string> = {
+    GTIP_PLAUSIBILITY: 'GTİP',
+    PERMIT_PRODUCT_CONTROL: 'GTİP',
+    REGIME_CHOICE: 'Beyanname',
+    VALUATION: 'Kıymet',
+    ORIGIN_PREFERENTIAL: 'Menşe',
+    INCOTERM: 'Kıymet',
+    DOCUMENT_CONSISTENCY: 'Belge seti',
+    LEGAL_CONTEXT: 'Yapay zeka',
   }
-  if (reviewNeeded > 0) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-blue-100 px-4 py-1 text-sm font-bold text-blue-700">
-        {reviewNeeded} inceleme
-      </span>
-    )
-  }
-  if (warnings > 0) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-yellow-100 px-4 py-1 text-sm font-bold text-yellow-700">
-        {warnings} Uyarı
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center rounded-full bg-green-100 px-4 py-1 text-sm font-bold text-green-700">
-      Temiz
-    </span>
-  )
+  return map[area] ?? 'Yapay zeka'
+}
+
+function sortFindings(a: ReportFindingItem, b: ReportFindingItem): number {
+  const resultDiff = resultPriority(a.result) - resultPriority(b.result)
+  if (resultDiff !== 0) return resultDiff
+  const categoryDiff = categoryPriority(a.category) - categoryPriority(b.category)
+  if (categoryDiff !== 0) return categoryDiff
+  return a.code.localeCompare(b.code, 'tr')
 }
 
 function resultPriority(result: string): number {
@@ -523,25 +278,10 @@ function resultPriority(result: string): number {
   return 3
 }
 
-function ResultIcon({ result }: { result: string }) {
-  if (result === 'FAIL') return <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
-  if (result === 'WARN') return <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-500" />
-  if (result === 'REVIEW_NEEDED') return <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
-  return <CheckCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" />
-}
-
-function ResultBadge({ result }: { result: string }) {
-  const map: Record<string, string> = {
-    FAIL: 'bg-red-100 text-red-600',
-    WARN: 'bg-yellow-100 text-yellow-700',
-    REVIEW_NEEDED: 'bg-blue-100 text-blue-700',
-    PASS: 'bg-green-100 text-green-700',
-  }
-  return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${map[result] ?? 'bg-gray-100 text-gray-600'}`}>
-      {resultLabel(result)}
-    </span>
-  )
+function categoryPriority(category: string): number {
+  const order = ['Belge seti', 'Belge kalitesi', 'Fatura', 'Çeki listesi', 'Beyanname', 'GTİP', 'Menşe', 'Kıymet', 'Taşıma', 'Yapay zeka']
+  const index = order.indexOf(category)
+  return index === -1 ? order.length : index
 }
 
 function aiRuleValidationLabel(status: string): string {
@@ -550,28 +290,6 @@ function aiRuleValidationLabel(status: string): string {
     POTENTIAL_FALSE_POSITIVE: 'Yanlış pozitif olabilir',
     POTENTIAL_FALSE_NEGATIVE: 'Kaçan risk olabilir',
     NEEDS_HUMAN_REVIEW: 'Manuel inceleme gerekir',
-  }
-  return map[status] ?? status
-}
-
-function riskLevelLabel(risk: string): string {
-  const map: Record<string, string> = {
-    LOW: 'Düşük',
-    MEDIUM: 'Orta',
-    HIGH: 'Yüksek',
-    CRITICAL: 'Kritik',
-  }
-  return map[risk] ?? risk
-}
-
-function legalContextStatusLabel(status: string): string {
-  const map: Record<string, string> = {
-    READY: 'Hazır',
-    MISSING_REQUIRED_SOURCE: 'Zorunlu kaynak eksik',
-    EMPTY_CONTEXT: 'Mevzuat bağlamı boş',
-    DISABLED: 'Devre dışı',
-    NOT_RUN: 'Çalıştırılmadı',
-    LEGAL_CONTEXT_INCOMPLETE: 'Mevzuat bağlamı eksik',
   }
   return map[status] ?? status
 }
@@ -596,7 +314,12 @@ function formatExpertEvidence(value: unknown): string[] {
     .map((item) => {
       if (!item || typeof item !== 'object') return null
       const ref = item as { docType?: unknown; field?: unknown; value?: unknown }
-      return [ref.docType, ref.field, ref.value].filter(Boolean).join(' · ')
+      return [ref.docType, ref.field, ref.value].filter(Boolean).join(' / ')
     })
     .filter((item): item is string => Boolean(item))
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value
+  return `${value.slice(0, max - 1).trim()}…`
 }

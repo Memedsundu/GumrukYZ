@@ -1,0 +1,83 @@
+{
+  "_fixture": "locale-number-formats",
+  "_description": "Turkish and international decimal/thousands separators should normalize before weight and quantity rules run",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "PL-001": "PASS",
+    "PL-002": "PASS",
+    "CROSS-004": "PASS",
+    "CROSS-006": "PASS",
+    "EXP-004": "PASS"
+  },
+  "_assertNoFailures": true,
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.98,
+      "data": {
+        "invoice_number": "FI2026-00068",
+        "invoice_date": "2026-05-22",
+        "seller_name": "Ardelya Bus HVAC Parts A.S. (Fictional)",
+        "seller_address": "Istanbul, Turkiye",
+        "buyer_name": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "buyer_address": "Warszawa, Poland",
+        "currency": "EUR",
+        "total_amount": "33,600.00",
+        "incoterm": "DAP",
+        "country_of_origin": "Türkiye / Turkey",
+        "gtip_code": "870829909000",
+        "net_weight": "980,00",
+        "items": [
+          {
+            "description": "Bus ventilation duct components",
+            "quantity": "480",
+            "unit": "pcs/adet",
+            "unit_price": "70.00",
+            "total_price": "33,600.00",
+            "hs_code": "870829909000"
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.98,
+      "data": {
+        "shipper": "Ardelya Bus HVAC Parts A.S. (Fictional)",
+        "consignee": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "goods_description": "Bus ventilation duct components",
+        "package_count": "12",
+        "package_type": "wooden boxes on 3 pallets",
+        "net_weight": "980.00",
+        "gross_weight": "1,185.00",
+        "items": [
+          {
+            "description": "Bus ventilation duct components",
+            "quantity": "160",
+            "package_count": "4",
+            "package_type": "wooden box",
+            "net_weight": "330.00",
+            "gross_weight": "398.00"
+          },
+          {
+            "description": "Bus ventilation duct components",
+            "quantity": "160",
+            "package_count": "4",
+            "package_type": "wooden box",
+            "net_weight": "325.00",
+            "gross_weight": "392.00"
+          },
+          {
+            "description": "Bus ventilation duct components",
+            "quantity": "160",
+            "package_count": "4",
+            "package_type": "wooden box",
+            "net_weight": "325.00",
+            "gross_weight": "395.00"
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

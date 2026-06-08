@@ -14,14 +14,14 @@ export type ExpertReviewReservation =
 
 export class ExpertReviewQuotaExhaustedError extends Error {
   constructor() {
-    super('Uzman AI inceleme hakkı kalmadı')
+    super('Uzman yapay zeka inceleme hakkı kalmadı')
     this.name = 'ExpertReviewQuotaExhaustedError'
   }
 }
 
 export class ExpertReviewAlreadyRunningError extends Error {
   constructor() {
-    super('Bu dosya için uzman AI incelemesi zaten devam ediyor')
+    super('Bu dosya için uzman yapay zeka incelemesi zaten devam ediyor')
     this.name = 'ExpertReviewAlreadyRunningError'
   }
 }
@@ -103,7 +103,7 @@ export async function reserveExpertReviewSlot(params: {
           submissionId: params.submissionId,
           status: 'RUNNING',
           legalContextStatus: 'NOT_RUN',
-          summary: 'Uzman AI incelemesi hazırlanıyor.',
+          summary: 'Uzman yapay zeka incelemesi hazırlanıyor.',
         },
         select: { id: true },
       })
