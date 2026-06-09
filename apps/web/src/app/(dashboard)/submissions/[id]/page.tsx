@@ -36,15 +36,15 @@ export default async function SubmissionDetailPage({ params }: Props) {
     <div className="p-8">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-          <Link href="/dashboard" className="hover:text-gray-700">Kontrol paneli</Link>
+        <div className="flex items-center gap-2 text-sm text-ink-muted mb-2">
+          <Link href="/dashboard" className="hover:text-ink-muted">Kontrol paneli</Link>
           <span>/</span>
           <span>{submission.title}</span>
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{submission.title}</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-2xl font-bold text-ink">{submission.title}</h1>
+            <p className="mt-1 text-sm text-ink-muted">
               {tradeFlowLabel(submission.tradeFlow)} •{' '}
               {formatDateTime(submission.createdAt)}
             </p>
@@ -52,7 +52,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
           <div className="flex items-center gap-3">
             <Link
               href={`/submissions/${submission.id}/documents`}
-              className="flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="flex items-center rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink-muted hover:bg-surface-muted"
             >
               <Upload className="mr-2 h-4 w-4" />
               Belge Ekle
@@ -60,7 +60,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
             {latestReport && (
               <Link
                 href={`/submissions/${submission.id}/report`}
-                className="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
               >
                 <BarChart2 className="mr-2 h-4 w-4" />
                 Risk Raporu
@@ -74,41 +74,41 @@ export default async function SubmissionDetailPage({ params }: Props) {
         {/* Status card */}
         <div className="col-span-2 space-y-6">
           {/* Processing status */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
-            <h2 className="mb-4 text-base font-semibold text-gray-900">İşlem Durumu</h2>
+          <div className="rounded-lg border border-line bg-surface p-6">
+            <h2 className="mb-4 text-base font-semibold text-ink">İşlem Durumu</h2>
             <ProcessingTimeline status={submission.status} job={latestJob ?? null} />
           </div>
 
           {/* Documents */}
-          <div className="rounded-lg border border-gray-200 bg-white">
-            <div className="border-b border-gray-200 px-6 py-4">
-              <h2 className="text-base font-semibold text-gray-900">
+          <div className="rounded-lg border border-line bg-surface">
+            <div className="border-b border-line px-6 py-4">
+              <h2 className="text-base font-semibold text-ink">
                 Belgeler ({submission.documents.length})
               </h2>
             </div>
             {submission.documents.length === 0 ? (
               <div className="flex flex-col items-center py-8">
-                <p className="text-sm text-gray-500">Henüz belge yüklenmedi.</p>
+                <p className="text-sm text-ink-muted">Henüz belge yüklenmedi.</p>
                 <Link
                   href={`/submissions/${submission.id}/documents`}
-                  className="mt-2 text-sm font-medium text-blue-600"
+                  className="mt-2 text-sm font-medium text-brand-600"
                 >
                   Belge yükle →
                 </Link>
               </div>
             ) : (
-              <ul className="divide-y divide-gray-50">
+              <ul className="divide-y divide-line">
                 {submission.documents.map((doc) => (
                   <li key={doc.id} className="flex items-center px-6 py-4">
-                    <FileText className="h-5 w-5 text-gray-400" />
+                    <FileText className="h-5 w-5 text-ink-subtle" />
                     <div className="ml-3 flex-1">
-                      <p className="text-sm font-medium text-gray-900">{doc.label}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm font-medium text-ink">{doc.label}</p>
+                      <p className="text-xs text-ink-muted">
                         {doc.latestVersion?.originalFilename ?? 'Dosya yok'} •{' '}
                         {doc.isIgnored ? 'Yoksayıldı' : doc.docType}
                       </p>
                       {doc.suggestedDocType && !doc.classificationValidatedAt && (
-                        <p className="text-xs text-blue-600">
+                        <p className="text-xs text-brand-600">
                           Öneri: {doc.suggestedDocType}
                           {doc.suggestedDocTypeConfidence != null
                             ? ` (%${Math.round(doc.suggestedDocTypeConfidence * 100)})`
@@ -127,75 +127,75 @@ export default async function SubmissionDetailPage({ params }: Props) {
         {/* Risk summary */}
         <div className="space-y-6">
           {latestReport && (
-            <div className="rounded-lg border border-gray-200 bg-white p-6">
-              <h2 className="mb-4 text-base font-semibold text-gray-900">Risk Özeti</h2>
+            <div className="rounded-lg border border-line bg-surface p-6">
+              <h2 className="mb-4 text-base font-semibold text-ink">Risk Özeti</h2>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
-                    <XCircle className="mr-2 h-4 w-4 text-red-500" />
-                    <span className="text-sm text-gray-600">Hatalar</span>
+                    <XCircle className="mr-2 h-4 w-4 text-danger-500" />
+                    <span className="text-sm text-ink-muted">Hatalar</span>
                   </div>
-                  <span className="text-sm font-bold text-red-600">{latestReport.totalErrors}</span>
+                  <span className="text-sm font-bold text-danger-600">{latestReport.totalErrors}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
-                    <AlertCircle className="mr-2 h-4 w-4 text-yellow-500" />
-                    <span className="text-sm text-gray-600">Uyarılar</span>
+                    <AlertCircle className="mr-2 h-4 w-4 text-warning-500" />
+                    <span className="text-sm text-ink-muted">Uyarılar</span>
                   </div>
-                  <span className="text-sm font-bold text-yellow-600">{latestReport.totalWarnings}</span>
+                  <span className="text-sm font-bold text-warning-600">{latestReport.totalWarnings}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
-                    <Clock className="mr-2 h-4 w-4 text-blue-500" />
-                    <span className="text-sm text-gray-600">İnceleme Gerekli</span>
+                    <Clock className="mr-2 h-4 w-4 text-brand-500" />
+                    <span className="text-sm text-ink-muted">İnceleme Gerekli</span>
                   </div>
-                  <span className="text-sm font-bold text-blue-600">{latestReport.totalReviewNeeded}</span>
+                  <span className="text-sm font-bold text-brand-600">{latestReport.totalReviewNeeded}</span>
                 </div>
               </div>
 
               {latestReport.summaryText && (
-                <div className="mt-4 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+                <div className="mt-4 rounded-lg bg-surface-muted p-3 text-sm text-ink-muted">
                   {latestReport.summaryText}
                 </div>
               )}
 
               <Link
                 href={`/submissions/${submission.id}/report`}
-                className="mt-4 block text-center text-sm font-medium text-blue-600 hover:text-blue-700"
+                className="mt-4 block text-center text-sm font-medium text-brand-600 hover:text-brand-700"
               >
                 Tam Raporu Gör →
               </Link>
             </div>
           )}
 
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
-            <h2 className="mb-3 text-base font-semibold text-gray-900">Dosya Bilgileri</h2>
+          <div className="rounded-lg border border-line bg-surface p-6">
+            <h2 className="mb-3 text-base font-semibold text-ink">Dosya Bilgileri</h2>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <dt className="text-gray-500">Tür</dt>
-                <dd className="font-medium text-gray-900">
+                <dt className="text-ink-muted">Tür</dt>
+                <dd className="font-medium text-ink">
                   {tradeFlowLabel(submission.tradeFlow)}
                 </dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-500">Sınıflandırma</dt>
-                <dd className="font-medium text-gray-900">
+                <dt className="text-ink-muted">Sınıflandırma</dt>
+                <dd className="font-medium text-ink">
                   {classificationStatusLabel(submission.classificationStatus)}
                 </dd>
               </div>
               {submission.brokerClient && (
                 <div className="flex justify-between">
-                  <dt className="text-gray-500">Müşteri</dt>
-                  <dd className="font-medium text-gray-900">{submission.brokerClient.displayName}</dd>
+                  <dt className="text-ink-muted">Müşteri</dt>
+                  <dd className="font-medium text-ink">{submission.brokerClient.displayName}</dd>
                 </div>
               )}
               <div className="flex justify-between">
-                <dt className="text-gray-500">Belgeler</dt>
-                <dd className="font-medium text-gray-900">{submission.documents.length}</dd>
+                <dt className="text-ink-muted">Belgeler</dt>
+                <dd className="font-medium text-ink">{submission.documents.length}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-500">Oluşturulma</dt>
-                <dd className="font-medium text-gray-900">{formatDateTime(submission.createdAt)}</dd>
+                <dt className="text-ink-muted">Oluşturulma</dt>
+                <dd className="font-medium text-ink">{formatDateTime(submission.createdAt)}</dd>
               </div>
             </dl>
           </div>
@@ -229,19 +229,19 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
 
   return (
     <div>
-      <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+      <div className="mb-5 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-medium text-blue-950">{progress.label}</p>
-            <p className="mt-0.5 text-xs text-blue-800">{progress.description}</p>
+            <p className="text-sm font-medium text-brand-700">{progress.label}</p>
+            <p className="mt-0.5 text-xs text-brand-600">{progress.description}</p>
           </div>
-          <span className="font-mono text-sm font-semibold text-blue-800">
+          <span className="font-mono text-sm font-semibold text-brand-600">
             %{Math.round(progress.percent)}
           </span>
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface">
           <div
-            className="h-full rounded-full bg-blue-600"
+            className="h-full rounded-full bg-brand-600"
             style={{ width: `${progress.percent}%` }}
           />
         </div>
@@ -256,14 +256,14 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
           return (
             <li key={step.key} className="flex items-center gap-3">
               <div className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                isFailed && isCurrent ? 'bg-red-100 text-red-600' :
-                isDone ? 'bg-green-100 text-green-600' :
-                isCurrent ? 'bg-blue-100 text-blue-600' :
-                'bg-gray-100 text-gray-400'
+                isFailed && isCurrent ? 'bg-danger-100 text-danger-600' :
+                isDone ? 'bg-success-100 text-success-600' :
+                isCurrent ? 'bg-brand-100 text-brand-600' :
+                'bg-surface-muted text-ink-subtle'
               }`}>
                 {isDone && !isCurrent ? '✓' : i + 1}
               </div>
-              <span className={`text-sm ${isDone ? 'text-gray-900' : 'text-gray-400'}`}>
+              <span className={`text-sm ${isDone ? 'text-ink' : 'text-ink-subtle'}`}>
                 {step.label}
               </span>
             </li>
@@ -272,13 +272,13 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
       </ol>
 
       {isFailed && job?.errorMessage && (
-        <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-4 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">
           Hata: {job.errorMessage}
         </div>
       )}
 
       {status === 'PENDING' && (
-        <p className="mt-4 text-sm text-gray-500">
+        <p className="mt-4 text-sm text-ink-muted">
           Belgeleri yükleyin ve analizi başlatın.
         </p>
       )}
@@ -287,9 +287,9 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
 }
 
 function DocStatusIcon({ status }: { status: string }) {
-  if (status === 'DONE') return <CheckCircle className="h-4 w-4 text-green-500" />
-  if (status === 'FAILED') return <XCircle className="h-4 w-4 text-red-500" />
-  return <Clock className="h-4 w-4 text-gray-400" />
+  if (status === 'DONE') return <CheckCircle className="h-4 w-4 text-success-500" />
+  if (status === 'FAILED') return <XCircle className="h-4 w-4 text-danger-500" />
+  return <Clock className="h-4 w-4 text-ink-subtle" />
 }
 
 function tradeFlowLabel(tradeFlow: string) {

@@ -91,8 +91,8 @@ export default async function ReportPage({ params }: Props) {
   if (!report) {
     return (
       <div className="p-8">
-        <p className="text-gray-500">Henüz rapor üretilmedi. Önce analizi başlatın.</p>
-        <Link href={`/submissions/${id}`} className="mt-4 text-sm text-blue-600">
+        <p className="text-ink-muted">Henüz rapor üretilmedi. Önce analizi başlatın.</p>
+        <Link href={`/submissions/${id}`} className="mt-4 inline-block text-sm text-brand-600 hover:text-brand-700">
           ← Dosyaya dön
         </Link>
       </div>

@@ -18,6 +18,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { RiskScore } from '@/components/ui/risk-score'
 import ExpertReviewButton from './expert-review-button'
 import OverrideButton from './override-button'
 
@@ -180,12 +182,12 @@ export default function ReportWorkspace({
   }
 
   return (
-    <div className="min-h-full bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-canvas px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1500px]">
         <header className="mb-5">
           <Link
             href={`/submissions/${submissionId}`}
-            className="mb-3 inline-flex items-center text-sm text-slate-500 hover:text-slate-800"
+            className="mb-3 inline-flex items-center text-sm text-ink-muted hover:text-ink"
           >
             <ChevronLeft className="mr-1 h-4 w-4" />
             {submissionTitle}
@@ -194,32 +196,30 @@ export default function ReportWorkspace({
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Risk Raporu</h1>
+                <h1 className="text-3xl font-bold tracking-tight text-ink">Risk Raporu</h1>
                 <RiskBadge counts={counts} />
               </div>
-              <p className="mt-1 text-sm text-slate-500">Üretilme: {generatedAt}</p>
+              <p className="mt-1 text-sm text-ink-muted">Üretilme: {generatedAt}</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href={`/api/submissions/${submissionId}/report/download?format=pdf`}
-                className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                PDF indir
-              </Link>
-              <Link
-                href={`/api/submissions/${submissionId}/report/download?format=json`}
-                className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                JSON indir
-              </Link>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/api/submissions/${submissionId}/report/download?format=pdf`}>
+                  <Download />
+                  PDF indir
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/api/submissions/${submissionId}/report/download?format=json`}>
+                  <Download />
+                  JSON indir
+                </Link>
+              </Button>
             </div>
           </div>
         </header>
 
-        <div className="sticky top-0 z-20 -mx-4 border-y border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="sticky top-0 z-20 -mx-4 border-y border-line bg-canvas/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <div className="mx-auto flex max-w-[1500px] gap-2 overflow-x-auto">
             {FILTERS.map((filter) => (
               <button
@@ -227,17 +227,17 @@ export default function ReportWorkspace({
                 type="button"
                 onClick={() => handleFilterChange(filter.key)}
                 className={cn(
-                  'inline-flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                  'inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                   activeFilter === filter.key
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                    ? 'border-brand-600 bg-brand-600 text-white'
+                    : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink',
                 )}
               >
                 {filter.label}
                 <span
                   className={cn(
                     'rounded px-1.5 py-0.5 text-xs',
-                    activeFilter === filter.key ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500',
+                    activeFilter === filter.key ? 'bg-white/20 text-white' : 'bg-surface-muted text-ink-subtle',
                   )}
                 >
                   {filterCounts[filter.key]}
@@ -249,31 +249,35 @@ export default function ReportWorkspace({
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <main className="min-w-0 space-y-6">
-            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+            <section className="rounded-2xl border border-line bg-surface p-5 shadow-card">
+              <div className="grid gap-5 lg:grid-cols-[auto_1fr_300px] lg:items-start">
+                <div className="flex justify-center rounded-xl bg-canvas px-4 py-5 lg:px-6">
+                  <RiskScore errors={counts.errors} warnings={counts.warnings} reviews={counts.reviewNeeded} />
+                </div>
+
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Dosya durumu</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Dosya durumu</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <Metric label="Hata" value={counts.errors} tone="red" />
                     <Metric label="İnceleme gerekli" value={counts.reviewNeeded} tone="blue" />
                     <Metric label="Uyarı" value={counts.warnings} tone="amber" />
                     <Metric label="Geçti" value={counts.passes} tone="green" />
                   </div>
                   {summaryText && (
-                    <div className="mt-5 border-l-2 border-blue-500 pl-4">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                        <Info className="h-4 w-4 text-blue-600" />
+                    <div className="mt-5 rounded-xl border-l-2 border-brand-500 bg-brand-50/50 py-3 pl-4 pr-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+                        <Info className="h-4 w-4 text-brand-600" />
                         Yapay zeka özeti
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-700">{summaryText}</p>
-                      <p className="mt-2 text-xs text-slate-500">
+                      <p className="mt-2 text-sm leading-6 text-ink-muted">{summaryText}</p>
+                      <p className="mt-2 text-xs text-ink-subtle">
                         Bilgilendirme amaçlıdır; bağlayıcı hukuki karar yerine geçmez.
                       </p>
                     </div>
                   )}
                 </div>
 
-                <div className="rounded-md border border-indigo-100 bg-indigo-50/60 p-4">
+                <div className="rounded-xl border border-ai-100 bg-ai-50/60 p-4">
                   <ExpertReviewButton
                     submissionId={submissionId}
                     quota={expertQuota}
@@ -284,11 +288,11 @@ export default function ReportWorkspace({
             </section>
 
             {activeFilter !== 'PASS' && (
-              <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <section className="rounded-lg border border-line bg-surface p-5 shadow-card">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <h2 className="text-base font-semibold text-slate-950">Bulgular</h2>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <h2 className="text-base font-semibold text-ink">Bulgular</h2>
+                    <p className="mt-1 text-sm text-ink-muted">
                       Hata, inceleme ve uyarılar tek listede gösterilir. Detay için bir bulguya tıklayın.
                     </p>
                   </div>
@@ -296,7 +300,7 @@ export default function ReportWorkspace({
                     <button
                       type="button"
                       onClick={() => setActiveCategory(null)}
-                      className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                      className="inline-flex items-center justify-center rounded-md border border-line px-3 py-2 text-sm font-medium text-ink-muted hover:bg-surface-muted"
                     >
                       Kategori filtresini temizle
                     </button>
@@ -357,13 +361,13 @@ function IssueColumn({
   onOpenFinding: (id: string) => void
 }) {
   return (
-    <div className="min-h-48 rounded-md border border-slate-100 bg-slate-50 p-3">
+    <div className="min-h-48 rounded-md border border-line bg-surface-muted p-3">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
-        <span className="rounded bg-white px-2 py-0.5 text-xs font-medium text-slate-500">{findings.length}</span>
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        <span className="rounded bg-surface px-2 py-0.5 text-xs font-medium text-ink-muted">{findings.length}</span>
       </div>
       {findings.length === 0 ? (
-        <p className="rounded-md border border-dashed border-slate-200 bg-white px-3 py-6 text-center text-sm text-slate-500">
+        <p className="rounded-md border border-dashed border-line bg-surface px-3 py-6 text-center text-sm text-ink-muted">
           {empty}
         </p>
       ) : (
@@ -383,21 +387,21 @@ function FindingSummaryCard({ finding, onOpen }: { finding: ReportFindingItem; o
       type="button"
       onClick={onOpen}
       className={cn(
-        'w-full rounded-md border bg-white px-3 py-3 text-left shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50',
+        'w-full rounded-md border bg-surface px-3 py-3 text-left shadow-card transition-colors hover:border-line-strong hover:bg-surface-muted',
         resultTone(finding.result).border,
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
         <ResultIcon result={finding.result} />
-        <span className="font-mono text-xs text-slate-500">{finding.code}</span>
+        <span className="font-mono text-xs text-ink-muted">{finding.code}</span>
         <ResultBadge result={finding.result} label={finding.resultLabel} />
         {finding.kind === 'expert' && <SourceTypeBadge label={finding.sourceType} />}
       </div>
-      <p className="mt-2 text-sm font-semibold text-slate-950">{finding.title}</p>
-      <p className="mt-1 line-clamp-2 text-sm leading-5 text-slate-600">{finding.message}</p>
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+      <p className="mt-2 text-sm font-semibold text-ink">{finding.title}</p>
+      <p className="mt-1 line-clamp-2 text-sm leading-5 text-ink-muted">{finding.message}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
         <span>{finding.category}</span>
-        {finding.blocking && <span className="rounded bg-red-50 px-1.5 py-0.5 font-medium text-red-700">Bloke edebilir</span>}
+        {finding.blocking && <span className="rounded bg-danger-50 px-1.5 py-0.5 font-medium text-danger-700">Bloke edebilir</span>}
         {finding.confidence !== null && <span>Güven %{Math.round(finding.confidence * 100)}</span>}
       </div>
     </button>
@@ -416,23 +420,23 @@ function PassControlsSection({
   onOpenFinding: (id: string) => void
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section className="rounded-lg border border-line bg-surface shadow-card">
       <button
         type="button"
         onClick={onToggle}
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
       >
         <div>
-          <h2 className="text-base font-semibold text-slate-950">Geçen kontroller</h2>
-          <p className="mt-1 text-sm text-slate-500">{findings.length} kontrol geçti. Liste kapalı gelir.</p>
+          <h2 className="text-base font-semibold text-ink">Geçen kontroller</h2>
+          <p className="mt-1 text-sm text-ink-muted">{findings.length} kontrol geçti. Liste kapalı gelir.</p>
         </div>
-        <ChevronDown className={cn('h-5 w-5 text-slate-400 transition-transform', open && 'rotate-180')} />
+        <ChevronDown className={cn('h-5 w-5 text-ink-subtle transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className="border-t border-slate-100 px-5 pb-5 pt-4">
+        <div className="border-t border-line px-5 pb-5 pt-4">
           {findings.length === 0 ? (
-            <p className="text-sm text-slate-500">Bu filtrede geçen kontrol yok.</p>
+            <p className="text-sm text-ink-muted">Bu filtrede geçen kontrol yok.</p>
           ) : (
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {findings.map((finding) => (
@@ -440,15 +444,15 @@ function PassControlsSection({
                   key={finding.id}
                   type="button"
                   onClick={() => onOpenFinding(finding.id)}
-                  className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-left hover:border-slate-300 hover:bg-white"
+                  className="rounded-md border border-line bg-surface-muted px-3 py-2 text-left hover:border-line-strong hover:bg-surface"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <ResultIcon result={finding.result} />
-                    <span className="font-mono text-xs text-slate-500">{finding.code}</span>
+                    <span className="font-mono text-xs text-ink-muted">{finding.code}</span>
                     <ResultBadge result={finding.result} label={finding.resultLabel} />
                   </div>
-                  <p className="mt-1 text-sm font-medium text-slate-900">{finding.title}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{finding.category}</p>
+                  <p className="mt-1 text-sm font-medium text-ink">{finding.title}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">{finding.category}</p>
                 </button>
               ))}
             </div>
@@ -480,7 +484,7 @@ function FindingDetailModal({ finding, onClose }: { finding: ReportFindingItem |
   if (!finding) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 py-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/35 px-4 py-6">
       <button
         type="button"
         aria-label="Detay penceresini kapat"
@@ -491,31 +495,31 @@ function FindingDetailModal({ finding, onClose }: { finding: ReportFindingItem |
         role="dialog"
         aria-modal="true"
         aria-labelledby="finding-detail-title"
-        className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
+        className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg border border-line bg-surface shadow-pop"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div className="min-w-0">
-            <p id="finding-detail-title" className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p id="finding-detail-title" className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
               Bulgu detayı
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs text-slate-500">{finding.code}</span>
+              <span className="font-mono text-xs text-ink-muted">{finding.code}</span>
               <ResultBadge result={finding.result} label={finding.resultLabel} />
               <SourceTypeBadge label={finding.sourceType} />
-              {finding.blocking && <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-700">Bloke edebilir</span>}
+              {finding.blocking && <span className="rounded bg-danger-50 px-1.5 py-0.5 text-xs font-medium text-danger-700">Bloke edebilir</span>}
               {finding.confidence !== null && (
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
+                <span className="rounded bg-surface-muted px-1.5 py-0.5 text-xs font-medium text-ink-muted">
                   Güven %{Math.round(finding.confidence * 100)}
                 </span>
               )}
             </div>
-            <h2 className="mt-2 text-lg font-semibold text-slate-950">{finding.title}</h2>
-            <p className="mt-1 text-sm text-slate-500">{finding.category} · {finding.explanation}</p>
+            <h2 className="mt-2 text-lg font-semibold text-ink">{finding.title}</h2>
+            <p className="mt-1 text-sm text-ink-muted">{finding.category} · {finding.explanation}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-md p-2 text-ink-subtle hover:bg-surface-muted hover:text-ink-muted"
             aria-label="Detay penceresini kapat"
           >
             <X className="h-5 w-5" />
@@ -536,10 +540,10 @@ function FindingDetailModal({ finding, onClose }: { finding: ReportFindingItem |
                 <DetailBlock title="Yapay zeka ikinci kontrol">
                   <div className="space-y-3">
                     {finding.aiValidations.map((validation) => (
-                      <div key={validation.id} className="rounded-md bg-indigo-50 px-3 py-2 text-indigo-950">
+                      <div key={validation.id} className="rounded-md bg-ai-50 px-3 py-2 text-ai-700">
                         <div className="flex flex-wrap items-center gap-2 text-xs">
-                          <span className="rounded bg-white px-1.5 py-0.5 font-medium">{validation.statusLabel}</span>
-                          <span className="text-indigo-700">Güven %{Math.round(validation.confidence * 100)}</span>
+                          <span className="rounded bg-surface px-1.5 py-0.5 font-medium">{validation.statusLabel}</span>
+                          <span className="text-ai-700">Güven %{Math.round(validation.confidence * 100)}</span>
                         </div>
                         <p className="mt-2">{validation.explanation}</p>
                         <p className="mt-1">
@@ -553,9 +557,9 @@ function FindingDetailModal({ finding, onClose }: { finding: ReportFindingItem |
 
               {finding.gtipCandidates.length > 0 && (
                 <DetailBlock title="GTİP aday yorumu">
-                  <div className="overflow-x-auto rounded-md border border-slate-200">
-                    <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
-                      <thead className="bg-slate-50 text-slate-500">
+                  <div className="overflow-x-auto rounded-md border border-line">
+                    <table className="min-w-full divide-y divide-line text-left text-xs">
+                      <thead className="bg-surface-muted text-ink-muted">
                         <tr>
                           <th className="px-3 py-2 font-medium">Kod</th>
                           <th className="px-3 py-2 font-medium">Güven</th>
@@ -563,10 +567,10 @@ function FindingDetailModal({ finding, onClose }: { finding: ReportFindingItem |
                           <th className="px-3 py-2 font-medium">Gerekli kanıt</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                      <tbody className="divide-y divide-line bg-surface text-ink-muted">
                         {finding.gtipCandidates.map((candidate) => (
                           <tr key={candidate.code}>
-                            <td className="px-3 py-2 font-mono font-semibold text-slate-950">{candidate.code}</td>
+                            <td className="px-3 py-2 font-mono font-semibold text-ink">{candidate.code}</td>
                             <td className="px-3 py-2">%{Math.round(candidate.confidence * 100)}</td>
                             <td className="px-3 py-2">{candidate.rationale}</td>
                             <td className="px-3 py-2">{candidate.requiredEvidence.join(', ') || 'Belirtilmedi'}</td>
@@ -587,14 +591,14 @@ function FindingDetailModal({ finding, onClose }: { finding: ReportFindingItem |
                         href={citation.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block rounded-md border border-slate-100 bg-slate-50 px-3 py-2 hover:border-slate-300 hover:bg-white"
+                        className="block rounded-md border border-line bg-surface-muted px-3 py-2 hover:border-line-strong hover:bg-surface"
                       >
-                        <span className="flex items-center gap-1 font-medium text-blue-700">
+                        <span className="flex items-center gap-1 font-medium text-brand-700">
                           {citation.title}
                           {citation.label ? ` - ${citation.label}` : ''}
                           <ExternalLink className="h-3 w-3" />
                         </span>
-                        <span className="mt-1 block text-slate-600">{citation.excerpt}</span>
+                        <span className="mt-1 block text-ink-muted">{citation.excerpt}</span>
                       </a>
                     ))}
                   </div>
@@ -602,19 +606,19 @@ function FindingDetailModal({ finding, onClose }: { finding: ReportFindingItem |
               )}
 
               {finding.overrideReason && (
-                <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  <span className="font-medium text-slate-900">Geçersiz kılındı:</span> {finding.overrideReason}
+                <div className="rounded-md bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+                  <span className="font-medium text-ink">Geçersiz kılındı:</span> {finding.overrideReason}
                 </div>
               )}
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-md bg-slate-50 px-3 py-3 text-xs text-slate-600">
-                <p className="font-semibold text-slate-900">Kanıt</p>
+              <div className="rounded-md bg-surface-muted px-3 py-3 text-xs text-ink-muted">
+                <p className="font-semibold text-ink">Kanıt</p>
                 {finding.sourceRefs.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {finding.sourceRefs.map((ref, index) => (
-                      <span key={`${ref}-${index}`} className="rounded bg-white px-2 py-1 text-slate-600">
+                      <span key={`${ref}-${index}`} className="rounded bg-surface px-2 py-1 text-ink-muted">
                         {ref}
                       </span>
                     ))}
@@ -648,21 +652,21 @@ function EvidencePanel({
 }) {
   return (
     <div className="sticky top-24 space-y-4">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-lg border border-line bg-surface p-4 shadow-card">
         <div className="flex items-center gap-2">
-          <PanelRight className="h-4 w-4 text-slate-500" />
-          <h2 className="text-sm font-semibold text-slate-950">Kanıt ve kaynaklar</h2>
+          <PanelRight className="h-4 w-4 text-ink-muted" />
+          <h2 className="text-sm font-semibold text-ink">Kanıt ve kaynaklar</h2>
         </div>
 
         <div className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Kategoriler</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Kategoriler</p>
           <div className="mt-2 space-y-1">
             <button
               type="button"
               onClick={() => onCategoryChange(null)}
               className={cn(
                 'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm',
-                !activeCategory ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                !activeCategory ? 'bg-brand-600 text-white' : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
               )}
             >
               <span>Tüm kategoriler</span>
@@ -675,12 +679,12 @@ function EvidencePanel({
                 className={cn(
                   'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm',
                   activeCategory === group.category
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                    ? 'bg-brand-600 text-white'
+                    : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
                 )}
               >
                 <span>{group.category}</span>
-                <span className={cn('rounded px-1.5 py-0.5 text-xs', activeCategory === group.category ? 'bg-white/15' : 'bg-slate-100 text-slate-500')}>
+                <span className={cn('rounded px-1.5 py-0.5 text-xs', activeCategory === group.category ? 'bg-white/15' : 'bg-surface-muted text-ink-muted')}>
                   {group.count}
                 </span>
               </button>
@@ -689,26 +693,26 @@ function EvidencePanel({
         </div>
 
         <div className="mt-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Belgeler</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Belgeler</p>
           <div className="mt-2 space-y-2">
             {documents.map((document) => (
-              <div key={document.id} className="rounded-md border border-slate-100 px-3 py-2">
+              <div key={document.id} className="rounded-md border border-line px-3 py-2">
                 <div className="flex items-start gap-2">
-                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-ink-subtle" />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{document.filename}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="truncate text-sm font-medium text-ink">{document.filename}</p>
+                    <p className="mt-0.5 text-xs text-ink-muted">
                       {document.docType}
                       {document.isIgnored ? ' · Yoksayıldı' : ''}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
                       {document.extractionConfidence !== null && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
+                        <span className="rounded bg-surface-muted px-1.5 py-0.5 text-ink-muted">
                           Okuma %{Math.round(document.extractionConfidence * 100)}
                         </span>
                       )}
                       {document.classificationConfidence !== null && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
+                        <span className="rounded bg-surface-muted px-1.5 py-0.5 text-ink-muted">
                           Tür %{Math.round(document.classificationConfidence * 100)}
                         </span>
                       )}
@@ -722,7 +726,7 @@ function EvidencePanel({
 
         {reportSources.length > 0 && (
           <div className="mt-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Mevzuat</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Mevzuat</p>
             <div className="mt-2 space-y-2">
               {reportSources.slice(0, 6).map((source) => (
                 <a
@@ -730,10 +734,10 @@ function EvidencePanel({
                   href={source.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block rounded-md bg-slate-50 px-3 py-2 text-xs hover:bg-slate-100"
+                  className="block rounded-md bg-surface-muted px-3 py-2 text-xs hover:bg-surface-muted"
                 >
-                  <span className="font-medium text-blue-700">{source.title}</span>
-                  {source.label && <span className="text-slate-500"> · {source.label}</span>}
+                  <span className="font-medium text-brand-700">{source.title}</span>
+                  {source.label && <span className="text-ink-muted"> · {source.label}</span>}
                 </a>
               ))}
             </div>
@@ -746,8 +750,8 @@ function EvidencePanel({
 
 function DetailBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="text-sm leading-6 text-slate-700">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+    <div className="text-sm leading-6 text-ink-muted">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-subtle">{title}</p>
       {children}
     </div>
   )
@@ -755,13 +759,13 @@ function DetailBlock({ title, children }: { title: string; children: ReactNode }
 
 function Metric({ label, value, tone }: { label: string; value: number; tone: 'red' | 'blue' | 'amber' | 'green' }) {
   const map = {
-    red: 'border-red-100 bg-red-50 text-red-700',
-    blue: 'border-blue-100 bg-blue-50 text-blue-700',
-    amber: 'border-amber-100 bg-amber-50 text-amber-700',
-    green: 'border-green-100 bg-green-50 text-green-700',
+    red: 'border-danger-100 bg-danger-50 text-danger-700',
+    blue: 'border-brand-100 bg-brand-50 text-brand-700',
+    amber: 'border-warning-100 bg-warning-50 text-warning-700',
+    green: 'border-success-100 bg-success-50 text-success-700',
   }
   return (
-    <div className={cn('rounded-md border px-3 py-3', map[tone])}>
+    <div className={cn('rounded-xl border px-3 py-3', map[tone])}>
       <p className="text-xs font-medium opacity-80">{label}</p>
       <p className="mt-1 text-2xl font-semibold">{value}</p>
     </div>
@@ -770,30 +774,30 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: 'r
 
 function RiskBadge({ counts }: { counts: ReportWorkspaceProps['counts'] }) {
   if (counts.errors > 0) {
-    return <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">{counts.errors} hata</span>
+    return <span className="rounded-full bg-danger-100 px-3 py-1 text-sm font-semibold text-danger-700">{counts.errors} hata</span>
   }
   if (counts.reviewNeeded > 0) {
     return (
-      <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
+      <span className="rounded-full bg-brand-100 px-3 py-1 text-sm font-semibold text-brand-700">
         {counts.reviewNeeded} inceleme
       </span>
     )
   }
   if (counts.warnings > 0) {
     return (
-      <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">
+      <span className="rounded-full bg-warning-100 px-3 py-1 text-sm font-semibold text-warning-700">
         {counts.warnings} uyarı
       </span>
     )
   }
-  return <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">Temiz</span>
+  return <span className="rounded-full bg-success-100 px-3 py-1 text-sm font-semibold text-success-700">Temiz</span>
 }
 
 function ResultIcon({ result }: { result: string }) {
-  if (result === 'FAIL') return <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-  if (result === 'WARN') return <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-  if (result === 'REVIEW_NEEDED') return <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-  return <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+  if (result === 'FAIL') return <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-500" />
+  if (result === 'WARN') return <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning-500" />
+  if (result === 'REVIEW_NEEDED') return <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+  return <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-success-500" />
 }
 
 function ResultBadge({ result, label }: { result: string; label: string }) {
@@ -804,7 +808,7 @@ function ResultBadge({ result, label }: { result: string; label: string }) {
 function SourceTypeBadge({ label }: { label: string }) {
   const isExpert = label.includes('Yapay zeka')
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium', isExpert ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600')}>
+    <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium', isExpert ? 'bg-ai-50 text-ai-700' : 'bg-surface-muted text-ink-muted')}>
       {isExpert && <Sparkles className="h-3 w-3" />}
       {label}
     </span>
@@ -814,25 +818,25 @@ function SourceTypeBadge({ label }: { label: string }) {
 function resultTone(result: string) {
   if (result === 'FAIL') {
     return {
-      border: 'border-red-200',
-      badge: 'bg-red-100 text-red-700',
+      border: 'border-danger-200',
+      badge: 'bg-danger-100 text-danger-700',
     }
   }
   if (result === 'WARN') {
     return {
-      border: 'border-amber-200',
-      badge: 'bg-amber-100 text-amber-700',
+      border: 'border-warning-200',
+      badge: 'bg-warning-100 text-warning-700',
     }
   }
   if (result === 'REVIEW_NEEDED') {
     return {
-      border: 'border-blue-200',
-      badge: 'bg-blue-100 text-blue-700',
+      border: 'border-brand-200',
+      badge: 'bg-brand-100 text-brand-700',
     }
   }
   return {
-    border: 'border-slate-200',
-    badge: 'bg-green-100 text-green-700',
+    border: 'border-line',
+    badge: 'bg-success-100 text-success-700',
   }
 }
 

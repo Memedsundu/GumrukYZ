@@ -2,6 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
+import { PageHeader } from '@/components/ui/page-header'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export default function NewSubmissionPage() {
   const router = useRouter()
@@ -37,40 +43,32 @@ export default function NewSubmissionPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Yeni dosya oluştur</h1>
-      </div>
+      <PageHeader title="Yeni dosya oluştur" description="Bir referans adı verin, ardından belgeleri yükleyin." />
 
-      <div className="max-w-lg rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <Card className="max-w-lg p-6">
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-              Referans Adı
-            </label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="title">Referans Adı</Label>
+            <Input
               id="title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Örn: INV-2024-00123 / ABC Firması"
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               required
             />
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+            <div className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading || !title.trim()}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <Button type="submit" disabled={loading || !title.trim()} className="w-full">
+            {loading && <Loader2 className="animate-spin" />}
             {loading ? 'Oluşturuluyor...' : 'Yeni dosya oluştur'}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
     </div>
   )
 }

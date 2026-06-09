@@ -27,15 +27,15 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+        <div className="flex items-center gap-2 text-sm text-ink-muted mb-2">
           <span>Kontrol paneli</span>
           <span>/</span>
           <span>{submission.title}</span>
           <span>/</span>
           <span>Belgeler</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">{submission.title}</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-ink">{submission.title}</h1>
+        <p className="mt-1 text-sm text-ink-muted">
           {submission.tradeFlow === 'UNKNOWN'
             ? 'İşlem yönü otomatik önerilecek'
             : submission.tradeFlow === 'IMPORT'

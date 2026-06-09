@@ -9,7 +9,7 @@ import { getLegalContextReadiness, isExpertReviewEnabled } from '@/lib/expert-re
 function VerificationBadge({ status }: { status: string }) {
   if (status === 'OFFICIAL_SNAPSHOT') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-success-100 px-2 py-0.5 text-xs font-medium text-success-700">
         <CheckCircle className="h-3 w-3" />
         Snapshot
       </span>
@@ -17,7 +17,7 @@ function VerificationBadge({ status }: { status: string }) {
   }
   if (status === 'OFFICIAL_FETCHED_NO_BLOB') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
         <Globe className="h-3 w-3" />
         Fetched
       </span>
@@ -25,14 +25,14 @@ function VerificationBadge({ status }: { status: string }) {
   }
   if (status === 'FETCH_FAILED') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-danger-100 px-2 py-0.5 text-xs font-medium text-danger-700">
         <XCircle className="h-3 w-3" />
         Erişilemiyor
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+    <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-ink-muted">
       <AlertCircle className="h-3 w-3" />
       Yalnızca meta
     </span>
@@ -64,97 +64,97 @@ export default async function AdminSourcesPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Mevzuat Kaynakları</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-ink">Mevzuat Kaynakları</h1>
+        <p className="mt-1 text-sm text-ink-muted">
           Sisteme yüklü mevzuat kaynaklarının durumu. Kurallar bu kaynaklara dayanmaktadır.
         </p>
       </div>
 
       {/* Summary stats */}
       <div className="mb-6 grid grid-cols-4 gap-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-xs text-gray-500">Toplam Kaynak</p>
-          <p className="text-2xl font-bold text-gray-900">{sources.length}</p>
+        <div className="rounded-lg border border-line bg-white p-4">
+          <p className="text-xs text-ink-muted">Toplam Kaynak</p>
+          <p className="text-2xl font-bold text-ink">{sources.length}</p>
         </div>
-        <div className="rounded-lg border border-green-100 bg-green-50 p-4">
-          <p className="text-xs text-gray-500">Snapshot Alındı</p>
-          <p className="text-2xl font-bold text-green-700">{snapshotCount}</p>
+        <div className="rounded-lg border border-success-100 bg-success-50 p-4">
+          <p className="text-xs text-ink-muted">Snapshot Alındı</p>
+          <p className="text-2xl font-bold text-success-700">{snapshotCount}</p>
         </div>
-        <div className="rounded-lg border border-red-100 bg-red-50 p-4">
-          <p className="text-xs text-gray-500">Erişilemiyor</p>
-          <p className="text-2xl font-bold text-red-700">{failedCount}</p>
+        <div className="rounded-lg border border-danger-100 bg-danger-50 p-4">
+          <p className="text-xs text-ink-muted">Erişilemiyor</p>
+          <p className="text-2xl font-bold text-danger-700">{failedCount}</p>
         </div>
-        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-          <p className="text-xs text-gray-500">Toplam Chunk</p>
-          <p className="text-2xl font-bold text-blue-700">{totalChunks}</p>
+        <div className="rounded-lg border border-brand-100 bg-brand-50 p-4">
+          <p className="text-xs text-ink-muted">Toplam Chunk</p>
+          <p className="text-2xl font-bold text-brand-700">{totalChunks}</p>
         </div>
       </div>
 
       {failedCount > 0 && (
-        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+        <div className="mb-6 rounded-lg border border-warning-200 bg-warning-50 p-4 text-sm text-warning-700">
           <span className="font-medium">{failedCount} kaynak erişilemiyor.</span>{' '}
           Ağ bağlantısı düzelince{' '}
-          <code className="rounded bg-yellow-100 px-1 text-xs">pnpm --filter @gumrukyz/db ingest-regulations</code>{' '}
+          <code className="rounded bg-warning-100 px-1 text-xs">pnpm --filter @gumrukyz/db ingest-regulations</code>{' '}
           komutunu yeniden çalıştırın.
         </div>
       )}
 
       {expertReviewEnabled && legalContextReadiness.missingRequiredSources.length > 0 && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <div className="mb-6 rounded-lg border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
           <span className="font-medium">Yapay zeka uzman incelemesi mevzuat bağlamı eksik.</span>{' '}
           Eksik veya embedding olmayan kaynaklar: {legalContextReadiness.missingRequiredSources.join(', ')}.{' '}
-          <code className="rounded bg-red-100 px-1 text-xs">pnpm db:bootstrap-regulations</code>{' '}
+          <code className="rounded bg-danger-100 px-1 text-xs">pnpm db:bootstrap-regulations</code>{' '}
           komutunu çalıştırın.
         </div>
       )}
 
       {/* Sources table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-line bg-white">
+        <table className="min-w-full divide-y divide-line">
+          <thead className="bg-surface-muted">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted">
                 Kaynak
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted">
                 Durum
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted">
                 Chunk
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted">
                 Son Doğrulama
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted">
                 Blob
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-line">
             {sources.map((source) => (
-              <tr key={source.id} className="hover:bg-gray-50">
+              <tr key={source.id} className="hover:bg-surface-muted">
                 <td className="px-6 py-4">
                   <div className="flex items-start gap-3">
-                    <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                    <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-ink-subtle" />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{source.title}</p>
+                      <p className="text-sm font-medium text-ink">{source.title}</p>
                       <a
                         href={source.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-0.5 block truncate text-xs text-blue-600 hover:text-blue-800"
+                        className="mt-0.5 block truncate text-xs text-brand-600 hover:text-brand-700"
                         style={{ maxWidth: '400px' }}
                       >
                         {source.url}
                       </a>
                       <div className="mt-1 flex gap-2">
-                        <span className="text-xs text-gray-400">{source.jurisdiction}</span>
-                        <span className="text-xs text-gray-400">·</span>
-                        <span className="text-xs text-gray-400">{source.language.toUpperCase()}</span>
+                        <span className="text-xs text-ink-subtle">{source.jurisdiction}</span>
+                        <span className="text-xs text-ink-subtle">·</span>
+                        <span className="text-xs text-ink-subtle">{source.language.toUpperCase()}</span>
                         {source.effectiveDate && (
                           <>
-                            <span className="text-xs text-gray-400">·</span>
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-ink-subtle">·</span>
+                            <span className="text-xs text-ink-subtle">
                               {new Date(source.effectiveDate).getFullYear()}
                             </span>
                           </>
@@ -166,21 +166,21 @@ export default async function AdminSourcesPage() {
                 <td className="px-6 py-4">
                   <VerificationBadge status={source.verificationStatus ?? 'SOURCE_METADATA_ONLY'} />
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-900">
+                <td className="px-6 py-4 text-sm text-ink">
                   {source._count.regulationChunks > 0 ? (
                     <span className="font-medium">{source._count.regulationChunks}</span>
                   ) : (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-ink-subtle">—</span>
                   )}
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
+                <td className="px-6 py-4 text-sm text-ink-muted">
                   {source.lastVerifiedAt ? formatDateTime(source.lastVerifiedAt) : '—'}
                 </td>
                 <td className="px-6 py-4">
                   {source.snapshotBlobUrl ? (
-                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <CheckCircle className="h-4 w-4 text-success-500" />
                   ) : (
-                    <span className="text-xs text-gray-400">—</span>
+                    <span className="text-xs text-ink-subtle">—</span>
                   )}
                 </td>
               </tr>
@@ -190,11 +190,11 @@ export default async function AdminSourcesPage() {
 
         {sources.length === 0 && (
           <div className="px-6 py-12 text-center">
-            <FileText className="mx-auto mb-3 h-8 w-8 text-gray-300" />
-            <p className="text-sm text-gray-500">
+            <FileText className="mx-auto mb-3 h-8 w-8 text-ink-subtle" />
+            <p className="text-sm text-ink-muted">
               Henüz kaynak içeri aktarılmadı.
             </p>
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-ink-subtle">
               <code>pnpm --filter @gumrukyz/db ingest-regulations</code> komutunu çalıştırın.
             </p>
           </div>
@@ -202,10 +202,10 @@ export default async function AdminSourcesPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <Link href="/admin/rules" className="text-sm text-gray-500 hover:text-gray-700">
+        <Link href="/admin/rules" className="text-sm text-ink-muted hover:text-ink-muted">
           ← Kural Yönetimi
         </Link>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-ink-subtle">
           Kaynaklar yalnızca okuma amaçlıdır. Güncellemek için ingest scriptini çalıştırın.
         </p>
       </div>

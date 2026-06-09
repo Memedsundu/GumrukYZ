@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 interface Props {
   ruleResultId: string
@@ -46,40 +48,37 @@ export default function OverrideButton({ ruleResultId }: Props) {
 
   if (!open) {
     return (
-      <button
-        onClick={() => setOpen(true)}
-        className="flex-shrink-0 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
-      >
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="w-full">
         Geçersiz Kıl
-      </button>
+      </Button>
     )
   }
 
   return (
-    <div className="flex-shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm w-72">
-      <p className="mb-2 font-medium text-gray-700">Neden geçersiz kılıyorsunuz?</p>
-      <textarea
+    <div className="w-full flex-shrink-0 rounded-xl border border-line bg-surface-muted p-3 text-sm">
+      <p className="mb-2 font-medium text-ink">Neden geçersiz kılıyorsunuz?</p>
+      <Textarea
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Zorunlu açıklama..."
         rows={3}
-        className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
       />
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-xs text-danger-600">{error}</p>}
       <div className="mt-2 flex gap-2">
-        <button
-          onClick={handleOverride}
-          disabled={loading}
-          className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
+        <Button size="sm" onClick={handleOverride} disabled={loading}>
           {loading ? 'Kaydediliyor...' : 'Onayla'}
-        </button>
-        <button
-          onClick={() => { setOpen(false); setReason(''); setError(null) }}
-          className="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-white"
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(false)
+            setReason('')
+            setError(null)
+          }}
         >
           İptal
-        </button>
+        </Button>
       </div>
     </div>
   )

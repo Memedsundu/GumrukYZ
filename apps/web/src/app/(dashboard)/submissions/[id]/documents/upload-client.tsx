@@ -368,14 +368,14 @@ export default function DocumentUploadClient({
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+      <div className="rounded-lg border border-brand-200 bg-brand-50 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Sıradaki adım</p>
-            <h2 className="mt-1 text-base font-semibold text-gray-900">{nextAction.title}</h2>
-            <p className="mt-1 text-sm text-gray-700">{nextAction.description}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Sıradaki adım</p>
+            <h2 className="mt-1 text-base font-semibold text-ink">{nextAction.title}</h2>
+            <p className="mt-1 text-sm text-ink-muted">{nextAction.description}</p>
             {nextAction.blockingReasons.length > 0 && (
-              <ul className="mt-2 space-y-1 text-sm text-blue-900">
+              <ul className="mt-2 space-y-1 text-sm text-brand-700">
                 {nextAction.blockingReasons.map((reason) => (
                   <li key={reason}>• {reason}</li>
                 ))}
@@ -390,7 +390,7 @@ export default function DocumentUploadClient({
               if (nextAction.action === 'process') void handleProcess()
             }}
             disabled={nextAction.disabled}
-            className="inline-flex shrink-0 items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
           >
             {nextAction.loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
             {nextAction.cta}
@@ -398,11 +398,11 @@ export default function DocumentUploadClient({
         </div>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-6">
-        <h2 className="mb-4 text-base font-semibold text-gray-900">Belgeleri Yükle</h2>
+      <div className="rounded-lg border border-line bg-surface p-6">
+        <h2 className="mb-4 text-base font-semibold text-ink">Belgeleri Yükle</h2>
         <div
           className={`flex cursor-pointer flex-col items-center rounded-lg border-2 border-dashed px-6 py-8 transition-colors ${
-            dragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+            dragging ? 'border-brand-500 bg-brand-50' : 'border-line-strong hover:border-brand-500 hover:bg-brand-50'
           }`}
           onClick={() => !uploading && fileInputRef.current?.click()}
           onDragEnter={(e) => {
@@ -427,11 +427,11 @@ export default function DocumentUploadClient({
             void uploadFiles(e.dataTransfer.files)
           }}
         >
-          {uploading ? <Loader2 className="h-8 w-8 animate-spin text-blue-500" /> : <Upload className="h-8 w-8 text-gray-400" />}
-          <p className="mt-2 text-sm font-medium text-gray-600">
+          {uploading ? <Loader2 className="h-8 w-8 animate-spin text-brand-500" /> : <Upload className="h-8 w-8 text-ink-subtle" />}
+          <p className="mt-2 text-sm font-medium text-ink-muted">
             {uploading ? 'Yükleniyor...' : 'Dosyaları yükleyin; belge türünü sistem önerecek'}
           </p>
-          <p className="mt-1 text-xs text-gray-400">{SUPPORTED_UPLOAD_LABEL}</p>
+          <p className="mt-1 text-xs text-ink-subtle">{SUPPORTED_UPLOAD_LABEL}</p>
           <input
             ref={fileInputRef}
             type="file"
@@ -444,32 +444,32 @@ export default function DocumentUploadClient({
             disabled={uploading}
           />
         </div>
-        {uploadError && <div className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{uploadError}</div>}
+        {uploadError && <div className="mt-3 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{uploadError}</div>}
       </div>
 
       {documents.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white">
-          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-            <h2 className="text-base font-semibold text-gray-900">Yüklenen Belgeler ({documents.length})</h2>
+        <div className="rounded-lg border border-line bg-surface">
+          <div className="flex items-center justify-between border-b border-line px-6 py-4">
+            <h2 className="text-base font-semibold text-ink">Yüklenen Belgeler ({documents.length})</h2>
             <button
               onClick={handleClassify}
               disabled={classifying}
-              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
             >
               {classifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SearchCheck className="mr-2 h-4 w-4" />}
               {classifying ? 'Okunuyor...' : 'Tekrar oku ve sınıflandır'}
             </button>
           </div>
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-line">
             {documents.map((doc) => (
               <div key={doc.id} className="px-6 py-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                  <FileText className="mt-1 h-5 w-5 text-gray-400" />
+                  <FileText className="mt-1 h-5 w-5 text-ink-subtle" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900">{doc.filename}</p>
+                    <p className="text-sm font-medium text-ink">{doc.filename}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {doc.suggestedDocType && (
-                        <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        <span className="rounded bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
                           Öneri: {docTypeLabel(doc.suggestedDocType)}
                         </span>
                       )}
@@ -480,12 +480,12 @@ export default function DocumentUploadClient({
                       )}
                     </div>
                     {doc.classificationReasoning && (
-                      <p className="mt-1 text-xs text-gray-500">{doc.classificationReasoning}</p>
+                      <p className="mt-1 text-xs text-ink-muted">{doc.classificationReasoning}</p>
                     )}
                     {doc.classificationSourceRefs.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {doc.classificationSourceRefs.slice(0, 4).map((ref, i) => (
-                          <span key={`${ref.field}-${i}`} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                          <span key={`${ref.field}-${i}`} className="rounded bg-surface-muted px-2 py-0.5 text-xs text-ink-muted">
                             {ref.field}: {ref.value}
                           </span>
                         ))}
@@ -498,7 +498,7 @@ export default function DocumentUploadClient({
                         value={doc.docType === 'UNCLASSIFIED' ? '' : doc.docType}
                         onChange={(e) => setDocuments((prev) => prev.map((item) => item.id === doc.id ? { ...item, docType: e.target.value } : item))}
                         disabled={doc.isIgnored}
-                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-100 disabled:text-gray-400 sm:min-w-44"
+                        className="w-full rounded-md border border-line-strong px-2 py-1 text-sm disabled:bg-surface-muted disabled:text-ink-subtle sm:min-w-44"
                       >
                         <option value="">Belge türü seçin</option>
                         {DOC_TYPES.map((type) => (
@@ -510,8 +510,8 @@ export default function DocumentUploadClient({
                         onClick={() => setDocuments((prev) => prev.map((item) => item.id === doc.id ? { ...item, isIgnored: !item.isIgnored } : item))}
                         className={`inline-flex w-full items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors sm:min-w-32 ${
                           doc.isIgnored
-                            ? 'border-gray-300 bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                            ? 'border-line-strong bg-surface-muted text-ink-muted hover:bg-line'
+                            : 'border-success-200 bg-success-50 text-success-700 hover:bg-success-100'
                         }`}
                         aria-pressed={doc.isIgnored}
                         title={doc.isIgnored ? 'Bu belge analiz dışında kalır' : 'Bu belge analizde kullanılır'}
@@ -529,18 +529,18 @@ export default function DocumentUploadClient({
         </div>
       )}
 
-      {classificationError && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{classificationError}</div>}
+      {classificationError && <div className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{classificationError}</div>}
 
       {documents.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <h3 className="text-sm font-semibold text-gray-900">Son kontrol</h3>
+        <div className="rounded-lg border border-line bg-surface p-6">
+          <h3 className="text-sm font-semibold text-ink">Son kontrol</h3>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700">İşlem yönü</label>
+              <label className="block text-sm font-medium text-ink-muted">İşlem yönü</label>
               <select
                 value={tradeFlowChoice}
                 onChange={(e) => setTradeFlowChoice(e.target.value)}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-line-strong px-3 py-2 text-sm"
               >
                 <option value="">Seçin</option>
                 <option value="IMPORT">İthalat</option>
@@ -549,7 +549,7 @@ export default function DocumentUploadClient({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">Dosyanın ait olduğu müşteri</label>
+              <label className="block text-sm font-medium text-ink-muted">Dosyanın ait olduğu müşteri</label>
               <select
                 value={clientAction === 'existing' ? selectedClientId : clientAction}
                 onChange={(e) => {
@@ -562,7 +562,7 @@ export default function DocumentUploadClient({
                     setSelectedClientId(value)
                   }
                 }}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-line-strong px-3 py-2 text-sm"
               >
                 <option value="none">Müşteri seçmeden devam et</option>
                 {clientMatches.map((client) => (
@@ -572,11 +572,11 @@ export default function DocumentUploadClient({
                 ))}
                 <option value="create">Yeni müşteri kaydı oluştur</option>
               </select>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-ink-muted">
                 Bu seçim dosyayı müşteri kayıtlarınızdaki firma ile ilişkilendirir. Emin değilseniz müşteri seçmeden devam edebilirsiniz.
               </p>
               {clientMatches[0] && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-ink-muted">
                   En güçlü eşleşme: {clientMatches[0].displayName} · {clientMatchLabel(clientMatches[0].matchType)} · güven %{Math.round(clientMatches[0].confidence * 100)}
                 </p>
               )}
@@ -589,65 +589,65 @@ export default function DocumentUploadClient({
                 value={newClient.displayName}
                 onChange={(e) => setNewClient((prev) => ({ ...prev, displayName: e.target.value }))}
                 placeholder="Müşteri adı"
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="rounded-md border border-line-strong px-3 py-2 text-sm"
               />
               <input
                 value={newClient.taxId}
                 onChange={(e) => setNewClient((prev) => ({ ...prev, taxId: e.target.value }))}
                 placeholder="Vergi numarası"
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="rounded-md border border-line-strong px-3 py-2 text-sm"
               />
               <input
                 value={newClient.address}
                 onChange={(e) => setNewClient((prev) => ({ ...prev, address: e.target.value }))}
                 placeholder="Adres"
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="rounded-md border border-line-strong px-3 py-2 text-sm"
               />
               <input
                 value={newClient.country}
                 onChange={(e) => setNewClient((prev) => ({ ...prev, country: e.target.value }))}
                 placeholder="Ülke"
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="rounded-md border border-line-strong px-3 py-2 text-sm"
               />
             </div>
           )}
 
           <div className="mt-5 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-ink-muted">
               {needsValidation ? 'Önerileri kontrol edip doğruladıktan sonra analiz başlatılabilir.' : 'Sınıflandırma doğrulandı.'}
             </p>
             <button
               onClick={handleValidate}
               disabled={validating}
-              className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              className="inline-flex items-center rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
             >
               {validating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
               Doğrulamayı kaydet
             </button>
           </div>
-          {validationError && <div className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{validationError}</div>}
+          {validationError && <div className="mt-3 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{validationError}</div>}
         </div>
       )}
 
       {documents.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="rounded-lg border border-line bg-surface p-6">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">Analizi Başlat</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <h3 className="text-sm font-semibold text-ink">Analizi Başlat</h3>
+              <p className="mt-1 text-sm text-ink-muted">
                 {canProcess ? `${documents.length} belge doğrulandı.` : 'Önce sınıflandırmayı doğrulayın.'}
               </p>
             </div>
             <button
               onClick={handleProcess}
               disabled={processing || !canProcess}
-              className="flex items-center rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              className="flex items-center rounded-lg bg-success-600 px-5 py-2 text-sm font-medium text-white hover:bg-success-700 disabled:opacity-50"
             >
               {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
               {processing ? 'İşleniyor...' : 'Analizi Başlat'}
             </button>
           </div>
-          {processError && <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{processError}</div>}
+          {processError && <div className="mt-4 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{processError}</div>}
           {(processing || processingProgress) && (
             <ProgressBar progress={processingProgress} />
           )}
@@ -668,14 +668,14 @@ function DocumentStatusBadge({
 }) {
   if (ignored) {
     return (
-      <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500">
+      <span className="inline-flex items-center rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted">
         Analizde kullanılmayacak
       </span>
     )
   }
   if (status === 'FAILED') {
     return (
-      <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+      <span className="inline-flex items-center rounded-full bg-danger-50 px-2.5 py-1 text-xs font-medium text-danger-700">
         <XCircle className="mr-1 h-3.5 w-3.5" />
         Okuma hatası
       </span>
@@ -683,7 +683,7 @@ function DocumentStatusBadge({
   }
   if (status === 'PROCESSING') {
     return (
-      <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+      <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
         <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
         Okunuyor
       </span>
@@ -691,7 +691,7 @@ function DocumentStatusBadge({
   }
   if (validated) {
     return (
-      <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+      <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
         <CheckCircle className="mr-1 h-3.5 w-3.5" />
         Doğrulandı
       </span>
@@ -699,14 +699,14 @@ function DocumentStatusBadge({
   }
   if (status === 'DONE') {
     return (
-      <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+      <span className="inline-flex items-center rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
         <CheckCircle className="mr-1 h-3.5 w-3.5" />
         Hazır
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+    <span className="inline-flex items-center rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted">
       Belge türü bekliyor
     </span>
   )
@@ -715,25 +715,25 @@ function DocumentStatusBadge({
 function ProgressBar({ progress }: { progress: ProcessingProgressState | null }) {
   const percent = Math.max(0, Math.min(100, progress?.percent ?? 8))
   return (
-    <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+    <div className="mt-5 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-blue-950">
+          <p className="text-sm font-medium text-brand-700">
             {progress?.label ?? 'İşlem sürüyor'}
           </p>
-          <p className="mt-0.5 text-xs text-blue-800">
+          <p className="mt-0.5 text-xs text-brand-600">
             {progress?.description ?? 'Tahmini ilerleme hazırlanıyor.'}
           </p>
         </div>
-        <span className="font-mono text-sm font-semibold text-blue-800">%{Math.round(percent)}</span>
+        <span className="font-mono text-sm font-semibold text-brand-600">%{Math.round(percent)}</span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface">
         <div
-          className="h-full rounded-full bg-blue-600 transition-all duration-500"
+          className="h-full rounded-full bg-brand-600 transition-all duration-500"
           style={{ width: `${percent}%` }}
         />
       </div>
-      <p className="mt-2 text-xs text-blue-700">
+      <p className="mt-2 text-xs text-brand-700">
         Bu gösterge tahminidir; büyük PDF dosyalarında bazı adımlar daha uzun sürebilir.
       </p>
     </div>
@@ -812,9 +812,9 @@ function docTypeLabel(docType: string): string {
 }
 
 function confidenceClass(confidence: number): string {
-  if (confidence >= 0.8) return 'bg-green-50 text-green-700'
-  if (confidence >= 0.6) return 'bg-yellow-50 text-yellow-700'
-  return 'bg-red-50 text-red-700'
+  if (confidence >= 0.8) return 'bg-success-50 text-success-700'
+  if (confidence >= 0.6) return 'bg-warning-50 text-warning-700'
+  return 'bg-danger-50 text-danger-700'
 }
 
 function clientMatchLabel(matchType: string): string {

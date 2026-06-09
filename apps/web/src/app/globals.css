@@ -1,30 +1,77 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* Typography */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Warm neutrals (stone-based) */
+  --color-canvas: #faf9f7;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f5f4f2;
+  --color-ink: #1c1917;
+  --color-ink-muted: #57534e;
+  --color-ink-subtle: #a8a29e;
+  --color-line: #e7e5e4;
+  --color-line-strong: #d6d3d1;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Brand — friendly trustworthy blue */
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe6fe;
+  --color-brand-200: #bcd0fd;
+  --color-brand-500: #3b6cf6;
+  --color-brand-600: #2b57e0;
+  --color-brand-700: #1e40c4;
+
+  /* Accent — warm coral for human/illustrative touches */
+  --color-accent-50: #fff1ed;
+  --color-accent-100: #ffe1d6;
+  --color-accent-500: #ff7a59;
+  --color-accent-600: #f2613f;
+
+  /* Risk: success / clean */
+  --color-success-50: #ecfdf5;
+  --color-success-100: #d1fae5;
+  --color-success-200: #a7f3d0;
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+
+  /* Risk: warning */
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-200: #fde68a;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  /* Risk: danger / error */
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-500: #f43f5e;
+  --color-danger-600: #e11d48;
+  --color-danger-700: #be123c;
+
+  /* AI / expert-review moments */
+  --color-ai-50: #f5f3ff;
+  --color-ai-100: #ede9fe;
+  --color-ai-500: #8b5cf6;
+  --color-ai-600: #7c3aed;
+  --color-ai-700: #6d28d9;
+
+  /* Soft, warm-tinted elevation */
+  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.06);
+  --shadow-pop: 0 10px 30px -10px rgba(28, 25, 23, 0.18), 0 4px 12px -4px rgba(28, 25, 23, 0.1);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
+/* Clerk: keep only the footer action link */
 .cl-footer > :not(.cl-footerAction) {
   display: none !important;
 }

@@ -4,7 +4,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { trTR } from '@clerk/localizations'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const clerkLocalization = {
   ...trTR,
   signIn: {
@@ -48,8 +48,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr">
-      <body className={inter.className}>
+    <html lang="tr" className={inter.variable}>
+      <body className="font-sans antialiased">
         <ClerkProvider localization={clerkLocalization}>{children}</ClerkProvider>
       </body>
     </html>
