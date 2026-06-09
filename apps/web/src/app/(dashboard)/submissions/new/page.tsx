@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { PageShell } from '@/components/ui/page-shell'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
@@ -42,7 +43,7 @@ export default function NewSubmissionPage() {
   }
 
   return (
-    <div className="p-8">
+    <PageShell size="narrow">
       <PageHeader title="Yeni dosya oluştur" description="Bir referans adı verin, ardından belgeleri yükleyin." />
 
       <Card className="max-w-lg p-6">
@@ -69,6 +70,6 @@ export default function NewSubmissionPage() {
           </Button>
         </form>
       </Card>
-    </div>
+    </PageShell>
   )
 }

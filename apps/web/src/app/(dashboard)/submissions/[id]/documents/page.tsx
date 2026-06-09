@@ -1,4 +1,5 @@
 import { getAuthenticatedUser } from '@/lib/auth'
+import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
 import DocumentUploadClient from './upload-client'
@@ -25,7 +26,7 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
   if (!submission) notFound()
 
   return (
-    <div className="p-8">
+    <PageShell>
       <div className="mb-8">
         <div className="flex items-center gap-2 text-sm text-ink-muted mb-2">
           <span>Kontrol paneli</span>
@@ -63,6 +64,6 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
           filename: d.latestVersion?.originalFilename ?? null,
         }))}
       />
-    </div>
+    </PageShell>
   )
 }

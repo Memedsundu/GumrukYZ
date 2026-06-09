@@ -1,4 +1,5 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
+import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -62,7 +63,7 @@ export default async function AdminSourcesPage() {
   const expertReviewEnabled = isExpertReviewEnabled()
 
   return (
-    <div className="p-8">
+    <PageShell>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-ink">Mevzuat Kaynakları</h1>
         <p className="mt-1 text-sm text-ink-muted">
@@ -209,6 +210,6 @@ export default async function AdminSourcesPage() {
           Kaynaklar yalnızca okuma amaçlıdır. Güncellemek için ingest scriptini çalıştırın.
         </p>
       </div>
-    </div>
+    </PageShell>
   )
 }

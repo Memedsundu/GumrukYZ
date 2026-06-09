@@ -1,4 +1,5 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
+import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { ScrollText } from 'lucide-react'
@@ -73,7 +74,7 @@ export default async function AuditPage({ searchParams }: PageProps) {
   const totalPages = Math.ceil(total / pageSize)
 
   return (
-    <div className="p-8">
+    <PageShell>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-ink">Denetim Günlüğü</h1>
         <p className="mt-1 text-sm text-ink-muted">
@@ -213,6 +214,6 @@ export default async function AuditPage({ searchParams }: PageProps) {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

@@ -1,4 +1,5 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
+import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { Activity, TrendingUp, AlertCircle, DollarSign } from 'lucide-react'
@@ -163,7 +164,7 @@ export default async function ObservabilityPage() {
   const totalJobs = totalJobStats.reduce((sum, s) => sum + s._count.id, 0)
 
   return (
-    <div className="p-8">
+    <PageShell>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-ink">Sağlayıcı Takibi</h1>
         <p className="mt-1 text-sm text-ink-muted">
@@ -337,6 +338,6 @@ export default async function ObservabilityPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

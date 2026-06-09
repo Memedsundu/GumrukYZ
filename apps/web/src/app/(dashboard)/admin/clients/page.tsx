@@ -1,4 +1,5 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
+import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -21,7 +22,7 @@ export default async function AdminClientsPage() {
   })
 
   return (
-    <div className="p-8">
+    <PageShell>
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-ink">Müşteri Kaydı</h1>
@@ -116,6 +117,6 @@ export default async function AdminClientsPage() {
           </table>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

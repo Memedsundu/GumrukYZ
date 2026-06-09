@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { PageShell } from '@/components/ui/page-shell'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -36,7 +37,7 @@ export default function NewClientPage() {
   }
 
   return (
-    <div className="p-8">
+    <PageShell size="narrow">
       <div className="mb-8">
         <Link href="/admin/clients" className="mb-4 block text-sm text-ink-muted hover:text-ink-muted">
           ← Müşteri Listesi
@@ -116,6 +117,6 @@ export default function NewClientPage() {
           </div>
         </form>
       </div>
-    </div>
+    </PageShell>
   )
 }

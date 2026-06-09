@@ -1,4 +1,5 @@
 import { getAuthenticatedUser } from '@/lib/auth'
+import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -33,7 +34,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
   const latestReport = submission.riskReports[0]
 
   return (
-    <div className="p-8">
+    <PageShell>
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 text-sm text-ink-muted mb-2">
@@ -201,7 +202,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   )
 }
 

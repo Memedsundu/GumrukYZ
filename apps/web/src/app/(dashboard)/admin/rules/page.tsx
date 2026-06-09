@@ -1,4 +1,5 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
+import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { formatDateTime } from '@/lib/utils'
@@ -28,7 +29,7 @@ export default async function AdminRulesPage() {
   const deprecatedRules = rules.filter((r) => r.lifecycleStatus === 'DEPRECATED')
 
   return (
-    <div className="p-8">
+    <PageShell>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-ink">Kural Yönetimi</h1>
         <p className="mt-1 text-sm text-ink-muted">
@@ -169,7 +170,7 @@ export default async function AdminRulesPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }
 

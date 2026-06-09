@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { PageShell } from '@/components/ui/page-shell'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Trash2 } from 'lucide-react'
@@ -110,7 +111,7 @@ export default function EditClientPage() {
   }
 
   return (
-    <div className="p-8">
+    <PageShell size="narrow">
       <div className="mb-8">
         <Link href="/admin/clients" className="mb-4 block text-sm text-ink-muted hover:text-ink-muted">
           ← Müşteri Listesi
@@ -197,6 +198,6 @@ export default function EditClientPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }
