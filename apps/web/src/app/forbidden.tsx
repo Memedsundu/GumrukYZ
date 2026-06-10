@@ -1,20 +1,22 @@
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { AccessDeniedIllustration } from '@/components/illustrations'
 
 export default function ForbiddenPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
-      <div className="max-w-md rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">403</p>
-        <h1 className="mt-2 text-xl font-bold text-gray-900">Erişim yetkiniz yok</h1>
-        <p className="mt-3 text-sm text-gray-600">
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-6">
+      <div className="max-w-md animate-fade-rise rounded-2xl border border-line bg-surface p-8 text-center shadow-card">
+        <div className="flex justify-center text-ink-subtle">
+          <AccessDeniedIllustration width={160} />
+        </div>
+        <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-ink-subtle">403</p>
+        <h1 className="mt-2 font-display text-xl font-bold text-ink">Erişim yetkiniz yok</h1>
+        <p className="mt-3 text-sm text-ink-muted">
           Bu sayfayı açmak için gerekli yetki hesabınızda tanımlı değil.
         </p>
-        <Link
-          href="/sign-in"
-          className="mt-5 inline-flex rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
-        >
-          Giriş sayfasına dön
-        </Link>
+        <Button asChild className="mt-6">
+          <Link href="/sign-in">Giriş sayfasına dön</Link>
+        </Button>
       </div>
     </main>
   )

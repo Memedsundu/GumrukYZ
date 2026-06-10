@@ -5,7 +5,9 @@ import {
   Document,
   Font,
   Page,
+  Path,
   StyleSheet,
+  Svg,
   Text,
   View,
   renderToBuffer,
@@ -45,12 +47,53 @@ function registerFonts() {
   fontsRegistered = true
 }
 
+/** Mirrors the web design tokens in globals.css — keep the two in sync. */
+const COLORS = {
+  ink: '#1c1917',
+  inkMuted: '#57534e',
+  line: '#e7e5e4',
+  surfaceMuted: '#f5f4f2',
+  brand: '#2b57e0',
+  brand50: '#eef4ff',
+  brand100: '#dbe6fe',
+  brand700: '#1e40c4',
+  success50: '#ecfdf5',
+  success200: '#a7f3d0',
+  success700: '#047857',
+  warning50: '#fffbeb',
+  warning200: '#fde68a',
+  warning700: '#b45309',
+  danger50: '#fef2f2',
+  danger200: '#fecaca',
+  danger700: '#be123c',
+  ai600: '#7c3aed',
+}
+
 const styles = StyleSheet.create({
   page: {
     padding: 36,
     fontFamily: 'Noto Sans',
     fontSize: 10,
-    color: '#111827',
+    color: COLORS.ink,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.brand,
+  },
+  brandName: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: COLORS.brand,
+  },
+  brandTag: {
+    fontSize: 8,
+    color: COLORS.inkMuted,
+    marginLeft: 'auto',
   },
   title: {
     fontSize: 20,
@@ -58,7 +101,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   muted: {
-    color: '#6b7280',
+    color: COLORS.inkMuted,
   },
   section: {
     marginTop: 18,
@@ -71,8 +114,8 @@ const styles = StyleSheet.create({
   summaryBox: {
     padding: 10,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
-    backgroundColor: '#eff6ff',
+    borderColor: COLORS.brand100,
+    backgroundColor: COLORS.brand50,
   },
   statsRow: {
     flexDirection: 'row',
@@ -83,7 +126,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 8,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: COLORS.line,
   },
   statNumber: {
     fontSize: 16,
@@ -92,7 +135,7 @@ const styles = StyleSheet.create({
   ruleRow: {
     paddingVertical: 9,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: COLORS.line,
   },
   ruleHeader: {
     flexDirection: 'row',
@@ -101,7 +144,7 @@ const styles = StyleSheet.create({
   },
   ruleCode: {
     fontSize: 9,
-    color: '#6b7280',
+    color: COLORS.inkMuted,
     fontWeight: 700,
   },
   result: {
@@ -110,14 +153,14 @@ const styles = StyleSheet.create({
   },
   sourceRef: {
     marginTop: 3,
-    color: '#6b7280',
+    color: COLORS.inkMuted,
     fontSize: 8,
   },
   legalRef: {
     marginTop: 5,
     padding: 6,
-    backgroundColor: '#f8fafc',
-    color: '#334155',
+    backgroundColor: COLORS.surfaceMuted,
+    color: COLORS.inkMuted,
     fontSize: 8,
   },
   legalTitle: {
@@ -126,15 +169,45 @@ const styles = StyleSheet.create({
   expertRow: {
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: COLORS.line,
   },
   expertMeta: {
-    color: '#4f46e5',
+    color: COLORS.ai600,
     fontSize: 8,
     fontWeight: 700,
     marginBottom: 3,
   },
 })
+
+const STAT_TONES: Record<string, { border: string; background: string; number: string }> = {
+  danger: { border: COLORS.danger200, background: COLORS.danger50, number: COLORS.danger700 },
+  warning: { border: COLORS.warning200, background: COLORS.warning50, number: COLORS.warning700 },
+  brand: { border: COLORS.brand100, background: COLORS.brand50, number: COLORS.brand700 },
+  success: { border: COLORS.success200, background: COLORS.success50, number: COLORS.success700 },
+}
+
+function BrandHeader() {
+  return (
+    <View style={styles.brandRow}>
+      <Svg width={16} height={16} viewBox="0 0 24 24">
+        {/* shield */}
+        <Path
+          d="M12 2 L20 5 V11 C20 16.5 16.6 20.6 12 22 C7.4 20.6 4 16.5 4 11 V5 Z"
+          fill={COLORS.brand}
+        />
+        {/* check */}
+        <Path
+          d="M8.5 11.8 L11 14.3 L15.5 9.4"
+          stroke="#ffffff"
+          strokeWidth={1.8}
+          fill="none"
+        />
+      </Svg>
+      <Text style={styles.brandName}>GümrükYZ</Text>
+      <Text style={styles.brandTag}>Akıllı Gümrük Kontrol Sistemi</Text>
+    </View>
+  )
+}
 
 export async function renderReportPdf(payload: ReportPayload): Promise<Buffer> {
   registerFonts()
@@ -152,17 +225,18 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
   return (
     <Document title={`GümrükYZ Risk Raporu - ${payload.submission.title}`}>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>GümrükYZ Risk Raporu</Text>
+        <BrandHeader />
+        <Text style={styles.title}>Risk Raporu</Text>
         <Text style={styles.muted}>{payload.submission.title}</Text>
         <Text style={styles.muted}>
           Üretilme: {formatDate(payload.report.generatedAt)} | Akış: {tradeFlowLabel(payload.submission.tradeFlow)}
         </Text>
 
         <View style={styles.statsRow}>
-          <Stat label="Hata" value={payload.counts.errors} />
-          <Stat label="Uyarı" value={payload.counts.warnings} />
-          <Stat label="İnceleme Gerekli" value={payload.counts.reviewNeeded} />
-          <Stat label="Geçti" value={payload.counts.passes} />
+          <Stat label="Hata" value={payload.counts.errors} tone="danger" />
+          <Stat label="Uyarı" value={payload.counts.warnings} tone="warning" />
+          <Stat label="İnceleme Gerekli" value={payload.counts.reviewNeeded} tone="brand" />
+          <Stat label="Geçti" value={payload.counts.passes} tone="success" />
         </View>
 
         {payload.report.summaryText && (
@@ -291,11 +365,12 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
   )
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, tone }: { label: string; value: number; tone: keyof typeof STAT_TONES }) {
+  const colors = STAT_TONES[tone]
   return (
-    <View style={styles.statBox}>
+    <View style={[styles.statBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
       <Text style={styles.muted}>{label}</Text>
-      <Text style={styles.statNumber}>{value}</Text>
+      <Text style={[styles.statNumber, { color: colors.number }]}>{value}</Text>
     </View>
   )
 }

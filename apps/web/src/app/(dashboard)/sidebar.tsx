@@ -12,7 +12,7 @@ function Brand({ collapsed }: { collapsed: boolean }) {
         <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">
           <ShieldCheck className="size-5" />
         </span>
-        {!collapsed && <span className="text-lg font-bold text-ink">GümrükYZ</span>}
+        {!collapsed && <span className="font-display text-lg font-bold tracking-tight text-ink">GümrükYZ</span>}
       </Link>
     </div>
   )

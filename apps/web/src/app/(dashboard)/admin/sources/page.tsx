@@ -1,5 +1,9 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { PageShell } from '@/components/ui/page-shell'
+import { PageHeader } from '@/components/ui/page-header'
+import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
+import { StatuteBookIllustration } from '@/components/illustrations'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -10,33 +14,33 @@ import { getLegalContextReadiness, isExpertReviewEnabled } from '@/lib/expert-re
 function VerificationBadge({ status }: { status: string }) {
   if (status === 'OFFICIAL_SNAPSHOT') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-success-100 px-2 py-0.5 text-xs font-medium text-success-700">
-        <CheckCircle className="h-3 w-3" />
+      <Badge tone="success">
+        <CheckCircle />
         Snapshot
-      </span>
+      </Badge>
     )
   }
   if (status === 'OFFICIAL_FETCHED_NO_BLOB') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
-        <Globe className="h-3 w-3" />
+      <Badge tone="info">
+        <Globe />
         Fetched
-      </span>
+      </Badge>
     )
   }
   if (status === 'FETCH_FAILED') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-danger-100 px-2 py-0.5 text-xs font-medium text-danger-700">
-        <XCircle className="h-3 w-3" />
+      <Badge tone="danger">
+        <XCircle />
         Erişilemiyor
-      </span>
+      </Badge>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-ink-muted">
-      <AlertCircle className="h-3 w-3" />
+    <Badge tone="neutral">
+      <AlertCircle />
       Yalnızca meta
-    </span>
+    </Badge>
   )
 }
 
@@ -64,15 +68,13 @@ export default async function AdminSourcesPage() {
 
   return (
     <PageShell>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-ink">Mevzuat Kaynakları</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Sisteme yüklü mevzuat kaynaklarının durumu. Kurallar bu kaynaklara dayanmaktadır.
-        </p>
-      </div>
+      <PageHeader
+        title="Mevzuat Kaynakları"
+        description="Sisteme yüklü mevzuat kaynaklarının durumu. Kurallar bu kaynaklara dayanmaktadır."
+      />
 
       {/* Summary stats */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-lg border border-line bg-white p-4">
           <p className="text-xs text-ink-muted">Toplam Kaynak</p>
           <p className="text-2xl font-bold text-ink">{sources.length}</p>
@@ -190,15 +192,17 @@ export default async function AdminSourcesPage() {
         </table>
 
         {sources.length === 0 && (
-          <div className="px-6 py-12 text-center">
-            <FileText className="mx-auto mb-3 h-8 w-8 text-ink-subtle" />
-            <p className="text-sm text-ink-muted">
-              Henüz kaynak içeri aktarılmadı.
-            </p>
-            <p className="mt-1 text-xs text-ink-subtle">
-              <code>pnpm --filter @gumrukyz/db ingest-regulations</code> komutunu çalıştırın.
-            </p>
-          </div>
+          <EmptyState
+            illustration={<StatuteBookIllustration />}
+            title="Henüz kaynak içeri aktarılmadı."
+            description={
+              <>
+                <code className="font-mono text-xs">pnpm --filter @gumrukyz/db ingest-regulations</code>{' '}
+                komutunu çalıştırın.
+              </>
+            }
+            className="py-12"
+          />
         )}
       </div>
 

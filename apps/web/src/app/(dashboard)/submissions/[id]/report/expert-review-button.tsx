@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Sparkles } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type Quota = {
   limit: number
@@ -56,7 +57,7 @@ export default function ExpertReviewButton({
   }
 
   return (
-    <div>
+    <div className={cn(loading && 'animate-pulse-soft')}>
       <div className="flex flex-col gap-3">
         <div>
           <p className="flex items-center gap-1.5 text-sm font-semibold text-ai-700">

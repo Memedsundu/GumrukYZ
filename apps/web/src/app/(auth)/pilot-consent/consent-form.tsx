@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PILOT_DISCLAIMER_VERSION } from '@/lib/pilot'
+import { Button } from '@/components/ui/button'
 
 export default function PilotConsentForm() {
   const router = useRouter()
@@ -41,7 +42,7 @@ export default function PilotConsentForm() {
 
   return (
     <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-      <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-3">
+      <div className="max-h-64 overflow-y-auto rounded-lg border border-line bg-surface-muted p-4 text-sm text-ink-muted space-y-3">
         <p>
           <strong>GümrükYZ</strong> bir gümrük beyanname ön kontrol ve risk analiz aracıdır. Hukuki
           tavsiye vermez, BİLGE / YKTS / TPS ile entegre değildir ve lisanslı gümrük müşavirinin
@@ -57,15 +58,15 @@ export default function PilotConsentForm() {
           belgesi yüklerseniz, işleme için gerekli hukuki dayanağın (açık rıza / sözleşme) firmada
           bulunduğunu beyan edersiniz.
         </p>
-        <p className="text-xs text-gray-500">Koşul sürümü: {PILOT_DISCLAIMER_VERSION}</p>
+        <p className="text-xs text-ink-subtle">Koşul sürümü: {PILOT_DISCLAIMER_VERSION}</p>
       </div>
 
-      <label className="flex items-start gap-3 text-sm text-gray-800">
+      <label className="flex items-start gap-3 text-sm text-ink">
         <input
           type="checkbox"
           checked={accepted}
           onChange={(e) => setAccepted(e.target.checked)}
-          className="mt-1"
+          className="mt-1 accent-brand-600"
         />
         <span>
           Pilot kullanım koşullarını ve yukarıdaki bilgilendirmeyi okudum, ürünün beta olduğunu ve
@@ -73,12 +74,12 @@ export default function PilotConsentForm() {
         </span>
       </label>
 
-      <label className="flex items-start gap-3 text-sm text-gray-800">
+      <label className="flex items-start gap-3 text-sm text-ink">
         <input
           type="checkbox"
           checked={realDataAck}
           onChange={(e) => setRealDataAck(e.target.checked)}
-          className="mt-1"
+          className="mt-1 accent-brand-600"
         />
         <span>
           Gerçek müşteri belgesi yüklersem, firmamın veri işleme yükümlülüklerini yerine getirdiğini
@@ -87,16 +88,19 @@ export default function PilotConsentForm() {
       </label>
 
       {error && (
-        <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700" role="alert">
+          {error}
+        </div>
       )}
 
-      <button
+      <Button
         type="submit"
-        disabled={!accepted || !realDataAck || loading}
-        className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        className="w-full"
+        disabled={!accepted || !realDataAck}
+        loading={loading}
       >
         {loading ? 'Kaydediliyor...' : 'Kabul ediyorum ve devam et'}
-      </button>
+      </Button>
     </form>
   )
 }

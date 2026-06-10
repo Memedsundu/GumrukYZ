@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { PageShell } from '@/components/ui/page-shell'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -56,16 +55,18 @@ export default function NewSubmissionPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Örn: INV-2024-00123 / ABC Firması"
+              aria-invalid={error ? true : undefined}
               required
             />
           </div>
 
           {error && (
-            <div className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</div>
+            <div className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700" role="alert">
+              {error}
+            </div>
           )}
 
-          <Button type="submit" disabled={loading || !title.trim()} className="w-full">
-            {loading && <Loader2 className="animate-spin" />}
+          <Button type="submit" disabled={!title.trim()} loading={loading} className="w-full">
             {loading ? 'Oluşturuluyor...' : 'Yeni dosya oluştur'}
           </Button>
         </form>

@@ -1,5 +1,9 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { PageShell } from '@/components/ui/page-shell'
+import { PageHeader } from '@/components/ui/page-header'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { EmptyDossierIllustration } from '@/components/illustrations'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -23,36 +27,34 @@ export default async function AdminClientsPage() {
 
   return (
     <PageShell>
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">Müşteri Kaydı</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            İthalatçı ve ihracatçı müşteri bilgileri. Beyanname dosyaları bu kayıtlara bağlanır.
-          </p>
-        </div>
-        <Link
-          href="/admin/clients/new"
-          className="inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Yeni Müşteri
-        </Link>
-      </div>
+      <PageHeader
+        title="Müşteri Kaydı"
+        description="İthalatçı ve ihracatçı müşteri bilgileri. Beyanname dosyaları bu kayıtlara bağlanır."
+        actions={
+          <Button asChild>
+            <Link href="/admin/clients/new">
+              <Plus />
+              Yeni Müşteri
+            </Link>
+          </Button>
+        }
+      />
 
       {clients.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-line-strong bg-white px-6 py-12 text-center">
-          <Users className="mx-auto mb-3 h-8 w-8 text-ink-subtle" />
-          <p className="text-sm font-medium text-ink">Henüz müşteri kaydı yok</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            Müşteri eklemek için &ldquo;Yeni Müşteri&rdquo; butonunu kullanın.
-          </p>
-          <Link
-            href="/admin/clients/new"
-            className="mt-4 inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Yeni Müşteri Ekle
-          </Link>
+        <div className="rounded-lg border border-dashed border-line-strong bg-white">
+          <EmptyState
+            illustration={<EmptyDossierIllustration />}
+            title="Henüz müşteri kaydı yok"
+            description="Müşteri eklemek için “Yeni Müşteri” butonunu kullanın."
+            action={
+              <Button asChild>
+                <Link href="/admin/clients/new">
+                  <Plus />
+                  Yeni Müşteri Ekle
+                </Link>
+              </Button>
+            }
+          />
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-line bg-white">

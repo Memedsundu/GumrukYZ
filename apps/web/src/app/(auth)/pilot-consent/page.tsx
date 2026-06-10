@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { getProvisioningUser } from '@/lib/auth'
+import { BrandMark } from '@/components/ui/brand-mark'
 import PilotConsentForm from './consent-form'
 
 export default async function PilotConsentPage() {
@@ -12,10 +13,11 @@ export default async function PilotConsentPage() {
   if (user.pilotConsentAt) redirect('/dashboard')
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10">
-      <div className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-900">Pilot kullanım koşulları</h1>
-        <p className="mt-2 text-sm text-gray-600">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
+      <div className="w-full max-w-2xl animate-fade-rise rounded-2xl border border-line bg-surface p-8 shadow-card">
+        <BrandMark size="sm" className="mb-5" />
+        <h1 className="font-display text-xl font-bold text-ink">Pilot kullanım koşulları</h1>
+        <p className="mt-2 text-sm text-ink-muted">
           {user.tenant.name} — GümrükYZ beta pilot programı
         </p>
         <PilotConsentForm />

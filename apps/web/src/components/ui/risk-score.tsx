@@ -31,9 +31,14 @@ export function RiskScore({ errors, warnings, reviews = 0, size = 132, className
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
   const filled = (assessment.score / 100) * circumference
+  const compact = size < 110
 
   return (
-    <div className={cn('flex flex-col items-center gap-2', className)}>
+    <div
+      role="img"
+      aria-label={`Risk skoru ${assessment.score} — ${assessment.label}`}
+      className={cn('flex flex-col items-center gap-2', className)}
+    >
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
           <circle
@@ -53,18 +58,27 @@ export function RiskScore({ errors, warnings, reviews = 0, size = 132, className
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={`${filled} ${circumference}`}
+            style={{ transition: 'stroke-dasharray var(--duration-slow) var(--ease-out-soft)' }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={cn('text-2xl font-bold tracking-tight', textByLevel[assessment.level])}>
+          <span
+            className={cn(
+              'font-display font-bold tracking-tight',
+              compact ? 'text-lg' : 'text-2xl',
+              textByLevel[assessment.level],
+            )}
+          >
             {assessment.score}
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-wide text-ink-subtle">
-            Risk skoru
-          </span>
+          {!compact && (
+            <span className="text-[10px] font-medium uppercase tracking-wide text-ink-subtle">
+              Risk skoru
+            </span>
+          )}
         </div>
       </div>
-      <span className={cn('text-sm font-semibold', textByLevel[assessment.level])}>
+      <span className={cn('font-semibold', compact ? 'text-xs' : 'text-sm', textByLevel[assessment.level])}>
         {assessment.label}
       </span>
     </div>

@@ -2,12 +2,16 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff } from 'lucide-react'
 import {
   isSupportedUploadFile,
   SUPPORTED_UPLOAD_ACCEPT,
   SUPPORTED_UPLOAD_LABEL,
 } from '@/lib/document-file-types'
+import { Button } from '@/components/ui/button'
+import { DocTypeChip } from '@/components/ui/doc-type-chip'
+import { AnimatedCheck } from '@/components/ui/animated-check'
+import { UploadDocsIllustration } from '@/components/illustrations'
 
 const DOC_TYPES = [
   { value: 'INVOICE', label: 'Fatura' },
@@ -382,7 +386,7 @@ export default function DocumentUploadClient({
               </ul>
             )}
           </div>
-          <button
+          <Button
             onClick={() => {
               if (nextAction.action === 'upload') fileInputRef.current?.click()
               if (nextAction.action === 'classify') void handleClassify()
@@ -390,19 +394,22 @@ export default function DocumentUploadClient({
               if (nextAction.action === 'process') void handleProcess()
             }}
             disabled={nextAction.disabled}
-            className="inline-flex shrink-0 items-center rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            loading={nextAction.loading}
+            className="shrink-0"
           >
-            {nextAction.loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+            {!nextAction.loading && <CheckCircle />}
             {nextAction.cta}
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="rounded-lg border border-line bg-surface p-6">
         <h2 className="mb-4 text-base font-semibold text-ink">Belgeleri Yükle</h2>
         <div
-          className={`flex cursor-pointer flex-col items-center rounded-lg border-2 border-dashed px-6 py-8 transition-colors ${
-            dragging ? 'border-brand-500 bg-brand-50' : 'border-line-strong hover:border-brand-500 hover:bg-brand-50'
+          className={`flex cursor-pointer flex-col items-center rounded-lg border-2 border-dashed px-6 py-8 transition-[colors,transform] duration-200 ${
+            dragging
+              ? 'scale-[1.01] border-brand-500 bg-brand-50'
+              : 'border-line-strong hover:border-brand-500 hover:bg-brand-50'
           }`}
           onClick={() => !uploading && fileInputRef.current?.click()}
           onDragEnter={(e) => {
@@ -427,7 +434,13 @@ export default function DocumentUploadClient({
             void uploadFiles(e.dataTransfer.files)
           }}
         >
-          {uploading ? <Loader2 className="h-8 w-8 animate-spin text-brand-500" /> : <Upload className="h-8 w-8 text-ink-subtle" />}
+          {uploading ? (
+            <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+          ) : (
+            <span className="text-ink-subtle">
+              <UploadDocsIllustration width={120} />
+            </span>
+          )}
           <p className="mt-2 text-sm font-medium text-ink-muted">
             {uploading ? 'Yükleniyor...' : 'Dosyaları yükleyin; belge türünü sistem önerecek'}
           </p>
@@ -451,14 +464,10 @@ export default function DocumentUploadClient({
         <div className="rounded-lg border border-line bg-surface">
           <div className="flex items-center justify-between border-b border-line px-6 py-4">
             <h2 className="text-base font-semibold text-ink">Yüklenen Belgeler ({documents.length})</h2>
-            <button
-              onClick={handleClassify}
-              disabled={classifying}
-              className="inline-flex items-center rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {classifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SearchCheck className="mr-2 h-4 w-4" />}
+            <Button onClick={handleClassify} loading={classifying} size="sm">
+              {!classifying && <SearchCheck />}
               {classifying ? 'Okunuyor...' : 'Tekrar oku ve sınıflandır'}
-            </button>
+            </Button>
           </div>
           <div className="divide-y divide-line">
             {documents.map((doc) => (
@@ -469,8 +478,9 @@ export default function DocumentUploadClient({
                     <p className="text-sm font-medium text-ink">{doc.filename}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {doc.suggestedDocType && (
-                        <span className="rounded bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
-                          Öneri: {docTypeLabel(doc.suggestedDocType)}
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-ink-muted">
+                          Öneri:
+                          <DocTypeChip docType={doc.suggestedDocType} label={docTypeLabel(doc.suggestedDocType)} />
                         </span>
                       )}
                       {doc.suggestedDocTypeConfidence != null && (
@@ -612,18 +622,15 @@ export default function DocumentUploadClient({
             </div>
           )}
 
-          <div className="mt-5 flex items-center justify-between">
-            <p className="text-sm text-ink-muted">
+          <div className="mt-5 flex items-center justify-between gap-4">
+            <p className="flex items-center gap-2 text-sm text-ink-muted">
+              {!needsValidation && <AnimatedCheck size={22} />}
               {needsValidation ? 'Önerileri kontrol edip doğruladıktan sonra analiz başlatılabilir.' : 'Sınıflandırma doğrulandı.'}
             </p>
-            <button
-              onClick={handleValidate}
-              disabled={validating}
-              className="inline-flex items-center rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-            >
-              {validating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+            <Button onClick={handleValidate} loading={validating}>
+              {!validating && <CheckCircle />}
               Doğrulamayı kaydet
-            </button>
+            </Button>
           </div>
           {validationError && <div className="mt-3 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{validationError}</div>}
         </div>
@@ -638,14 +645,15 @@ export default function DocumentUploadClient({
                 {canProcess ? `${documents.length} belge doğrulandı.` : 'Önce sınıflandırmayı doğrulayın.'}
               </p>
             </div>
-            <button
+            <Button
               onClick={handleProcess}
-              disabled={processing || !canProcess}
-              className="flex items-center rounded-lg bg-success-600 px-5 py-2 text-sm font-medium text-white hover:bg-success-700 disabled:opacity-50"
+              disabled={!canProcess}
+              loading={processing}
+              variant="success"
             >
-              {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              {!processing && <Play />}
               {processing ? 'İşleniyor...' : 'Analizi Başlat'}
-            </button>
+            </Button>
           </div>
           {processError && <div className="mt-4 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{processError}</div>}
           {(processing || processingProgress) && (
@@ -729,7 +737,7 @@ function ProgressBar({ progress }: { progress: ProcessingProgressState | null })
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface">
         <div
-          className="h-full rounded-full bg-brand-600 transition-all duration-500"
+          className="h-full rounded-full bg-brand-600 transition-[width] duration-300"
           style={{ width: `${percent}%` }}
         />
       </div>

@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table'
 import { PageShell } from '@/components/ui/page-shell'
+import { EmptyDossierIllustration } from '@/components/illustrations'
 import { submissionStatusConfig, tradeFlowConfig } from '@/lib/status'
 
 export default async function DashboardPage() {
@@ -63,11 +64,17 @@ export default async function DashboardPage() {
   return (
     <PageShell>
       {/* Hero band */}
-      <section className="overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 to-brand-700 p-6 text-white shadow-card sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 to-brand-700 p-6 text-white shadow-card sm:p-8">
+        {/* ambient mesh — decorative only, stays inside the band */}
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="absolute -right-16 -top-20 size-64 rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute -bottom-24 right-32 size-56 rounded-full bg-accent-500/15 blur-3xl" />
+          <div className="absolute -left-20 top-1/2 size-48 rounded-full bg-brand-500/30 blur-3xl" />
+        </div>
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-medium text-white/80">Hoş geldiniz</p>
-            <h1 className="mt-1 truncate text-2xl font-bold tracking-tight sm:text-3xl">{user.tenant.name}</h1>
+            <h1 className="mt-1 truncate font-display text-2xl font-bold tracking-tight sm:text-3xl">{user.tenant.name}</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/80">
               Aktif dosyalarınızı, risk analizlerini ve uzman yapay zeka incelemelerini tek ekrandan yönetin.
             </p>
@@ -89,7 +96,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* Stat row */}
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid animate-fade-rise gap-5 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard icon={FileText} label="Toplam dosya" value={stats.total} tone="brand" />
         <StatCard icon={CheckCircle} label="Tamamlandı" value={stats.completed} tone="success" />
         <StatCard icon={Clock} label="İşleniyor" value={stats.pending} tone="warning" />
@@ -114,7 +121,7 @@ export default async function DashboardPage() {
           </CardHeader>
           {submissions.length === 0 ? (
             <EmptyState
-              icon={FileText}
+              illustration={<EmptyDossierIllustration />}
               title="Henüz dosya yüklenmedi."
               description="İlk gümrük dosyanızı oluşturup belgeleri yükleyin; analiz otomatik başlar."
               action={
@@ -199,7 +206,13 @@ export default async function DashboardPage() {
                 <span className="ml-1 text-base font-medium text-ink-subtle">/ {expertQuota.limit}</span>
               </p>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-muted">
-                <div className="h-full rounded-full bg-ai-500" style={{ width: `${quotaPct}%` }} />
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-[width] duration-300',
+                    quotaPct >= 80 ? 'bg-accent-500' : 'bg-ai-500',
+                  )}
+                  style={{ width: `${quotaPct}%` }}
+                />
               </div>
               <p className="mt-2 text-xs text-ink-subtle">Bugün {expertQuota.used} hak kullanıldı.</p>
             </CardContent>

@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
 import { FileText, Upload, BarChart2, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { getProcessingProgress } from '@/lib/processing-progress'
+import { Button } from '@/components/ui/button'
+import { DocTypeChip } from '@/components/ui/doc-type-chip'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -42,38 +44,36 @@ export default async function SubmissionDetailPage({ params }: Props) {
           <span>/</span>
           <span>{submission.title}</span>
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-ink">{submission.title}</h1>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-2xl font-bold text-ink">{submission.title}</h1>
             <p className="mt-1 text-sm text-ink-muted">
               {tradeFlowLabel(submission.tradeFlow)} •{' '}
               {formatDateTime(submission.createdAt)}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/submissions/${submission.id}/documents`}
-              className="flex items-center rounded-lg border border-line-strong px-4 py-2 text-sm font-medium text-ink-muted hover:bg-surface-muted"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Belge Ekle
-            </Link>
-            {latestReport && (
-              <Link
-                href={`/submissions/${submission.id}/report`}
-                className="flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-              >
-                <BarChart2 className="mr-2 h-4 w-4" />
-                Risk Raporu
+          <div className="flex shrink-0 items-center gap-3">
+            <Button asChild variant="outline">
+              <Link href={`/submissions/${submission.id}/documents`}>
+                <Upload />
+                Belge Ekle
               </Link>
+            </Button>
+            {latestReport && (
+              <Button asChild>
+                <Link href={`/submissions/${submission.id}/report`}>
+                  <BarChart2 />
+                  Risk Raporu
+                </Link>
+              </Button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Status card */}
-        <div className="col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Processing status */}
           <div className="rounded-lg border border-line bg-surface p-6">
             <h2 className="mb-4 text-base font-semibold text-ink">İşlem Durumu</h2>
@@ -104,9 +104,10 @@ export default async function SubmissionDetailPage({ params }: Props) {
                     <FileText className="h-5 w-5 text-ink-subtle" />
                     <div className="ml-3 flex-1">
                       <p className="text-sm font-medium text-ink">{doc.label}</p>
-                      <p className="text-xs text-ink-muted">
-                        {doc.latestVersion?.originalFilename ?? 'Dosya yok'} •{' '}
-                        {doc.isIgnored ? 'Yoksayıldı' : doc.docType}
+                      <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+                        <span>{doc.latestVersion?.originalFilename ?? 'Dosya yok'}</span>
+                        <span aria-hidden>•</span>
+                        {doc.isIgnored ? <span>Yoksayıldı</span> : <DocTypeChip docType={doc.docType} />}
                       </p>
                       {doc.suggestedDocType && !doc.classificationValidatedAt && (
                         <p className="text-xs text-brand-600">
@@ -242,7 +243,7 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface">
           <div
-            className="h-full rounded-full bg-brand-600"
+            className="h-full rounded-full bg-brand-600 transition-[width] duration-300"
             style={{ width: `${progress.percent}%` }}
           />
         </div>
@@ -259,12 +260,12 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
               <div className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                 isFailed && isCurrent ? 'bg-danger-100 text-danger-600' :
                 isDone ? 'bg-success-100 text-success-600' :
-                isCurrent ? 'bg-brand-100 text-brand-600' :
+                isCurrent ? 'animate-pulse-soft bg-brand-100 text-brand-600' :
                 'bg-surface-muted text-ink-subtle'
               }`}>
                 {isDone && !isCurrent ? '✓' : i + 1}
               </div>
-              <span className={`text-sm ${isDone ? 'text-ink' : 'text-ink-subtle'}`}>
+              <span className={`text-sm ${isCurrent ? 'font-medium text-ink' : isDone ? 'text-ink' : 'text-ink-subtle'}`}>
                 {step.label}
               </span>
             </li>

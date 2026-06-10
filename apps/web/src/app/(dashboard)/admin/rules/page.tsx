@@ -1,5 +1,8 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { PageShell } from '@/components/ui/page-shell'
+import { PageHeader } from '@/components/ui/page-header'
+import { Badge } from '@/components/ui/badge'
+import { DocTypeChip } from '@/components/ui/doc-type-chip'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { formatDateTime } from '@/lib/utils'
@@ -39,15 +42,13 @@ export default async function AdminRulesPage() {
 
   return (
     <PageShell>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-ink">Kural Yönetimi</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Aktif kurallar, aday kurallar ve kural yaşam döngüsü yönetimi
-        </p>
-      </div>
+      <PageHeader
+        title="Kural Yönetimi"
+        description="Aktif kurallar, aday kurallar ve kural yaşam döngüsü yönetimi"
+      />
 
       {/* Stats */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-lg border border-line bg-white p-4">
           <p className="text-xs text-ink-muted">Aktif Kural</p>
           <p className="text-2xl font-bold text-success-600">{activeRules.length}</p>
@@ -101,9 +102,7 @@ export default async function AdminRulesPage() {
                 <td className="px-6 py-4">
                   <div className="flex flex-wrap gap-1">
                     {rule.appliesToDocTypes.map((t) => (
-                      <span key={t} className="rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-700">
-                        {t}
-                      </span>
+                      <DocTypeChip key={t} docType={t} />
                     ))}
                   </div>
                 </td>
@@ -177,9 +176,7 @@ export default async function AdminRulesPage() {
                     {(rule.appliesToDocTypes.length > 0 || rule.aiConfidence != null) && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1">
                         {rule.appliesToDocTypes.map((t) => (
-                          <span key={t} className="rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-700">
-                            {t}
-                          </span>
+                          <DocTypeChip key={t} docType={t} />
                         ))}
                         {rule.aiConfidence != null && (
                           <span className="text-xs text-ink-subtle">
@@ -208,29 +205,21 @@ export default async function AdminRulesPage() {
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
-  const map: Record<string, string> = {
-    ERROR: 'bg-danger-100 text-danger-700',
-    WARNING: 'bg-warning-100 text-warning-700',
-    INFO: 'bg-surface-muted text-ink-muted',
+  const toneMap: Record<string, 'danger' | 'warning' | 'neutral'> = {
+    ERROR: 'danger',
+    WARNING: 'warning',
+    INFO: 'neutral',
   }
-  return (
-    <span className={`rounded px-2 py-0.5 text-xs font-medium ${map[severity] ?? 'bg-surface-muted text-ink-muted'}`}>
-      {severity}
-    </span>
-  )
+  return <Badge tone={toneMap[severity] ?? 'neutral'}>{severity}</Badge>
 }
 
 function CandidateStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    DRAFT: { label: 'Taslak', className: 'bg-surface-muted text-ink-muted' },
-    IN_REVIEW: { label: 'İncelemede', className: 'bg-warning-100 text-warning-700' },
-    APPROVED: { label: 'Onaylandı', className: 'bg-success-100 text-success-700' },
-    REJECTED: { label: 'Reddedildi', className: 'bg-danger-100 text-danger-700' },
+  const map: Record<string, { label: string; tone: 'neutral' | 'warning' | 'success' | 'danger' }> = {
+    DRAFT: { label: 'Taslak', tone: 'neutral' },
+    IN_REVIEW: { label: 'İncelemede', tone: 'warning' },
+    APPROVED: { label: 'Onaylandı', tone: 'success' },
+    REJECTED: { label: 'Reddedildi', tone: 'danger' },
   }
-  const cfg = map[status] ?? { label: status, className: 'bg-surface-muted text-ink-muted' }
-  return (
-    <span className={`rounded px-2 py-0.5 text-xs font-medium ${cfg.className}`}>
-      {cfg.label}
-    </span>
-  )
+  const cfg = map[status] ?? { label: status, tone: 'neutral' as const }
+  return <Badge tone={cfg.tone}>{cfg.label}</Badge>
 }

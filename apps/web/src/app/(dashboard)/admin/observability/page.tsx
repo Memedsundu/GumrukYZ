@@ -1,5 +1,6 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { PageShell } from '@/components/ui/page-shell'
+import { PageHeader } from '@/components/ui/page-header'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { Activity, TrendingUp, AlertCircle, DollarSign } from 'lucide-react'
@@ -165,15 +166,13 @@ export default async function ObservabilityPage() {
 
   return (
     <PageShell>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-ink">Sağlayıcı Takibi</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Yapay zeka sağlayıcıları ve işlem maliyetleri. Gerçek zamanlı veriler.
-        </p>
-      </div>
+      <PageHeader
+        title="Sağlayıcı Takibi"
+        description="Yapay zeka sağlayıcıları ve işlem maliyetleri. Gerçek zamanlı veriler."
+      />
 
       {/* Top-level stats */}
-      <div className="mb-6 grid grid-cols-4 gap-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-lg border border-line bg-white p-4">
           <div className="flex items-center gap-2 text-ink-muted">
             <Activity className="h-4 w-4" />
@@ -207,7 +206,7 @@ export default async function ObservabilityPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid gap-6 lg:grid-cols-2">
         {/* Provider breakdown */}
         <div className="rounded-lg border border-line bg-white">
           <div className="border-b border-line px-6 py-4">

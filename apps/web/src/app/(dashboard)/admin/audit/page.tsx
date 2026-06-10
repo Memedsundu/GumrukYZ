@@ -1,5 +1,8 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
 import { PageShell } from '@/components/ui/page-shell'
+import { PageHeader } from '@/components/ui/page-header'
+import { Badge, type BadgeProps } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
 import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { ScrollText } from 'lucide-react'
@@ -13,13 +16,13 @@ const ACTION_LABELS: Record<string, string> = {
   'rule.override': 'Kural Geçersiz Kılındı',
 }
 
-const ACTION_COLORS: Record<string, string> = {
-  CREATE: 'bg-success-100 text-success-700',
-  UPDATE: 'bg-brand-100 text-brand-700',
-  DELETE: 'bg-danger-100 text-danger-700',
-  OVERRIDE: 'bg-accent-100 text-accent-600',
-  'submission.created': 'bg-success-100 text-success-700',
-  'rule.override': 'bg-accent-100 text-accent-600',
+const ACTION_TONES: Record<string, BadgeProps['tone']> = {
+  CREATE: 'success',
+  UPDATE: 'info',
+  DELETE: 'danger',
+  OVERRIDE: 'accent',
+  'submission.created': 'success',
+  'rule.override': 'accent',
 }
 
 interface PageProps {
@@ -75,12 +78,10 @@ export default async function AuditPage({ searchParams }: PageProps) {
 
   return (
     <PageShell>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-ink">Denetim Günlüğü</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Tüm değişikliklerin kayıtları. Müşteri ve kural değişikliklerini takip edin.
-        </p>
-      </div>
+      <PageHeader
+        title="Denetim Günlüğü"
+        description="Tüm değişikliklerin kayıtları. Müşteri ve kural değişikliklerini takip edin."
+      />
 
       {/* Filters */}
       <form method="GET" className="mb-6 flex flex-wrap gap-3">
@@ -126,10 +127,7 @@ export default async function AuditPage({ searchParams }: PageProps) {
       {/* Log table */}
       <div className="overflow-hidden rounded-lg border border-line bg-white">
         {logs.length === 0 ? (
-          <div className="px-6 py-12 text-center">
-            <ScrollText className="mx-auto mb-3 h-8 w-8 text-ink-subtle" />
-            <p className="text-sm text-ink-muted">Denetim kaydı bulunamadı.</p>
-          </div>
+          <EmptyState icon={ScrollText} title="Denetim kaydı bulunamadı." className="py-12" />
         ) : (
           <table className="min-w-full divide-y divide-line">
             <thead className="bg-surface-muted">
@@ -164,13 +162,9 @@ export default async function AuditPage({ searchParams }: PageProps) {
                     })}
                   </td>
                   <td className="px-6 py-3">
-                    <span
-                      className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${
-                        ACTION_COLORS[log.action] ?? 'bg-surface-muted text-ink-muted'
-                      }`}
-                    >
+                    <Badge tone={ACTION_TONES[log.action] ?? 'neutral'}>
                       {ACTION_LABELS[log.action] ?? log.action}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="px-6 py-3 text-sm text-ink-muted">{log.entityType}</td>
                   <td className="px-6 py-3 text-xs font-mono text-ink-muted">
