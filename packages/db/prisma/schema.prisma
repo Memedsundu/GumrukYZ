@@ -246,6 +246,7 @@ model DeclarationSnapshot {
   totalNetWeight          Decimal?  @map("total_net_weight") @db.Decimal(12, 3)
   totalGrossWeight        Decimal?  @map("total_gross_weight") @db.Decimal(12, 3)
   packageCount            Int?      @map("package_count")
+  gtipCode                String?   @map("gtip_code")
   rawJson                 Json?     @map("raw_json")
   createdAt               DateTime  @default(now()) @map("created_at")
 
@@ -339,7 +340,6 @@ model Rule {
   appliesToDocTypes   String[]  @map("applies_to_doc_types")
   fieldChecks         String[]  @map("field_checks")
   severity            String    // RuleSeverity
-  explanationTemplate String    @map("explanation_template")
   sourceDocumentId    String?   @map("source_document_id")
   effectiveFrom       DateTime? @map("effective_from")
   fixturePassRef      String?   @map("fixture_pass_ref")
@@ -445,18 +445,22 @@ model RiskReport {
   id               String   @id @default(uuid())
   submissionId     String   @map("submission_id")
   tenantId         String   @map("tenant_id")
+  providerRunId    String?  @map("provider_run_id")
   totalErrors      Int      @default(0) @map("total_errors")
   totalWarnings    Int      @default(0) @map("total_warnings")
   totalReviewNeeded Int     @default(0) @map("total_review_needed")
   summaryText      String?  @map("summary_text")
+  findingExplanationsJson Json? @map("finding_explanations_json")
   snapshotJson     Json?    @map("snapshot_json")
   generatedAt      DateTime @default(now()) @map("generated_at")
 
-  tenant     Tenant     @relation(fields: [tenantId], references: [id])
-  submission Submission @relation(fields: [submissionId], references: [id])
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  submission  Submission   @relation(fields: [submissionId], references: [id])
+  providerRun ProviderRun? @relation(fields: [providerRunId], references: [id])
 
   @@index([submissionId])
   @@index([tenantId])
+  @@index([providerRunId])
   @@map("risk_reports")
 }
 
@@ -470,6 +474,7 @@ model ExpertReview {
   model              String?
   overallRisk        String?   @map("overall_risk")
   summary            String?
+  supersededAt       DateTime? @map("superseded_at")
   createdAt          DateTime  @default(now()) @map("created_at")
   completedAt        DateTime? @map("completed_at")
 
@@ -495,6 +500,7 @@ model ExpertReviewFinding {
   explanation      String
   recommendation   String
   evidenceRefsJson Json?    @map("evidence_refs_json")
+  gtipCandidatesJson Json?  @map("gtip_candidates_json")
   createdAt        DateTime @default(now()) @map("created_at")
 
   tenant       Tenant                         @relation(fields: [tenantId], references: [id])
@@ -576,6 +582,7 @@ model ProviderRun {
   durationMs       Int?     @map("duration_ms")
   status           String   @default("OK") // 'OK' | 'ERROR'
   errorMessage     String?  @map("error_message")
+  promptVersion    String?  @map("prompt_version")
   createdAt        DateTime @default(now()) @map("created_at")
 
   tenant      Tenant               @relation(fields: [tenantId], references: [id])
@@ -583,6 +590,7 @@ model ProviderRun {
   classificationSuggestions DocumentClassificationSuggestion[]
   expertReviews ExpertReview[]
   aiRuleValidations AiRuleValidation[]
+  riskReports RiskReport[]
 
   @@index([tenantId])
   @@index([provider, operation])

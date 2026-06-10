@@ -14,7 +14,8 @@ const DEFAULT_METADATA: RuleDisplayMetadata = {
   blocking: false,
 }
 
-const RULE_METADATA: Record<string, RuleDisplayMetadata> = {
+// Exported for the rule parity check (scripts/check-rule-parity.ts).
+export const RULE_METADATA: Record<string, RuleDisplayMetadata> = {
   'QUAL-001': {
     category: 'Belge kalitesi',
     turkishTitle: 'Boş çıkarma',

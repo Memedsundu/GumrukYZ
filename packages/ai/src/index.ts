@@ -1,6 +1,13 @@
-export type { LlmProvider, DocumentClassificationResult, ExtractionResult, ExplanationResult, ProviderRunMetadata } from './provider.js'
-export { OpenAIProvider } from './openai-provider.js'
+export type { LlmProvider, DocumentClassificationResult, ExtractionResult, ExplanationResult, ProviderRunMetadata, RiskSummaryFindingInput } from './provider.js'
+export { OpenAIProvider, RISK_SUMMARY_PROMPT_VERSION } from './openai-provider.js'
 export { AnthropicPlaceholder } from './anthropic-placeholder.js'
+export {
+  createStructuredOpenAIClient,
+  parseStructuredOutput,
+  type StructuredParseRequest,
+  type StructuredParseResult,
+  type StructuredUserContent,
+} from './structured-client.js'
 export * from './schemas.js'
 
 import { OpenAIProvider } from './openai-provider.js'

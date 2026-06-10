@@ -99,6 +99,20 @@ export type TransportDocExtraction = z.infer<typeof TransportDocExtractionSchema
 
 // ─── Declaration output extraction schema ────────────────────────────────────
 
+export const DeclarationItemExtractionSchema = z.object({
+  line_number: z.number().nullable(),
+  gtip_code: z.string().nullable(),
+  goods_description: z.string().nullable(),
+  quantity: z.number().nullable(),
+  unit: z.string().nullable(),
+  net_weight: z.number().nullable(),
+  gross_weight: z.number().nullable(),
+  value: z.number().nullable(),
+  currency: z.string().nullable(),
+})
+
+export type DeclarationItemExtraction = z.infer<typeof DeclarationItemExtractionSchema>
+
 export const DeclarationOutputExtractionSchema = z.object({
   declaration_number: z.string().nullable(),
   declaration_date: z.string().nullable(),
@@ -117,6 +131,8 @@ export const DeclarationOutputExtractionSchema = z.object({
   currency: z.string().nullable(),
   incoterm: z.string().nullable(),
   permit_refs: z.array(z.string()).nullable(),
+  /** Kalem (line item) rows for multi-item declarations; null when not visible. */
+  items: z.array(DeclarationItemExtractionSchema).nullable(),
 })
 
 export type DeclarationOutputExtraction = z.infer<typeof DeclarationOutputExtractionSchema>

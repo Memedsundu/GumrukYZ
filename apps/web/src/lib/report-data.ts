@@ -3,6 +3,7 @@ import {
   formatRuleResultMessage,
   formatSourceRef,
   getRuleDisplayMetadata,
+  parseFindingExplanations,
   parseSourceRefs,
   recommendedActionForRuleResult,
   resultLabel,
@@ -68,7 +69,10 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
 
   const report = submission.riskReports[0]
   if (!report) return null
-  const expertReview = submission.expertReviews.find(shouldIntegrateExpertReview) ?? submission.expertReviews[0] ?? null
+  // Superseded reviews (stale after reprocess) are kept for audit but never
+  // shown as the current expert review.
+  const currentExpertReviews = submission.expertReviews.filter((review) => !review.supersededAt)
+  const expertReview = currentExpertReviews.find(shouldIntegrateExpertReview) ?? currentExpertReviews[0] ?? null
   const expertCounts = countIntegratedExpertFindings(expertReview)
   const mergedSummaryText = mergeReportSummaryText(report.summaryText, expertReview)
   const mergedWarnings = report.totalWarnings + expertCounts.warnings
@@ -98,6 +102,8 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
   const actionSummary = [...deterministicActionSummary, ...expertActionSummary]
     .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
     .slice(0, 8)
+
+  const findingExplanations = parseFindingExplanations(report.findingExplanationsJson)
 
   return {
     generatedAt: new Date().toISOString(),
@@ -158,7 +164,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
             explanation: finding.explanation,
             recommendation: finding.recommendation,
             evidenceRefs: parseExpertEvidenceRefs(finding.evidenceRefsJson),
-            gtipCandidates: parseExpertGtipCandidates(finding.evidenceRefsJson),
+            gtipCandidates: parseExpertGtipCandidates(finding.gtipCandidatesJson ?? finding.evidenceRefsJson),
             citations: finding.citations.map((citation) => ({
               id: citation.id,
               chunkId: citation.regulationChunk.id,
@@ -180,6 +186,9 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
     ruleResults: submission.ruleResults.map((result) => {
       const sourceRefs = parseSourceRefs(result.sourceRefsJson)
       return {
+        aiSummaryExplanation: findingExplanations.get(result.id)
+          ?? findingExplanations.get(`ai-rule:${result.id}`)
+          ?? null,
         id: result.id,
         ruleCode: result.ruleCode,
         severity: result.severity,

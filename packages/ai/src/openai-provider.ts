@@ -1,10 +1,10 @@
 import { generateObject, generateText } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
-import type { LlmProvider, DocumentClassificationResult, ExplanationResult, ProviderRunMetadata } from './provider.js'
+import type { LlmProvider, DocumentClassificationResult, ExplanationResult, ProviderRunMetadata, RiskSummaryFindingInput } from './provider.js'
 import type { DocumentType } from '@gumrukyz/domain'
 import { DocumentType as DocTypeEnum, TradeFlow } from '@gumrukyz/domain'
-import { ProviderError } from '@gumrukyz/shared'
+import { ProviderError, estimateModelCostUsd } from '@gumrukyz/shared'
 
 const DocumentClassificationSchema = z.object({
   detectedType: z.enum([
@@ -38,10 +38,17 @@ const DocumentClassificationSchema = z.object({
   ),
 })
 
+/**
+ * Bump when the risk summary prompt or schema changes; stored on the
+ * risk_summary ProviderRun row so findings can be tied to a prompt revision.
+ */
+export const RISK_SUMMARY_PROMPT_VERSION = '2026-06-10.1'
+
 const RiskSummarySchema = z.object({
   summary: z.string(),
   findingExplanations: z.array(
     z.object({
+      findingId: z.string(),
       ruleCode: z.string(),
       explanation: z.string(),
     }),
@@ -153,7 +160,7 @@ ${rawText.slice(0, 6000)}`,
   }
 
   async generateRiskSummary(
-    findings: Array<{ ruleCode: string; severity: string; message: string }>,
+    findings: RiskSummaryFindingInput[],
     tradeFlow: string,
     regulationContext?: Array<{ title: string; excerpt: string }>,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }> {
@@ -161,7 +168,7 @@ ${rawText.slice(0, 6000)}`,
     const start = Date.now()
 
     const findingsList = findings
-      .map((f) => `[${f.severity}] ${f.ruleCode}: ${f.message}`)
+      .map((f) => `[findingId=${f.findingId}] [${f.severity}] ${f.ruleCode}: ${f.message}`)
       .join('\n')
 
     const regulationSection = regulationContext && regulationContext.length > 0
@@ -183,7 +190,8 @@ Kurallar:
 - Hukuki hüküm verme ve gümrük işleminin kesin geçeceğini söyleme
 - Bulguların pratikte ne anlama geldiğini açıkla
 - Mevzuat bağlamı verilmişse ilgili maddelere Türkçe atıf yap; kaynak uydurmama
-- Genel özeti 2-3 cümleyle sınırla`,
+- Genel özeti 2-3 cümleyle sınırla
+- findingExplanations içinde her bulgunun findingId değerini AYNEN kopyala; yeni findingId uydurma`,
     })
 
     return {
@@ -200,8 +208,7 @@ Kurallar:
   }
 
   private estimateCost(inputTokens: number, outputTokens: number): number {
-    // gpt-4o pricing: $2.50/1M input, $10.00/1M output (approximate)
-    return (inputTokens * 0.0000025) + (outputTokens * 0.00001)
+    return estimateModelCostUsd(this.model, inputTokens, outputTokens) ?? 0
   }
 
   async generateText(prompt: string): Promise<{ text: string; meta: ProviderRunMetadata }> {

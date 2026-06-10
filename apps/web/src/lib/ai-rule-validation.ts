@@ -1,13 +1,14 @@
-import OpenAI from 'openai'
-import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
+import { parseStructuredOutput } from '@gumrukyz/ai'
 import { prisma, Prisma } from '@gumrukyz/db'
 import type { ExtractionData } from '@gumrukyz/rules'
-import { logger } from '@gumrukyz/shared'
+import { estimateModelCostUsd, logger } from '@gumrukyz/shared'
 
 const DEFAULT_MODEL = 'gpt-5.4-mini'
 const DEFAULT_TIMEOUT_MS = 60_000
 const DEFAULT_MAX_FINDINGS = 10
+/** Bump when the validation prompt or schema changes. */
+const RULE_VALIDATION_PROMPT_VERSION = '2026-06-10.1'
 
 const ValidationStatusSchema = z.enum([
   'LIKELY_CORRECT',
@@ -82,6 +83,7 @@ export async function runAiRuleValidationForSubmission(params: {
       model,
       operation: 'ai_rule_validation',
       status: 'OK',
+      promptVersion: RULE_VALIDATION_PROMPT_VERSION,
     },
   })
 
@@ -90,35 +92,18 @@ export async function runAiRuleValidationForSubmission(params: {
     const schema = z.object({
       validations: z.array(AiRuleValidationItemSchema).max(maxFindings),
     })
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-    const response = await openai.responses.parse(
-      {
-        model,
-        reasoning: { effort: 'low' },
-        input: [
-          {
-            role: 'system',
-            content:
-              'Sen Türkiye gümrük kontrol sonuçlarını hızlıca ikinci göz olarak inceleyen yardımcı asistansın. Çıktı Türkçe ve yalnızca verilen belge, kural ve mevzuat kanıtına dayalı olmalıdır.',
-          },
-          {
-            role: 'user',
-            content: buildPrompt(params, maxFindings),
-          },
-        ],
-        text: {
-          format: zodTextFormat(schema, 'gumrukyz_ai_rule_validation'),
-        },
-        max_output_tokens: 4_000,
-      },
-      {
-        timeout: getTimeoutMs(),
-        maxRetries: 1,
-      },
-    )
-
-    const parsed = response.output_parsed as z.infer<typeof schema> | null
-    if (!parsed) throw new Error('OpenAI rule validation returned no parsed output')
+    const { parsed, responseModel, inputTokens, outputTokens } = await parseStructuredOutput<z.infer<typeof schema>>({
+      model,
+      schema,
+      schemaName: 'gumrukyz_ai_rule_validation',
+      system:
+        'Sen Türkiye gümrük kontrol sonuçlarını hızlıca ikinci göz olarak inceleyen yardımcı asistansın. Çıktı Türkçe ve yalnızca verilen belge, kural ve mevzuat kanıtına dayalı olmalıdır.',
+      user: buildPrompt(params, maxFindings),
+      reasoningEffort: 'low',
+      maxOutputTokens: 4_000,
+      timeoutMs: getTimeoutMs(),
+      maxRetries: 1,
+    })
 
     const allowedRuleResults = new Map(params.ruleResults.map((ruleResult) => [ruleResult.id, ruleResult]))
     const findings = parsed.validations
@@ -129,10 +114,10 @@ export async function runAiRuleValidationForSubmission(params: {
       await tx.providerRun.update({
         where: { id: providerRun.id },
         data: {
-          model: String(response.model ?? model),
-          inputTokens: response.usage?.input_tokens,
-          outputTokens: response.usage?.output_tokens,
-          estimatedCostUsd: estimateCost(model, response.usage?.input_tokens, response.usage?.output_tokens),
+          model: responseModel,
+          inputTokens,
+          outputTokens,
+          estimatedCostUsd: estimateModelCostUsd(model, inputTokens, outputTokens),
           durationMs: Date.now() - startedAt,
         },
       })
@@ -181,33 +166,37 @@ export async function runAiRuleValidationForSubmission(params: {
   }
 }
 
+const PROMPT_PAYLOAD_BUDGET = 26_000
+const MIN_DOCUMENT_BUDGET = 2_000
+
 function buildPrompt(params: {
   tradeFlow: string
   documents: ExtractionData[]
   ruleResults: RuleResultForAiValidation[]
 }, maxFindings: number): string {
-  const payload = {
-    tradeFlow: params.tradeFlow,
-    documents: params.documents.map((document) => ({
-      docType: document.docType,
-      confidence: document.confidence,
-      data: compactJson(document.data),
+  // Rule results carry the rule_result_ids the model must echo back, so they
+  // are serialized first and never truncated. Documents fill the remaining
+  // budget with progressively more aggressive compaction — a large document
+  // set can no longer push the rule results (and their IDs) out of the prompt.
+  const ruleResultsJson = JSON.stringify(params.ruleResults.map((ruleResult) => ({
+    id: ruleResult.id,
+    ruleCode: ruleResult.ruleCode,
+    severity: ruleResult.severity,
+    result: ruleResult.result,
+    message: ruleResult.message,
+    sourceRefs: ruleResult.sourceRefsJson,
+    legalCitations: ruleResult.legalCitations.map((citation) => ({
+      sourceTitle: citation.sourceTitle,
+      articleLabel: citation.articleLabel,
+      excerpt: citation.excerpt.slice(0, 320),
+      url: citation.url,
     })),
-    ruleResults: params.ruleResults.map((ruleResult) => ({
-      id: ruleResult.id,
-      ruleCode: ruleResult.ruleCode,
-      severity: ruleResult.severity,
-      result: ruleResult.result,
-      message: ruleResult.message,
-      sourceRefs: ruleResult.sourceRefsJson,
-      legalCitations: ruleResult.legalCitations.map((citation) => ({
-        sourceTitle: citation.sourceTitle,
-        articleLabel: citation.articleLabel,
-        excerpt: citation.excerpt.slice(0, 320),
-        url: citation.url,
-      })),
-    })),
-  }
+  })))
+
+  const documentBudget = Math.max(PROMPT_PAYLOAD_BUDGET - ruleResultsJson.length, MIN_DOCUMENT_BUDGET)
+  const documentsJson = serializeDocumentsWithinBudget(params.documents, documentBudget)
+
+  const payloadJson = `{"tradeFlow":${JSON.stringify(params.tradeFlow)},"ruleResults":${ruleResultsJson},"documents":${documentsJson}}`
 
   return `Deterministik gümrük kural sonuçlarını kullanıcıya yardımcı olacak şekilde ikinci göz olarak kontrol et.
 
@@ -233,13 +222,47 @@ Kesin kurallar:
 - Eğer emin değilsen NEEDS_HUMAN_REVIEW kullan.
 
 Veri:
-${JSON.stringify(payload).slice(0, 26_000)}`
+${payloadJson}`
 }
 
-function compactJson(value: unknown): unknown {
+/**
+ * Serializes documents into a JSON array string that fits the given character
+ * budget, trying progressively more aggressive compaction levels: full data
+ * with long strings truncated, then shorter string truncation, then metadata
+ * only (docType + confidence). Always returns valid JSON.
+ */
+function serializeDocumentsWithinBudget(documents: ExtractionData[], budget: number): string {
+  const levels: Array<(document: ExtractionData) => unknown> = [
+    (document) => ({
+      docType: document.docType,
+      confidence: document.confidence,
+      data: compactJson(document.data, 420),
+    }),
+    (document) => ({
+      docType: document.docType,
+      confidence: document.confidence,
+      data: compactJson(document.data, 160),
+    }),
+    (document) => ({
+      docType: document.docType,
+      confidence: document.confidence,
+    }),
+  ]
+
+  let serialized = '[]'
+  for (const level of levels) {
+    serialized = JSON.stringify(documents.map(level))
+    if (serialized.length <= budget) return serialized
+  }
+  return JSON.stringify(documents.map(levels[levels.length - 1]!))
+}
+
+function compactJson(value: unknown, maxStringLength = 420): unknown {
   if (!value || typeof value !== 'object') return value
   return JSON.parse(JSON.stringify(value, (_key, nestedValue) => {
-    if (typeof nestedValue === 'string' && nestedValue.length > 420) return `${nestedValue.slice(0, 420)}...`
+    if (typeof nestedValue === 'string' && nestedValue.length > maxStringLength) {
+      return `${nestedValue.slice(0, maxStringLength)}...`
+    }
     return nestedValue
   }))
 }
@@ -258,11 +281,3 @@ function normalizeConfidence(value: number): number {
   return Math.max(0, Math.min(1, Math.round(value * 100) / 100))
 }
 
-function estimateCost(model: string, inputTokens?: number, outputTokens?: number): number | undefined {
-  if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number') return undefined
-  const normalized = model.toLowerCase()
-  const rates = normalized.includes('gpt-5.4-mini')
-    ? { input: 0.75, output: 4.5 }
-    : { input: 2.5, output: 15 }
-  return Math.round(((inputTokens * rates.input + outputTokens * rates.output) / 1_000_000) * 1_000_000) / 1_000_000
-}

@@ -8,6 +8,7 @@ import {
   formatRuleResultMessage,
   formatSourceRef,
   getRuleDisplayMetadata,
+  parseFindingExplanations,
   parseSourceRefs,
   recommendedActionForRuleResult,
   resultLabel,
@@ -103,7 +104,10 @@ export default async function ReportPage({ params }: Props) {
   const warnings = submission.ruleResults.filter((result) => result.result === 'WARN')
   const reviewNeeded = submission.ruleResults.filter((result) => result.result === 'REVIEW_NEEDED')
   const passes = submission.ruleResults.filter((result) => result.result === 'PASS')
-  const expertReview = submission.expertReviews.find(shouldIntegrateExpertReview) ?? submission.expertReviews[0] ?? null
+  // Superseded reviews (stale after reprocess) stay in the DB for audit but
+  // are never shown as the current expert review.
+  const currentExpertReviews = submission.expertReviews.filter((review) => !review.supersededAt)
+  const expertReview = currentExpertReviews.find(shouldIntegrateExpertReview) ?? currentExpertReviews[0] ?? null
   const expertCounts = countIntegratedExpertFindings(expertReview)
   const expertQuota = await getExpertReviewQuota(user.tenantId)
   const canOverride = canManageTenant(user)
@@ -118,6 +122,8 @@ export default async function ReportPage({ params }: Props) {
     extractionConfidence: document.latestVersion?.extractions[0]?.confidence ?? null,
     classificationConfidence: document.suggestedDocTypeConfidence,
   }))
+
+  const findingExplanations = parseFindingExplanations(report.findingExplanationsJson)
 
   const ruleFindings: ReportFindingItem[] = submission.ruleResults.map((result) => {
     const metadata = getRuleDisplayMetadata(result.ruleCode)
@@ -156,6 +162,9 @@ export default async function ReportPage({ params }: Props) {
         recommendation: validation.recommendation,
       })),
       gtipCandidates: [],
+      summaryExplanation: findingExplanations.get(result.id)
+        ?? findingExplanations.get(`ai-rule:${result.id}`)
+        ?? null,
       overrideReason: override?.reason ?? null,
       canOverride: canOverride && result.result !== 'PASS' && !override,
       defaultOpen: result.result === 'FAIL' || result.result === 'REVIEW_NEEDED',
@@ -165,7 +174,7 @@ export default async function ReportPage({ params }: Props) {
   const expertFindings: ReportFindingItem[] = shouldIntegrateExpertReview(expertReview)
     ? expertReview.findings.map((finding, index) => {
         const evidenceRefs = parseExpertEvidenceRefs(finding.evidenceRefsJson)
-        const gtipCandidates = parseExpertGtipCandidates(finding.evidenceRefsJson)
+        const gtipCandidates = parseExpertGtipCandidates(finding.gtipCandidatesJson ?? finding.evidenceRefsJson)
         return {
           id: finding.id,
           kind: 'expert',
@@ -198,6 +207,7 @@ export default async function ReportPage({ params }: Props) {
             rationale: candidate.rationale,
             requiredEvidence: candidate.requiredEvidence,
           })),
+          summaryExplanation: null,
           overrideReason: null,
           canOverride: false,
           defaultOpen: true,

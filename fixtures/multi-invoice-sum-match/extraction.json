@@ -1,0 +1,42 @@
+{
+  "_fixture": "multi-invoice-sum-match",
+  "_description": "Two invoices in the same currency whose totals sum to the declaration value — CROSS-001 must aggregate and PASS",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.93,
+      "data": {
+        "invoice_number": "INV-2024-A1",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 30000.0
+      }
+    },
+    {
+      "docType": "INVOICE",
+      "confidence": 0.91,
+      "data": {
+        "invoice_number": "INV-2024-A2",
+        "invoice_date": "2024-04-03",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 12500.0
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24010000456789",
+    "declarationDate": "2024-04-10",
+    "regimeCode": "4000",
+    "totalValue": 42500.0,
+    "currency": "EUR"
+  },
+  "_expectedResults": {
+    "CROSS-001": "PASS"
+  },
+  "_expectedAbsentResults": ["QUAL-003"]
+}

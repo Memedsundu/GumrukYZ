@@ -1,0 +1,41 @@
+{
+  "_fixture": "multi-invoice-currency-mismatch",
+  "_description": "Two invoices in different currencies — CROSS-001 must refuse to sum and ask for human review instead of failing",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.93,
+      "data": {
+        "invoice_number": "INV-2024-B1",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 30000.0
+      }
+    },
+    {
+      "docType": "INVOICE",
+      "confidence": 0.9,
+      "data": {
+        "invoice_number": "INV-2024-B2",
+        "invoice_date": "2024-04-03",
+        "seller_name": "US Components Inc.",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "USD",
+        "total_amount": 12500.0
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24010000456790",
+    "declarationDate": "2024-04-10",
+    "regimeCode": "4000",
+    "totalValue": 42500.0,
+    "currency": "EUR"
+  },
+  "_expectedResults": {
+    "CROSS-001": "REVIEW_NEEDED"
+  }
+}

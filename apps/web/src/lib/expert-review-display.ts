@@ -14,6 +14,8 @@ export type ExpertGtipCandidate = {
 export type ExpertReviewForDisplay = {
   status: string
   summary: string | null
+  /** Set when the submission was reprocessed after this review completed. */
+  supersededAt?: Date | string | null
   findings: Array<{
     severity: string
     title: string
@@ -25,7 +27,8 @@ export type ExpertReviewForDisplay = {
 }
 
 export function shouldIntegrateExpertReview(review: ExpertReviewForDisplay | null | undefined): boolean {
-  return Boolean(review && (review.status === 'COMPLETED' || review.status === 'LEGAL_CONTEXT_INCOMPLETE'))
+  if (!review || review.supersededAt) return false
+  return review.status === 'COMPLETED' || review.status === 'LEGAL_CONTEXT_INCOMPLETE'
 }
 
 export function countIntegratedExpertFindings(review: ExpertReviewForDisplay | null | undefined) {
@@ -56,11 +59,21 @@ export function parseExpertEvidenceRefs(value: unknown): ExpertEvidenceRef[] {
   return []
 }
 
+/**
+ * Reads GTİP candidates from the dedicated `gtipCandidatesJson` column
+ * (plain array) with a fallback to the legacy format where candidates were
+ * embedded inside `evidenceRefsJson` as `{ evidenceRefs, gtipCandidates }`.
+ */
 export function parseExpertGtipCandidates(value: unknown): ExpertGtipCandidate[] {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return []
-  const record = value as { gtipCandidates?: unknown }
-  if (!Array.isArray(record.gtipCandidates)) return []
-  return record.gtipCandidates
+  let rawCandidates: unknown[] = []
+  if (Array.isArray(value)) {
+    rawCandidates = value
+  } else if (value && typeof value === 'object') {
+    const record = value as { gtipCandidates?: unknown }
+    if (Array.isArray(record.gtipCandidates)) rawCandidates = record.gtipCandidates
+  }
+  if (rawCandidates.length === 0) return []
+  return rawCandidates
     .map((item) => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) return null
       const candidate = item as {

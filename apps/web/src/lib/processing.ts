@@ -4,8 +4,9 @@
  * Sprint 1 implementation: synchronous in-process execution.
  * Sprint 2: replace with Trigger.dev durable job.
  *
- * Pipeline steps:
- * CLASSIFYING → EXTRACTING → NORMALIZING → RUNNING_RULES → AI_RULE_VALIDATING → GENERATING_REPORT → COMPLETED
+ * Pipeline steps (classification happens pre-pipeline with mandatory human
+ * validation; see classification.ts and the /process route gate):
+ * EXTRACTING → NORMALIZING → RUNNING_RULES → AI_RULE_VALIDATING → GENERATING_REPORT → COMPLETED
  */
 import { prisma, searchRegulations } from '@gumrukyz/db'
 import { Prisma } from '@gumrukyz/db'
@@ -22,7 +23,7 @@ import {
   toFiniteNumber,
 } from '@gumrukyz/rules'
 import type { SubmissionContext, ExtractionData } from '@gumrukyz/rules'
-import { OpenAIProvider } from '@gumrukyz/ai'
+import { OpenAIProvider, RISK_SUMMARY_PROMPT_VERSION } from '@gumrukyz/ai'
 import {
   InvoiceExtractionSchema,
   PackingListExtractionSchema,
@@ -437,7 +438,11 @@ export async function processSubmission(
               result as Record<string, unknown>,
               rawText,
             )
-            aiConfidence = 0.85
+            aiConfidence = deriveStructuredExtractionConfidence(
+              docType,
+              structuredData,
+              extractionConfidence,
+            )
 
             await prisma.providerRun.update({
               where: { id: providerRun.id },
@@ -534,7 +539,7 @@ export async function processSubmission(
 
       const sourceDoc = submission.documents.find((doc) => doc.docType === 'DECLARATION_OUTPUT')
       if (sourceDoc?.latestVersionId) {
-        await prisma.declarationSnapshot.create({
+        const snapshot = await prisma.declarationSnapshot.create({
           data: {
             submissionId,
             tenantId,
@@ -548,9 +553,29 @@ export async function processSubmission(
             totalNetWeight: numberOrNull(d['net_weight']),
             totalGrossWeight: numberOrNull(d['gross_weight']),
             packageCount: intOrNull(d['package_count']),
+            gtipCode: stringOrNull(d['gtip_code']),
             rawJson: d as Prisma.InputJsonValue,
           },
         })
+
+        const items = extractDeclarationItems(d['items'])
+        if (items.length > 0) {
+          await prisma.declarationItem.createMany({
+            data: items.map((item, index) => ({
+              declarationSnapshotId: snapshot.id,
+              tenantId,
+              lineNumber: item.lineNumber ?? index + 1,
+              gtipCode: item.gtipCode,
+              goodsDescription: item.goodsDescription,
+              quantity: item.quantity,
+              unit: item.unit,
+              netWeight: item.netWeight,
+              grossWeight: item.grossWeight,
+              value: item.value,
+              currency: item.currency,
+            })),
+          })
+        }
       }
     }
 
@@ -575,7 +600,7 @@ export async function processSubmission(
             totalNetWeight: declarationSnap.totalNetWeight ? Number(declarationSnap.totalNetWeight) : null,
             totalGrossWeight: declarationSnap.totalGrossWeight ? Number(declarationSnap.totalGrossWeight) : null,
             packageCount: declarationSnap.packageCount,
-            gtipCode: null,
+            gtipCode: declarationSnap.gtipCode,
             regimeCode: declarationSnap.regimeCode,
           }
         : null,
@@ -724,16 +749,24 @@ export async function processSubmission(
     const reviewNeeded = resultRows.filter((r) => r.result === 'REVIEW_NEEDED').length
 
     let summaryText: string | null = null
+    let summaryProviderRunId: string | null = null
+    let findingExplanations: Array<{ findingId: string; ruleCode: string; explanation: string }> = []
+
+    // Stable finding IDs: deterministic findings use the persisted RuleResult
+    // row id; AI-rule findings use a synthetic key derived from the rule
+    // result they comment on. Rule codes alone are NOT unique.
     const aiRuleValidationFindingsForSummary = (aiRuleValidation?.findings ?? [])
       .filter((finding) => finding.status !== 'LIKELY_CORRECT')
       .map((finding) => ({
+        findingId: `ai-rule:${finding.ruleResultId}`,
         ruleCode: `AI-RULE-${finding.ruleCode}`,
         severity: finding.status,
         message: `${finding.explanation} Öneri: ${finding.recommendation}`,
       }))
-    const nonPassRuleFindings = resultRows
+    const nonPassRuleFindings = persistedRuleResults
       .filter((r) => r.result !== 'PASS' && r.result !== 'SKIP')
       .map((r) => ({
+        findingId: r.id,
         ruleCode: r.ruleCode,
         severity: r.severity,
         message: [
@@ -753,6 +786,16 @@ export async function processSubmission(
         // RAG: retrieve relevant regulation chunks to enrich the AI summary
         let regulationContext: Array<{ title: string; excerpt: string }> | undefined
         if (ai.embedText) {
+          const embedStartedAt = Date.now()
+          const embedRun = await prisma.providerRun.create({
+            data: {
+              tenantId,
+              provider: 'openai',
+              model: 'text-embedding-3-small',
+              operation: 'embed_query',
+              status: 'OK',
+            },
+          })
           try {
             const queryText = summaryFindings.map((f) => f.message).join(' ').slice(0, 4000)
             const embedding = await ai.embedText(queryText)
@@ -763,15 +806,69 @@ export async function processSubmission(
                 excerpt: c.chunkText.slice(0, 300),
               }))
             }
+            await prisma.providerRun.update({
+              where: { id: embedRun.id },
+              data: { durationMs: Date.now() - embedStartedAt },
+            })
           } catch (ragErr) {
+            await prisma.providerRun.update({
+              where: { id: embedRun.id },
+              data: {
+                status: 'ERROR',
+                errorMessage: ragErr instanceof Error ? ragErr.message : 'RAG search failed',
+                durationMs: Date.now() - embedStartedAt,
+              },
+            }).catch(() => {})
             logger.warn('RAG regulation search failed, proceeding without context', {
               error: ragErr instanceof Error ? ragErr.message : String(ragErr),
             })
           }
         }
 
-        const { result } = await ai.generateRiskSummary(summaryFindings, submission.tradeFlow, regulationContext)
-        summaryText = result.summary
+        const summaryStartedAt = Date.now()
+        const summaryRun = await prisma.providerRun.create({
+          data: {
+            tenantId,
+            provider: 'openai',
+            model: process.env['OPENAI_MODEL'] ?? 'gpt-4o',
+            operation: 'risk_summary',
+            status: 'OK',
+            promptVersion: RISK_SUMMARY_PROMPT_VERSION,
+          },
+        })
+        summaryProviderRunId = summaryRun.id
+
+        try {
+          const { result, meta } = await ai.generateRiskSummary(summaryFindings, submission.tradeFlow, regulationContext)
+          summaryText = result.summary
+
+          // Whitelist explanations against the findings we actually sent —
+          // the model cannot inject explanations for fabricated IDs.
+          const knownFindingIds = new Set(summaryFindings.map((f) => f.findingId))
+          findingExplanations = result.findingExplanations
+            .filter((explanation) => knownFindingIds.has(explanation.findingId))
+
+          await prisma.providerRun.update({
+            where: { id: summaryRun.id },
+            data: {
+              model: meta.model,
+              inputTokens: meta.inputTokens,
+              outputTokens: meta.outputTokens,
+              estimatedCostUsd: meta.estimatedCostUsd,
+              durationMs: meta.durationMs ?? Date.now() - summaryStartedAt,
+            },
+          })
+        } catch (summaryErr) {
+          await prisma.providerRun.update({
+            where: { id: summaryRun.id },
+            data: {
+              status: 'ERROR',
+              errorMessage: summaryErr instanceof Error ? summaryErr.message : 'Risk summary failed',
+              durationMs: Date.now() - summaryStartedAt,
+            },
+          }).catch(() => {})
+          throw summaryErr
+        }
       } catch (err) {
         logger.warn('Risk summary generation failed', {
           error: err instanceof Error ? err.message : String(err),
@@ -783,10 +880,14 @@ export async function processSubmission(
       data: {
         submissionId,
         tenantId,
+        providerRunId: summaryProviderRunId,
         totalErrors: errors,
         totalWarnings: warnings,
         totalReviewNeeded: reviewNeeded,
         summaryText,
+        findingExplanationsJson: findingExplanations.length > 0
+          ? (findingExplanations as Prisma.InputJsonValue)
+          : undefined,
         snapshotJson: resultRows as Prisma.InputJsonValue,
       },
     })
@@ -825,6 +926,52 @@ function getExtractionSchema(docType: DocumentType): z.ZodType<unknown> | null {
     case 'ORIGIN_DOC': return OriginDocExtractionSchema
     default: return null
   }
+}
+
+/**
+ * Core fields per document type used to estimate how complete a structured
+ * extraction is. Deliberately NOT the full (all-nullable) extraction schema:
+ * legitimately sparse documents must not be penalized for optional fields.
+ */
+const CORE_EXTRACTION_FIELDS: Partial<Record<string, string[]>> = {
+  INVOICE: ['invoice_number', 'invoice_date', 'seller_name', 'buyer_name', 'currency', 'total_amount'],
+  PACKING_LIST: ['package_count', 'gross_weight'],
+  LOADING_INSTRUCTION: ['shipper', 'consignee'],
+  TRANSPORT_DOC: ['document_number', 'shipper', 'consignee'],
+  DECLARATION_OUTPUT: ['declaration_number', 'regime_code', 'total_value', 'currency'],
+  ORIGIN_DOC: ['country_of_origin', 'issuing_authority'],
+}
+
+function hasUsableExtractedValue(value: unknown): boolean {
+  if (value == null) return false
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.length > 0
+  const text = String(value).trim()
+  return text.length > 0 && !isPlaceholderValue(text)
+}
+
+/**
+ * Derives the confidence of a structured (text-based LLM) extraction instead
+ * of asserting a fixed value: the read confidence of the underlying text is
+ * blended with the fill rate of the doc type's core fields, and the result is
+ * capped so structured extraction can never be trusted more than slightly
+ * above the text it was derived from. This keeps failOrReview's 0.7 threshold
+ * meaningful (see packages/rules/src/helpers.ts).
+ */
+function deriveStructuredExtractionConfidence(
+  docType: DocumentType,
+  data: Record<string, unknown>,
+  readConfidence: number,
+): number {
+  const coreFields = CORE_EXTRACTION_FIELDS[docType]
+  if (!coreFields || coreFields.length === 0) return roundConfidence(readConfidence)
+
+  const filled = coreFields.filter((field) => hasUsableExtractedValue(data[field])).length
+  const fillRate = filled / coreFields.length
+
+  const blended = 0.55 * readConfidence + 0.45 * fillRate
+  const capped = Math.min(blended, readConfidence + 0.15)
+  return roundConfidence(Math.max(0.1, Math.min(0.99, capped)))
 }
 
 function getDocumentReaderMode(): DocumentReaderMode {
@@ -900,8 +1047,12 @@ function enhanceStructuredDataFromText(
   if (docType === 'DECLARATION_OUTPUT') {
     const packageCount = firstMatch(rawText, /\b(\d+)\s*KAP\b/i)
     const netGross = rawText.match(/Toplam Net\s*\/\s*Br[üu]t Kg:\s*([\d.,]+)\s*\/\s*([\d.,]+)/i)
+    // Prefer an explicitly labeled regime code; fall back to a known-code
+    // match that cannot sit inside a larger number (e.g. "1.000,00" or
+    // "31500"), then to a 4-digit code at the start of a line.
     const regimeCode =
-      firstMatch(rawText, /\b(1000|1040|3150|3151|3153|3171|2100)\b/) ??
+      firstMatch(rawText, /Rejim(?:\s*Kodu)?\s*:?\s*(\d{4})\b/i) ??
+      firstMatch(rawText, /(?<![\d.,])(1000|1040|3150|3151|3153|3171|2100)(?![\d.,])/) ??
       firstMatch(rawText, /^\s*(\d{4})\s+[\d.,]+/m)
 
     if (packageCount) next['package_count'] = parseLocaleNumber(packageCount)
@@ -1003,7 +1154,25 @@ async function clearGeneratedArtifacts(
       },
     })
     await tx.ruleResult.deleteMany({ where: { submissionId, tenantId } })
-    await tx.expertReview.deleteMany({ where: { submissionId, tenantId } })
+
+    // Expert reviews are paid (quota) artifacts whose model cost was already
+    // spent — never delete them on reprocess. Stale-mark them instead so the
+    // new report does not integrate findings computed from old extractions.
+    const supersededAt = new Date()
+    await tx.expertReview.updateMany({
+      where: { submissionId, tenantId, status: 'RUNNING' },
+      data: {
+        status: 'ERROR',
+        summary: 'Uzman yapay zeka incelemesi, dosya yeniden işlendiği için iptal edildi.',
+        completedAt: supersededAt,
+        supersededAt,
+      },
+    })
+    await tx.expertReview.updateMany({
+      where: { submissionId, tenantId, supersededAt: null },
+      data: { supersededAt },
+    })
+
     await tx.riskReport.deleteMany({ where: { submissionId, tenantId } })
     await tx.declarationItem.deleteMany({
       where: {
@@ -1049,4 +1218,42 @@ function dateOrNull(val: unknown): Date | null {
     ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
     : new Date(value)
   return isNaN(d.getTime()) ? null : d
+}
+
+type NormalizedDeclarationItem = {
+  lineNumber: number | null
+  gtipCode: string | null
+  goodsDescription: string | null
+  quantity: number | null
+  unit: string | null
+  netWeight: number | null
+  grossWeight: number | null
+  value: number | null
+  currency: string | null
+}
+
+/** Normalize the extracted declaration items[] (kalem rows) for persistence. */
+function extractDeclarationItems(raw: unknown): NormalizedDeclarationItem[] {
+  if (!Array.isArray(raw)) return []
+  const items: NormalizedDeclarationItem[] = []
+  for (const entry of raw) {
+    if (entry == null || typeof entry !== 'object') continue
+    const item = entry as Record<string, unknown>
+    const normalized: NormalizedDeclarationItem = {
+      lineNumber: intOrNull(item['line_number']),
+      gtipCode: stringOrNull(item['gtip_code']),
+      goodsDescription: stringOrNull(item['goods_description']),
+      quantity: numberOrNull(item['quantity']),
+      unit: stringOrNull(item['unit']),
+      netWeight: numberOrNull(item['net_weight']),
+      grossWeight: numberOrNull(item['gross_weight']),
+      value: numberOrNull(item['value']),
+      currency: stringOrNull(item['currency']),
+    }
+    const hasContent = Object.entries(normalized).some(
+      ([key, value]) => key !== 'lineNumber' && value != null,
+    )
+    if (hasContent) items.push(normalized)
+  }
+  return items
 }

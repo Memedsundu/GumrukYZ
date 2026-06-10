@@ -1,0 +1,56 @@
+{
+  "_fixture": "import-decl-snapshot-mismatch",
+  "_description": "Declaration snapshot disagrees with documents: malformed regime code, currency mismatch with invoice, package count mismatch with packing list",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.92,
+      "data": {
+        "invoice_number": "INV-2024-G300",
+        "invoice_date": "2024-04-02",
+        "seller_name": "US Components Inc.",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "USD",
+        "total_amount": 42000.0,
+        "country_of_origin": "DE"
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.91,
+      "data": {
+        "package_count": 8,
+        "gross_weight": 900.0,
+        "net_weight": 820.0
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.92,
+      "data": {
+        "declaration_number": "24010000456802",
+        "declaration_date": "2024-04-10",
+        "regime_code": "40A0",
+        "customs_office_code": "TR341500",
+        "importer_tax_id": "1234567890",
+        "goods_description": "Electronic components",
+        "currency": "EUR"
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24010000456802",
+    "declarationDate": "2024-04-10",
+    "regimeCode": "40A0",
+    "totalValue": 42000.0,
+    "currency": "EUR",
+    "packageCount": 10
+  },
+  "_expectedResults": {
+    "DECL-001": "FAIL",
+    "CROSS-001": "PASS",
+    "CROSS-007": "FAIL",
+    "CROSS-008": "FAIL"
+  }
+}

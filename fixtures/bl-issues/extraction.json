@@ -1,0 +1,37 @@
+{
+  "_fixture": "bl-issues",
+  "_description": "Bill of lading with a number but no discharge port and a consignee that does not match the invoice buyer",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.92,
+      "data": {
+        "invoice_number": "INV-2024-H400",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 12000.0,
+        "country_of_origin": "DE"
+      }
+    },
+    {
+      "docType": "TRANSPORT_DOC",
+      "confidence": 0.92,
+      "data": {
+        "document_type": "BILL OF LADING",
+        "bl_number": "MAEU555000111",
+        "port_of_loading": "Rotterdam",
+        "shipper": "ACME Manufacturing GmbH",
+        "consignee": "Acme Logistics BV"
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "BL-001": "PASS",
+    "BL-002": "FAIL",
+    "BL-003": "WARN"
+  }
+}

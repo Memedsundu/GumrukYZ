@@ -1,9 +1,9 @@
-import OpenAI from 'openai'
-import { zodTextFormat } from 'openai/helpers/zod'
+import type OpenAI from 'openai'
 import { z } from 'zod'
+import { createStructuredOpenAIClient, parseStructuredOutput } from '@gumrukyz/ai'
 import { prisma, Prisma } from '@gumrukyz/db'
 import type { ExtractionData } from '@gumrukyz/rules'
-import { logger } from '@gumrukyz/shared'
+import { estimateModelCostUsd, logger } from '@gumrukyz/shared'
 
 const DEFAULT_MODEL = 'gpt-5.4'
 const DEFAULT_REASONING_EFFORT = 'medium'
@@ -16,6 +16,8 @@ const PROMPT_PAYLOAD_CHARS = 24_000
 const RETRY_CONTEXT_CHUNK_LIMIT = 6
 const RETRY_PROMPT_PAYLOAD_CHARS = 14_000
 const RETRY_MAX_FINDINGS = 4
+/** Bump when the expert review prompt or schema changes. */
+const EXPERT_REVIEW_PROMPT_VERSION = '2026-06-10.1'
 
 export const REQUIRED_LEGAL_SOURCE_TITLES = [
   '4458 Sayılı Gümrük Kanunu',
@@ -143,6 +145,7 @@ export async function runExpertReviewForSubmission(params: {
       model,
       operation: 'expert_review',
       status: 'OK',
+      promptVersion: EXPERT_REVIEW_PROMPT_VERSION,
     },
   })
 
@@ -182,7 +185,7 @@ export async function runExpertReviewForSubmission(params: {
       ])
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const openai = createStructuredOpenAIClient()
     const generated = await requestParsedExpertReview({
       openai,
       model,
@@ -389,10 +392,9 @@ async function retrieveLegalContext(params: {
   documents: ExtractionData[]
   ruleResults: RuleResultForExpertReview[]
 }): Promise<LegalContextChunk[]> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return fallbackLegalChunks()
+  if (!process.env.OPENAI_API_KEY) return fallbackLegalChunks()
 
-  const openai = new OpenAI({ apiKey })
+  const openai = createStructuredOpenAIClient()
   const query = buildLegalContextQuery(params)
   const embedding = await openai.embeddings.create({
     model: 'text-embedding-3-small',
@@ -521,43 +523,28 @@ async function requestParsedExpertReviewOnce(params: {
 }): Promise<ParsedExpertReviewResponse> {
   const schema = makeExpertReviewSchema(params.maxFindings)
   const contextChunks = params.contextChunks.slice(0, params.contextLimit)
-  const response = await params.openai.responses.parse(
-    {
-      model: params.model,
-      reasoning: { effort: getReasoningEffort() },
-      input: [
-        {
-          role: 'system',
-          content:
-            'Sen Türkiye gümrük işlemleri için çalışan uzman inceleme asistanısın. Çıktı tamamen Türkçe, kısa, şema uyumlu JSON ve sadece verilen belge kanıtları ile mevzuat parçalarına dayalı olmalıdır.',
-        },
-        {
-          role: 'user',
-          content: buildExpertReviewPrompt(params.params, contextChunks, {
-            maxFindings: params.maxFindings,
-            payloadLimit: params.payloadLimit,
-          }),
-        },
-      ],
-      text: {
-        format: zodTextFormat(schema, 'gumrukyz_expert_review'),
-      },
-      max_output_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
-    },
-    {
-      timeout: getTimeoutMs(),
-      maxRetries: 1,
-    },
-  )
-
-  const parsed = response.output_parsed as ExpertReviewResponse | null
-  if (!parsed) throw new Error('OpenAI expert review returned no parsed output')
+  const { parsed, responseModel, inputTokens, outputTokens } = await parseStructuredOutput<ExpertReviewResponse>({
+    model: params.model,
+    schema,
+    schemaName: 'gumrukyz_expert_review',
+    system:
+      'Sen Türkiye gümrük işlemleri için çalışan uzman inceleme asistanısın. Çıktı tamamen Türkçe, kısa, şema uyumlu JSON ve sadece verilen belge kanıtları ile mevzuat parçalarına dayalı olmalıdır.',
+    user: buildExpertReviewPrompt(params.params, contextChunks, {
+      maxFindings: params.maxFindings,
+      payloadLimit: params.payloadLimit,
+    }),
+    reasoningEffort: getReasoningEffort(),
+    maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    timeoutMs: getTimeoutMs(),
+    maxRetries: 1,
+    client: params.openai,
+  })
 
   return {
     parsed,
-    responseModel: String(response.model ?? params.model),
-    inputTokens: response.usage?.input_tokens,
-    outputTokens: response.usage?.output_tokens,
+    responseModel,
+    inputTokens,
+    outputTokens,
     contextChunks,
   }
 }
@@ -694,7 +681,15 @@ async function persistExpertReview(params: {
           title: finding.title,
           explanation: finding.explanation,
           recommendation: finding.recommendation,
-          evidenceRefsJson: serializeExpertEvidence(finding) as Prisma.InputJsonValue,
+          evidenceRefsJson: finding.evidence_refs as Prisma.InputJsonValue,
+          gtipCandidatesJson: finding.gtip_candidates.length > 0
+            ? (finding.gtip_candidates.map((candidate) => ({
+                code: candidate.code,
+                confidence: normalizeConfidence(candidate.confidence),
+                rationale: candidate.rationale,
+                requiredEvidence: candidate.required_evidence,
+              })) as Prisma.InputJsonValue)
+            : undefined,
         },
       })
 
@@ -739,18 +734,6 @@ function compactJson(value: unknown): unknown {
   }))
 }
 
-function serializeExpertEvidence(finding: z.infer<typeof ExpertFindingSchema>) {
-  if (!finding.gtip_candidates || finding.gtip_candidates.length === 0) return finding.evidence_refs
-  return {
-    evidenceRefs: finding.evidence_refs,
-    gtipCandidates: finding.gtip_candidates.map((candidate) => ({
-      code: candidate.code,
-      confidence: normalizeConfidence(candidate.confidence),
-      rationale: candidate.rationale,
-      requiredEvidence: candidate.required_evidence,
-    })),
-  }
-}
 
 function normalizeConfidence(value: number): number {
   return Math.max(0, Math.min(1, Math.round(value * 100) / 100))
@@ -775,16 +758,7 @@ function getReasoningEffort(): 'none' | 'low' | 'medium' | 'high' | 'xhigh' {
 }
 
 function estimateCost(model: string, inputTokens?: number, outputTokens?: number): number | undefined {
-  if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number') return undefined
-
-  const normalized = model.toLowerCase()
-  const rates = normalized.includes('gpt-5.5')
-    ? { input: 5, output: 30 }
-    : normalized.includes('gpt-5.4-mini')
-      ? { input: 0.75, output: 4.5 }
-      : { input: 2.5, output: 15 }
-
-  return Math.round(((inputTokens * rates.input + outputTokens * rates.output) / 1_000_000) * 1_000_000) / 1_000_000
+  return estimateModelCostUsd(model, inputTokens, outputTokens)
 }
 
 function formatError(error: unknown): string {

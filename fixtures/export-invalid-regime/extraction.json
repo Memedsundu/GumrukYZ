@@ -1,0 +1,30 @@
+{
+  "_fixture": "export-invalid-regime",
+  "_description": "Export flow with an import regime code and an invoice missing number and seller — EXP-001/002 fail, EXP-003 warns (migrated from packages/rules/fixtures/exp)",
+  "_tradeFlow": "EXPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.9,
+      "data": {
+        "invoice_date": "2024-03-15",
+        "buyer_name": "German GmbH",
+        "buyer_address": "Berlin, Germany",
+        "currency": "EUR",
+        "total_amount": 8000.0
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24TR001234567891",
+    "declarationDate": "2024-03-20",
+    "regimeCode": "4000",
+    "totalValue": 8000.0,
+    "currency": "EUR"
+  },
+  "_expectedResults": {
+    "EXP-001": "FAIL",
+    "EXP-002": "FAIL",
+    "EXP-003": "WARN"
+  }
+}

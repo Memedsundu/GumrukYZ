@@ -1,0 +1,50 @@
+{
+  "_fixture": "pres-multiple-declarations",
+  "_description": "Submission with two declaration output documents — PRES-005 must warn",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.92,
+      "data": {
+        "invoice_number": "INV-2024-K600",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 20000.0,
+        "country_of_origin": "DE"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.92,
+      "data": {
+        "declaration_number": "24010000456803",
+        "declaration_date": "2024-04-10",
+        "regime_code": "4000",
+        "customs_office_code": "TR341500",
+        "importer_tax_id": "1234567890",
+        "goods_description": "Machinery parts",
+        "currency": "EUR"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.91,
+      "data": {
+        "declaration_number": "24010000456804",
+        "declaration_date": "2024-04-11",
+        "regime_code": "4000",
+        "customs_office_code": "TR341500",
+        "importer_tax_id": "1234567890",
+        "goods_description": "Machinery parts",
+        "currency": "EUR"
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "PRES-005": "WARN"
+  }
+}

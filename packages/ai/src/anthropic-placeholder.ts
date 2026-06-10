@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { LlmProvider, DocumentClassificationResult, ExplanationResult, ProviderRunMetadata } from './provider.js'
+import type { LlmProvider, DocumentClassificationResult, ExplanationResult, ProviderRunMetadata, RiskSummaryFindingInput } from './provider.js'
 import type { DocumentType } from '@gumrukyz/domain'
 
 /**
@@ -29,7 +29,7 @@ export class AnthropicPlaceholder implements LlmProvider {
   }
 
   async generateRiskSummary(
-    _findings: Array<{ ruleCode: string; severity: string; message: string }>,
+    _findings: RiskSummaryFindingInput[],
     _tradeFlow: string,
     _regulationContext?: Array<{ title: string; excerpt: string }>,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }> {

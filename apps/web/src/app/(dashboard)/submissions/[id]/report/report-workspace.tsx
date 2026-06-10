@@ -83,6 +83,8 @@ export type ReportFindingItem = {
   citations: ReportCitationItem[]
   aiValidations: ReportAiValidationItem[]
   gtipCandidates: ReportGtipCandidate[]
+  /** AI risk-summary explanation persisted for this specific finding. */
+  summaryExplanation: string | null
   overrideReason: string | null
   canOverride: boolean
   defaultOpen: boolean
@@ -535,6 +537,12 @@ function FindingDetailModal({ finding, onClose }: { finding: ReportFindingItem |
               <DetailBlock title="Ne yapmalı?">
                 <p>{finding.action}</p>
               </DetailBlock>
+
+              {finding.summaryExplanation && (
+                <DetailBlock title="Yapay zeka özet açıklaması">
+                  <p className="rounded-md bg-ai-50 px-3 py-2 text-ai-700">{finding.summaryExplanation}</p>
+                </DetailBlock>
+              )}
 
               {finding.aiValidations.length > 0 && (
                 <DetailBlock title="Yapay zeka ikinci kontrol">

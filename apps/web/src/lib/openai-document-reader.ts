@@ -1,7 +1,6 @@
-import OpenAI from 'openai'
-import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
 import {
+  parseStructuredOutput,
   DeclarationOutputExtractionSchema,
   InvoiceExtractionSchema,
   LoadingInstructionExtractionSchema,
@@ -10,6 +9,7 @@ import {
   TransportDocExtractionSchema,
 } from '@gumrukyz/ai'
 import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
+import { estimateModelCostUsd } from '@gumrukyz/shared'
 import { inferDocumentContentType } from './document-file-types'
 import { readFileArrayBuffer } from './pdf-extractor'
 
@@ -73,54 +73,34 @@ export async function runOpenAIDocumentReader(params: {
   const base64 = Buffer.from(bytes).toString('base64')
   const model = process.env.OPENAI_DOCUMENT_READER_MODEL ?? DEFAULT_MODEL
 
-  const openai = new OpenAI({ apiKey })
-  const response = await openai.responses.parse(
-    {
-      model,
-      input: [
-        {
-          role: 'system',
-          content:
-            'You extract customs document data for Turkish customs compliance workflows. Return only facts clearly visible in the uploaded file.',
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'input_file',
-              filename: params.filename,
-              file_data: `data:${contentType};base64,${base64}`,
-              detail: 'high',
-            },
-            {
-              type: 'input_text',
-              text: buildReaderPrompt(params.docType, params.tradeFlow),
-            },
-          ],
-        },
-      ],
-      text: {
-        format: zodTextFormat(responseSchema, `${params.docType.toLowerCase()}_document_reader`),
+  const { parsed, responseModel, inputTokens, outputTokens } = await parseStructuredOutput<z.infer<typeof responseSchema>>({
+    model,
+    schema: responseSchema,
+    schemaName: `${params.docType.toLowerCase()}_document_reader`,
+    system:
+      'You extract customs document data for Turkish customs compliance workflows. Return only facts clearly visible in the uploaded file.',
+    user: [
+      {
+        type: 'input_file',
+        filename: params.filename,
+        file_data: `data:${contentType};base64,${base64}`,
+        detail: 'high',
       },
-      max_output_tokens: 6_000,
-    },
-    {
-      timeout: getTimeoutMs(),
-      maxRetries: 1,
-    },
-  )
-
-  const parsed = response.output_parsed as z.infer<typeof responseSchema> | null
-  if (!parsed) throw new Error('OpenAI document reader returned no parsed output')
-
-  const inputTokens = response.usage?.input_tokens
-  const outputTokens = response.usage?.output_tokens
+      {
+        type: 'input_text',
+        text: buildReaderPrompt(params.docType, params.tradeFlow),
+      },
+    ],
+    maxOutputTokens: 6_000,
+    timeoutMs: getTimeoutMs(),
+    maxRetries: 1,
+  })
 
   return {
     structuredData: parsed.structured_data as Record<string, unknown>,
     extractedText: parsed.extracted_text,
     confidence: normalizeConfidence(parsed.confidence),
-    model: String(response.model ?? model),
+    model: responseModel,
     inputTokens,
     outputTokens,
     estimatedCostUsd: estimateCost(model, inputTokens, outputTokens),
@@ -143,6 +123,7 @@ Rules:
 - Do not invent values that are not visible in the document.
 - Preserve document numbers, tax IDs, currency codes, dates, totals, weights, package counts, HS/GTIP codes, and party names exactly where possible.
 - For tables, read item rows and totals carefully.
+- For customs declarations (beyanname), read each kalem (line item) row into items[] with its own GTİP code, goods description, quantity, weights and value. Leave items null only when no line-item table is visible.
 - Parse locale number formats carefully: "980.00" and "980,00" mean 980; "1,185.00" and "1.185,00" mean 1185. Do not drop decimal separators in a way that turns 980.00 into 98000.
 - For packing-list item rows, separate package_count from product quantity. If a row says "4 boxes" and "Quantity Inside 53 pcs", set item.package_count=4 and item.quantity=53.
 - Do not infer net_weight from quantity, package count, or gross_weight. Use net_weight only when a visible label says Net Weight, Net Kg, Net Ağırlık, or Toplam Net.
@@ -186,18 +167,5 @@ function normalizeConfidence(confidence: number): number {
 }
 
 function estimateCost(model: string, inputTokens?: number, outputTokens?: number): number | undefined {
-  if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number') return undefined
-
-  const normalizedModel = model.toLowerCase()
-  const rates = normalizedModel.includes('gpt-5.4-mini')
-    ? { input: 0.75, output: 4.5 }
-    : normalizedModel.includes('gpt-5-mini')
-      ? { input: 0.25, output: 2 }
-      : normalizedModel.includes('gpt-4.1-mini')
-        ? { input: 0.4, output: 1.6 }
-        : normalizedModel.includes('gpt-4o')
-          ? { input: 2.5, output: 10 }
-          : { input: 0.75, output: 4.5 }
-
-  return Math.round(((inputTokens * rates.input + outputTokens * rates.output) / 1_000_000) * 1_000_000) / 1_000_000
+  return estimateModelCostUsd(model, inputTokens, outputTokens)
 }

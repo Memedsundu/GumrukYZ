@@ -1,6 +1,6 @@
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
 import type { RuleDefinition, SubmissionContext, RuleEvaluationResult } from '../types.js'
-import { toFiniteNumber } from '../helpers.js'
+import { reviewResult, toFiniteNumber } from '../helpers.js'
 
 const TOLERANCE = 0.01 // 1%
 const DECIMAL_SCALE_FACTORS = [10, 100, 1000]
@@ -89,6 +89,11 @@ function hasAmbiguousQuantityUnits(
   return invoiceLooksPieceBased && packingLooksPackageBased
 }
 
+function normalizeCurrencyCode(value: unknown): string | null {
+  const normalized = String(value ?? '').trim().toUpperCase()
+  return normalized.length > 0 ? normalized : null
+}
+
 export const CROSS_001: RuleDefinition = {
   code: 'CROSS-001',
   name: 'Fatura toplam tutarı beyanname toplam tutarıyla eşleşmeli',
@@ -96,32 +101,79 @@ export const CROSS_001: RuleDefinition = {
   appliesToDocTypes: [DocumentType.INVOICE, DocumentType.DECLARATION_OUTPUT],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
+    const invoices = ctx.documents.filter((d) => d.docType === DocumentType.INVOICE)
     const snap = ctx.declarationSnapshot
 
-    if (!invoice || !snap) return null
-    if (!invoice.data['total_amount'] || !snap.totalValue) return null
+    if (invoices.length === 0 || !snap?.totalValue) return null
 
-    const invAmt = toFiniteNumber(invoice.data['total_amount'])
     const declAmt = toFiniteNumber(snap.totalValue)
-    if (invAmt == null || declAmt == null) return null
+    if (declAmt == null) return null
 
+    const invoiceTotals = invoices.map((inv) => toFiniteNumber(inv.data['total_amount']))
+    const readableTotals = invoiceTotals.filter((total): total is number => total != null)
+    if (readableTotals.length === 0) return null
+
+    // Multi-invoice declarations: summing invoice totals is only meaningful
+    // when every invoice total is readable and all currencies agree (with
+    // each other and with the declaration). Otherwise the comparison cannot
+    // be decided deterministically — hand it to a human.
+    if (invoices.length > 1) {
+      if (readableTotals.length < invoices.length) {
+        return reviewResult(
+          this.code,
+          this.severity,
+          `Dosyada ${invoices.length} fatura var ancak ${invoices.length - readableTotals.length} tanesinde toplam tutar okunamadı. Fatura toplamları beyanname kıymetiyle karşılaştırılamadı; manuel kontrol gerekli.`,
+          [{ docType: DocumentType.INVOICE, field: 'total_amount', value: null }],
+        )
+      }
+      const invoiceCurrencies = new Set(
+        invoices
+          .map((inv) => normalizeCurrencyCode(inv.data['currency']))
+          .filter((currency): currency is string => Boolean(currency)),
+      )
+      const declCurrency = normalizeCurrencyCode(snap.currency)
+      const currencyConflict =
+        invoiceCurrencies.size > 1 ||
+        (declCurrency != null && invoiceCurrencies.size === 1 && !invoiceCurrencies.has(declCurrency))
+      if (currencyConflict) {
+        return reviewResult(
+          this.code,
+          this.severity,
+          `Dosyadaki faturalar farklı para birimlerinde (${[...invoiceCurrencies].join(', ')}${declCurrency ? `; beyanname ${declCurrency}` : ''}). Toplamlar kur dönüşümü olmadan karşılaştırılamaz; manuel kontrol gerekli.`,
+          invoices.map((inv) => ({
+            docType: DocumentType.INVOICE,
+            field: 'currency',
+            value: inv.data['currency'] ?? null,
+          })),
+        )
+      }
+    }
+
+    const invAmt = readableTotals.reduce((sum, total) => sum + total, 0)
     const pass = withinTolerance(invAmt, declAmt)
-    const isFreeOfChargeExport = ctx.tradeFlow === 'EXPORT' && invoice.data['free_of_charge'] === true
+    const isFreeOfChargeExport =
+      ctx.tradeFlow === 'EXPORT' && invoices.every((inv) => inv.data['free_of_charge'] === true)
+    const invoiceLabel = invoices.length > 1
+      ? `${invoices.length} faturanın toplam tutarı`
+      : 'Fatura toplam tutarı'
 
     return {
       ruleCode: this.code,
       severity: pass || !isFreeOfChargeExport ? this.severity : RuleSeverity.WARNING,
       result: pass ? 'PASS' : isFreeOfChargeExport ? 'WARN' : 'FAIL',
       message: pass
-        ? `Fatura tutarı (${invAmt}) beyanname tutarıyla (${declAmt}) tolerans dahilinde eşleşiyor.`
+        ? `${invoiceLabel} (${invAmt}) beyanname tutarıyla (${declAmt}) tolerans dahilinde eşleşiyor.`
         : isFreeOfChargeExport
           ? `Bedelsiz ihracat faturası (${invAmt}) beyanname istatistiki/gümrük kıymetinden (${declAmt}) farklı. Manuel inceleme önerilir.`
-        : `Fatura toplam tutarı (${invAmt}) beyanname toplam tutarıyla (${declAmt}) ±%1'den fazla farklı. Alanlar: invoice.total_amount, declaration.total_value.`,
+        : `${invoiceLabel} (${invAmt}) beyanname toplam tutarıyla (${declAmt}) ±%1'den fazla farklı. Alanlar: invoice.total_amount, declaration.total_value.`,
       sourceRefs: pass
         ? []
         : [
-            { docType: DocumentType.INVOICE, field: 'total_amount', value: invAmt },
+            ...invoices.map((inv) => ({
+              docType: DocumentType.INVOICE,
+              field: 'total_amount',
+              value: toFiniteNumber(inv.data['total_amount']),
+            })),
             { docType: DocumentType.DECLARATION_OUTPUT, field: 'total_value', value: declAmt },
           ],
     }

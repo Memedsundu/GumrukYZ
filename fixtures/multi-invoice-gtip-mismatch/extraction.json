@@ -1,0 +1,51 @@
+{
+  "_fixture": "multi-invoice-gtip-mismatch",
+  "_description": "Second invoice carries a GTİP family absent from the declaration — GTIP-003 must flag the unmatched code",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.93,
+      "data": {
+        "invoice_number": "INV-2024-D1",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 30000.0,
+        "gtip_code": "84137020"
+      }
+    },
+    {
+      "docType": "INVOICE",
+      "confidence": 0.91,
+      "data": {
+        "invoice_number": "INV-2024-D2",
+        "invoice_date": "2024-04-03",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 12500.0,
+        "gtip_code": "85015290"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.92,
+      "data": {
+        "declaration_number": "24010000456792",
+        "declaration_date": "2024-04-10",
+        "regime_code": "4000",
+        "customs_office_code": "TR341500",
+        "importer_tax_id": "1234567890",
+        "goods_description": "Industrial pump units",
+        "currency": "EUR",
+        "gtip_code": "84137020"
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "GTIP-003": "WARN"
+  }
+}

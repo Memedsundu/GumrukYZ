@@ -65,7 +65,7 @@ export { VAL_001, VAL_002, VAL_003 } from './rules/value.js'
 // ── Export-specific rules ─────────────────────────────────────────────────────
 export { EXP_001, EXP_002, EXP_003, EXP_004, EXP_005 } from './rules/export.js'
 
-// ── Compiled registry (49 ACTIVE rules) ───────────────────────────────────────
+// ── Compiled registry (48 ACTIVE rules) ───────────────────────────────────────
 import type { RuleDefinition } from './types.js'
 
 import { QUAL_001, QUAL_002, QUAL_003, OCR_001 } from './rules/quality.js'

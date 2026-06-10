@@ -1,0 +1,46 @@
+{
+  "_fixture": "import-declaration-gaps",
+  "_description": "Import declaration missing tax id, customs office, goods description, with a future date and no transport/origin documents — presence and declaration rules must flag the gaps",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.92,
+      "data": {
+        "invoice_number": "INV-2024-F200",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 15000.0,
+        "country_of_origin": "DE"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.9,
+      "data": {
+        "declaration_number": "24010000456801",
+        "declaration_date": "2031-01-15",
+        "regime_code": "4000",
+        "currency": "EUR"
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24010000456801",
+    "declarationDate": "2031-01-15",
+    "regimeCode": "4000",
+    "totalValue": 15000.0,
+    "currency": "EUR"
+  },
+  "_expectedResults": {
+    "PRES-003": "WARN",
+    "PRES-004": "WARN",
+    "DECL-001": "PASS",
+    "DECL-003": "FAIL",
+    "DECL-004": "FAIL",
+    "DECL-005": "WARN",
+    "GTIP-002": "FAIL"
+  }
+}

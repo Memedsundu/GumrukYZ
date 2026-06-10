@@ -1,0 +1,35 @@
+{
+  "_fixture": "coo-issues",
+  "_description": "Certificate of origin disagreeing with the invoice country, issued after the invoice date, and missing the issuing authority",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.92,
+      "data": {
+        "invoice_number": "INV-2024-J500",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 9500.0,
+        "country_of_origin": "DE"
+      }
+    },
+    {
+      "docType": "ORIGIN_DOC",
+      "confidence": 0.9,
+      "data": {
+        "certificate_number": "COO-2024-9911",
+        "country_of_origin": "CN",
+        "issue_date": "2024-05-15"
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "COO-001": "FAIL",
+    "COO-002": "WARN",
+    "COO-003": "FAIL"
+  }
+}

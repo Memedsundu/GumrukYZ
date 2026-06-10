@@ -72,7 +72,8 @@ const FIELD_LABELS: Record<string, string> = {
   'seller/buyer evidence': 'satıcı/alıcı yön kanıtı',
 }
 
-const PASS_MESSAGES: Record<string, string> = {
+// Exported for the rule parity check (scripts/check-rule-parity.ts).
+export const PASS_MESSAGES: Record<string, string> = {
   'PRES-001': 'Fatura belgesi mevcut.',
   'PRES-002': 'Çeki listesi mevcut.',
   'PRES-003': 'Taşıma belgesi mevcut.',
@@ -106,6 +107,7 @@ const PASS_MESSAGES: Record<string, string> = {
   'CROSS-001': 'Fatura toplam kıymeti ile beyanname toplam kıymeti tolerans içinde uyumlu.',
   'CROSS-002': 'Çeki listesi brüt ağırlığı ile beyanname brüt ağırlığı uyumlu.',
   'CROSS-003': 'Fatura ve yükleme talimatı Incoterm bilgileri uyumlu.',
+  'CROSS-004': 'Fatura kalem miktarları ile çeki listesi miktarları uyumlu.',
   'CROSS-005': 'Fatura satıcısı ile yükleme talimatı gönderici bilgisi uyumlu görünüyor.',
   'CROSS-006': 'Fatura ve çeki listesi net ağırlık bilgileri uyumlu.',
   'CROSS-007': 'Fatura ve beyanname para birimi uyumlu.',
@@ -121,7 +123,8 @@ const PASS_MESSAGES: Record<string, string> = {
   'EXP-005': 'Geçici ihracat için yükleme talimatı mevcut.',
 }
 
-const ISSUE_MESSAGES: Record<string, string> = {
+// Exported for the rule parity check (scripts/check-rule-parity.ts).
+export const ISSUE_MESSAGES: Record<string, string> = {
   'PRES-001': 'Dosyada fatura bulunamadı. İthalat/ihracat kontrolü için fatura zorunlu kabul edilir.',
   'PRES-002': 'İthalat dosyasında çeki listesi bulunamadı. Çeki listesi eklenmeli veya manuel kontrol yapılmalı.',
   'PRES-003': 'İthalat dosyasında taşıma belgesi bulunamadı. CMR, konşimento, AWB veya benzeri taşıma belgesi kontrol edilmeli.',
@@ -155,6 +158,7 @@ const ISSUE_MESSAGES: Record<string, string> = {
   'CROSS-001': 'Fatura toplam kıymeti ile beyanname toplam kıymeti tolerans dışında farklı.',
   'CROSS-002': 'Çeki listesi brüt ağırlığı ile beyanname brüt ağırlığı tolerans dışında farklı.',
   'CROSS-003': 'Fatura ve yükleme talimatı Incoterm bilgileri farklı.',
+  'CROSS-004': 'Fatura kalem miktarları ile çeki listesi miktarları uyumlu görünmüyor.',
   'CROSS-005': 'Fatura satıcısı ile yükleme talimatı gönderici bilgisi uyumlu görünmüyor.',
   'CROSS-006': 'Fatura ve çeki listesi net ağırlık bilgileri tolerans dışında farklı.',
   'CROSS-007': 'Fatura ve beyanname para birimi farklı.',
@@ -168,6 +172,24 @@ const ISSUE_MESSAGES: Record<string, string> = {
   'EXP-003': 'Beyannamedeki rejim kodu ihracat rejimleriyle uyumlu değil.',
   'EXP-004': 'İhracat faturasında menşe ülkesi eksik veya standart ülke adı olarak doğrulanamadı.',
   'EXP-005': 'Geçici ihracat için yükleme talimatı eksik.',
+}
+
+/**
+ * Parses RiskReport.findingExplanationsJson into a findingId → explanation
+ * map. Finding IDs are RuleResult row ids for deterministic findings and
+ * `ai-rule:{ruleResultId}` for AI-rule findings (see processing.ts).
+ */
+export function parseFindingExplanations(value: unknown): Map<string, string> {
+  const map = new Map<string, string>()
+  if (!Array.isArray(value)) return map
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const { findingId, explanation } = entry as { findingId?: unknown; explanation?: unknown }
+    if (typeof findingId === 'string' && typeof explanation === 'string' && explanation.trim().length > 0) {
+      map.set(findingId, explanation)
+    }
+  }
+  return map
 }
 
 export function parseSourceRefs(value: unknown): SourceRef[] {
@@ -236,14 +258,12 @@ export function formatRuleResultMessage(result: RuleResultDisplayInput): string 
     return PASS_MESSAGES[result.ruleCode] ?? 'Kontrol geçti.'
   }
 
-  if (result.ruleCode === 'EXP-004' && result.message && result.message.trim().length > 0) {
-    return result.message
-  }
-
-  // When the rule produces a REVIEW_NEEDED outcome (e.g. confidence-aware
-  // failOrReview helper), the rule's own Turkish message is more specific
-  // than the generic ISSUE_MESSAGES fallback — prefer it.
-  if (result.result === 'REVIEW_NEEDED' && result.message && result.message.trim().length > 0) {
+  // The rule's own Turkish message interpolates the actual values it compared
+  // (e.g. "Fatura tutarı (980) ↔ beyanname (98000)") and is therefore more
+  // specific than the canned ISSUE_MESSAGES — prefer it for every non-PASS
+  // outcome and fall back to the canned text only when a rule produced no
+  // message.
+  if (result.message && result.message.trim().length > 0) {
     return result.message
   }
 

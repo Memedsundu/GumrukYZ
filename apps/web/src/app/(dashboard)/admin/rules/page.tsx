@@ -4,6 +4,10 @@ import { prisma } from '@gumrukyz/db'
 import { redirect } from 'next/navigation'
 import { formatDateTime } from '@/lib/utils'
 import { CheckCircle, XCircle, BookOpen } from 'lucide-react'
+import {
+  CandidateRuleReviewActions,
+  ExtractCandidateRulesForm,
+} from './candidate-rule-actions'
 
 export default async function AdminRulesPage() {
   const user = await getAuthenticatedUser()
@@ -23,6 +27,11 @@ export default async function AdminRulesPage() {
   const candidateRules = await prisma.candidateRule.findMany({
     orderBy: { createdAt: 'desc' },
     include: { sourceDocument: true },
+  })
+
+  const sourceDocuments = await prisma.sourceDocument.findMany({
+    orderBy: { title: 'asc' },
+    select: { id: true, title: true },
   })
 
   const activeRules = rules.filter((r) => r.lifecycleStatus === 'ACTIVE')
@@ -136,6 +145,11 @@ export default async function AdminRulesPage() {
         </table>
       </div>
 
+      {/* Candidate rule extraction */}
+      <div className="mb-6">
+        <ExtractCandidateRulesForm sources={sourceDocuments} />
+      </div>
+
       {/* Candidate rules */}
       {candidateRules.length > 0 && (
         <div className="rounded-lg border border-warning-200 bg-warning-50">
@@ -160,9 +174,28 @@ export default async function AdminRulesPage() {
                     {rule.extractedRationale && (
                       <p className="mt-1 text-xs text-ink-muted">{rule.extractedRationale}</p>
                     )}
+                    {(rule.appliesToDocTypes.length > 0 || rule.aiConfidence != null) && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                        {rule.appliesToDocTypes.map((t) => (
+                          <span key={t} className="rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-700">
+                            {t}
+                          </span>
+                        ))}
+                        {rule.aiConfidence != null && (
+                          <span className="text-xs text-ink-subtle">
+                            Güven: %{Math.round(rule.aiConfidence * 100)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs text-ink-subtle">
-                    {formatDateTime(rule.createdAt)}
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="text-xs text-ink-subtle">
+                      {formatDateTime(rule.createdAt)}
+                    </div>
+                    {(rule.status === 'DRAFT' || rule.status === 'IN_REVIEW') && (
+                      <CandidateRuleReviewActions candidateId={rule.id} />
+                    )}
                   </div>
                 </div>
               </div>

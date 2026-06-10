@@ -26,9 +26,22 @@ export interface ExtractionResult {
   rawText?: string
 }
 
+export interface RiskSummaryFindingInput {
+  /**
+   * Stable identifier the model must echo back so explanations can be joined
+   * to specific findings. Rule codes are NOT unique (multiple results can
+   * share a code, and AI-rule findings use synthetic codes).
+   */
+  findingId: string
+  ruleCode: string
+  severity: string
+  message: string
+}
+
 export interface ExplanationResult {
   summary: string
   findingExplanations: Array<{
+    findingId: string
     ruleCode: string
     explanation: string
   }>
@@ -57,7 +70,7 @@ export interface LlmProvider {
   ): Promise<{ result: T; meta: ProviderRunMetadata }>
 
   generateRiskSummary(
-    findings: Array<{ ruleCode: string; severity: string; message: string }>,
+    findings: RiskSummaryFindingInput[],
     tradeFlow: string,
     regulationContext?: Array<{ title: string; excerpt: string }>,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }>

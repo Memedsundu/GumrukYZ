@@ -22,6 +22,15 @@ function areCompatibleGtipCodes(a: string, b: string): boolean {
   return left.slice(0, shortest) === right.slice(0, shortest)
 }
 
+type DeclarationItemRow = Record<string, unknown>
+
+/** Kalem (line item) rows extracted for a declaration, when the reader saw them. */
+function declarationItems(data: Record<string, unknown>): DeclarationItemRow[] {
+  const raw = data['items']
+  if (!Array.isArray(raw)) return []
+  return raw.filter((item): item is DeclarationItemRow => item != null && typeof item === 'object')
+}
+
 export const GTIP_002: RuleDefinition = {
   code: 'GTIP-002',
   name: 'Beyanname satırlarında eşya tanımı boş bırakılamaz',
@@ -32,7 +41,17 @@ export const GTIP_002: RuleDefinition = {
     const declarations = findDocs(ctx, DocumentType.DECLARATION_OUTPUT)
     if (declarations.length === 0) return null
 
-    const missing = declarations.filter((d) => !hasValue(d.data['goods_description']))
+    // Per-item check when kalem rows were extracted; header fallback otherwise.
+    let missingItemLines = 0
+    const missing = declarations.filter((d) => {
+      const items = declarationItems(d.data)
+      if (items.length > 0) {
+        const blankItems = items.filter((item) => !hasValue(item['goods_description']))
+        missingItemLines += blankItems.length
+        return blankItems.length > 0
+      }
+      return !hasValue(d.data['goods_description'])
+    })
 
     if (missing.length === 0) {
       return passResult(
@@ -46,7 +65,9 @@ export const GTIP_002: RuleDefinition = {
       this.code,
       this.severity,
       missing,
-      'Beyanname satırlarından birinde eşya tanımı (goods_description) eksik.',
+      missingItemLines > 0
+        ? `Beyannamenin ${missingItemLines} kaleminde eşya tanımı (goods_description) eksik.`
+        : 'Beyanname satırlarından birinde eşya tanımı (goods_description) eksik.',
       'Eşya tanımı beyannameden güvenle okunamadı. Manuel kontrol gerekli.',
       [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'goods_description' }],
     )
@@ -60,31 +81,70 @@ export const GTIP_003: RuleDefinition = {
   appliesToDocTypes: [DocumentType.INVOICE, DocumentType.DECLARATION_OUTPUT],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
-    const decl = ctx.documents.find((d) => d.docType === DocumentType.DECLARATION_OUTPUT)
+    const invoices = findDocs(ctx, DocumentType.INVOICE)
+    const declarations = findDocs(ctx, DocumentType.DECLARATION_OUTPUT)
+    if (invoices.length === 0 || declarations.length === 0) return null
 
-    if (!invoice || !decl) return null
+    // Multi-document pairing: every invoice GTİP must be compatible with at
+    // least one declaration GTİP and vice versa. A naive first-vs-first (or
+    // all-vs-all equality) comparison misfires on legitimate multi-invoice
+    // declarations covering several tariff positions.
+    const invoiceCodes = [...new Set(
+      invoices
+        .map((inv) => normalizeGtip(inv.data['gtip_code']))
+        .filter((code): code is string => Boolean(code)),
+    )]
+    const declCodes = [...new Set(
+      declarations
+        .flatMap((decl) => {
+          const itemCodes = declarationItems(decl.data)
+            .map((item) => normalizeGtip(item['gtip_code']))
+            .filter((code): code is string => Boolean(code))
+          // Kalem-level codes supersede the header code when present.
+          return itemCodes.length > 0 ? itemCodes : [normalizeGtip(decl.data['gtip_code'])]
+        })
+        .filter((code): code is string => Boolean(code)),
+    )]
+    if (invoiceCodes.length === 0 || declCodes.length === 0) return null
 
-    const invGtip = normalizeGtip(invoice.data['gtip_code'])
-    const declGtip = normalizeGtip(decl.data['gtip_code'])
+    const unmatchedInvoiceCodes = invoiceCodes.filter(
+      (code) => !declCodes.some((declCode) => areCompatibleGtipCodes(code, declCode)),
+    )
+    const unmatchedDeclCodes = declCodes.filter(
+      (code) => !invoiceCodes.some((invCode) => areCompatibleGtipCodes(invCode, code)),
+    )
 
-    if (!invGtip || !declGtip) return null
-
-    if (areCompatibleGtipCodes(invGtip, declGtip)) {
+    if (unmatchedInvoiceCodes.length === 0 && unmatchedDeclCodes.length === 0) {
       return passResult(
         this.code,
         this.severity,
-        `GTİP kodları uyumlu: fatura ${invGtip} / beyanname ${declGtip}.`,
+        `GTİP kodları uyumlu: fatura ${invoiceCodes.join(', ')} / beyanname ${declCodes.join(', ')}.`,
       )
+    }
+
+    const details: string[] = []
+    if (unmatchedInvoiceCodes.length > 0) {
+      details.push(`faturadaki "${unmatchedInvoiceCodes.join(', ')}" beyannamede karşılık bulamadı`)
+    }
+    if (unmatchedDeclCodes.length > 0) {
+      details.push(`beyannamedeki "${unmatchedDeclCodes.join(', ')}" faturalarda karşılık bulamadı`)
     }
 
     return failResult(
       this.code,
       this.severity,
-      `GTİP uyuşmazlığı: fatura "${invGtip}" ↔ beyanname "${declGtip}". HS sınıflandırmasını doğrulayın.`,
+      `GTİP uyuşmazlığı: ${details.join('; ')}. HS sınıflandırmasını doğrulayın.`,
       [
-        { docType: DocumentType.INVOICE, field: 'gtip_code', value: invGtip },
-        { docType: DocumentType.DECLARATION_OUTPUT, field: 'gtip_code', value: declGtip },
+        ...unmatchedInvoiceCodes.map((code) => ({
+          docType: DocumentType.INVOICE,
+          field: 'gtip_code',
+          value: code,
+        })),
+        ...unmatchedDeclCodes.map((code) => ({
+          docType: DocumentType.DECLARATION_OUTPUT,
+          field: 'gtip_code',
+          value: code,
+        })),
       ],
     )
   },
@@ -103,8 +163,18 @@ export const GTIP_001: RuleDefinition = {
 
     const allCodes: string[] = []
     for (const decl of declarations) {
-      const code = decl.data['gtip_code']
-      if (hasValue(code)) allCodes.push(String(code))
+      const items = declarationItems(decl.data)
+      const itemCodes = items
+        .map((item) => item['gtip_code'])
+        .filter((code) => hasValue(code))
+        .map((code) => String(code))
+      if (itemCodes.length > 0) {
+        // Multi-kalem declaration: validate every line's GTİP.
+        allCodes.push(...itemCodes)
+      } else {
+        const code = decl.data['gtip_code']
+        if (hasValue(code)) allCodes.push(String(code))
+      }
     }
     if (snapGtip) allCodes.push(snapGtip)
     if (allCodes.length === 0) return null

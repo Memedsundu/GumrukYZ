@@ -13,14 +13,15 @@
     "lint": "pnpm --workspace-root exec eslint \"$PWD/src\""
   },
   "dependencies": {
-    "ai": "^4.3.16",
     "@ai-sdk/openai": "^1.3.22",
-    "zod": "^3.24.2",
     "@gumrukyz/domain": "workspace:*",
-    "@gumrukyz/shared": "workspace:*"
+    "@gumrukyz/shared": "workspace:*",
+    "ai": "^4.3.16",
+    "openai": "6.36.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
-    "@types/node": "^20.19.39"
+    "@types/node": "^20.19.39",
+    "typescript": "^5.8.3"
   }
 }

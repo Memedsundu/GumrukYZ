@@ -1,0 +1,47 @@
+{
+  "_fixture": "export-temporary-regime",
+  "_description": "Valid export invoice under temporary export regime 2100 without a loading instruction — EXP-001/002/003/004 PASS, EXP-005 must warn (migrated from packages/rules/fixtures/exp)",
+  "_tradeFlow": "EXPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.93,
+      "data": {
+        "invoice_number": "EXP-INV-2024-0042",
+        "invoice_date": "2024-03-15",
+        "seller_name": "ABC Dış Ticaret A.Ş.",
+        "seller_address": "İstanbul, Türkiye",
+        "buyer_name": "German GmbH",
+        "buyer_address": "Berlin, Germany",
+        "currency": "EUR",
+        "total_amount": 15000.0,
+        "incoterm": "FOB",
+        "country_of_origin": "TR",
+        "items": [
+          {
+            "description": "Tekstil Ürünü",
+            "quantity": 500,
+            "unit": "PCS",
+            "unit_price": 30.0,
+            "total_price": 15000.0
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24TR001234567890",
+    "declarationDate": "2024-03-20",
+    "regimeCode": "2100",
+    "incoterm": "FOB",
+    "totalValue": 15000.0,
+    "currency": "EUR"
+  },
+  "_expectedResults": {
+    "EXP-001": "PASS",
+    "EXP-002": "PASS",
+    "EXP-003": "PASS",
+    "EXP-004": "PASS",
+    "EXP-005": "WARN"
+  }
+}

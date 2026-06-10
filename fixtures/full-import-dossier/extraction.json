@@ -1,0 +1,123 @@
+{
+  "_fixture": "full-import-dossier",
+  "_description": "Complete, consistent import dossier (invoice + packing list + B/L + COO + declaration) — presence, B/L, COO, declaration and cross-document rules must all PASS",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.93,
+      "data": {
+        "invoice_number": "INV-2024-E100",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "seller_address": "Industriestrasse 12, Berlin, Germany",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "buyer_address": "Atatürk Cad. 45, İstanbul, Türkiye",
+        "currency": "EUR",
+        "total_amount": 42000.0,
+        "incoterm": "CIF",
+        "country_of_origin": "DE",
+        "gtip_code": "84137020",
+        "items": [
+          {
+            "description": "Industrial pump unit",
+            "quantity": 100,
+            "unit": "PCS",
+            "unit_price": 420.0,
+            "total_price": 42000.0
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.92,
+      "data": {
+        "package_count": 10,
+        "gross_weight": 1300.0,
+        "net_weight": 1200.0,
+        "items": [
+          {
+            "description": "Industrial pump unit",
+            "quantity": 100,
+            "unit": "PCS",
+            "net_weight": 1200.0,
+            "gross_weight": 1300.0
+          }
+        ]
+      }
+    },
+    {
+      "docType": "TRANSPORT_DOC",
+      "confidence": 0.9,
+      "data": {
+        "document_type": "BILL OF LADING",
+        "bl_number": "MAEU123456789",
+        "port_of_loading": "Hamburg",
+        "port_of_discharge": "Istanbul",
+        "shipper": "ACME Manufacturing GmbH, Berlin, Germany",
+        "consignee": "Türk İthalat A.Ş."
+      }
+    },
+    {
+      "docType": "ORIGIN_DOC",
+      "confidence": 0.91,
+      "data": {
+        "certificate_number": "COO-2024-7788",
+        "country_of_origin": "DE",
+        "issue_date": "2024-03-28",
+        "issuing_authority": "Berlin Chamber of Commerce"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.92,
+      "data": {
+        "declaration_number": "24010000456800",
+        "declaration_date": "2024-04-10",
+        "regime_code": "4000",
+        "customs_office_code": "TR341500",
+        "importer_tax_id": "1234567890",
+        "importer": "Türk İthalat A.Ş., İstanbul, Türkiye",
+        "exporter": "ACME Manufacturing GmbH, Berlin, Germany",
+        "goods_description": "Industrial pump units",
+        "currency": "EUR",
+        "gtip_code": "84137020"
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "24010000456800",
+    "declarationDate": "2024-04-10",
+    "regimeCode": "4000",
+    "incoterm": "CIF",
+    "totalValue": 42000.0,
+    "currency": "EUR",
+    "totalNetWeight": 1200.0,
+    "totalGrossWeight": 1300.0,
+    "packageCount": 10
+  },
+  "_expectedResults": {
+    "PRES-001": "PASS",
+    "PRES-002": "PASS",
+    "PRES-003": "PASS",
+    "PRES-004": "PASS",
+    "PRES-005": "PASS",
+    "GTIP-002": "PASS",
+    "GTIP-003": "PASS",
+    "CROSS-001": "PASS",
+    "CROSS-007": "PASS",
+    "CROSS-008": "PASS",
+    "CROSS-009": "PASS",
+    "DECL-001": "PASS",
+    "DECL-003": "PASS",
+    "DECL-004": "PASS",
+    "DECL-005": "PASS",
+    "BL-001": "PASS",
+    "BL-002": "PASS",
+    "BL-003": "PASS",
+    "COO-001": "PASS",
+    "COO-002": "PASS",
+    "COO-003": "PASS"
+  }
+}

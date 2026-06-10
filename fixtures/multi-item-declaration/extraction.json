@@ -1,0 +1,79 @@
+{
+  "_fixture": "multi-item-declaration",
+  "_description": "Declaration with two kalem rows — GTIP-001 must validate per-item codes, GTIP-002 must flag the item missing a description, GTIP-003 must pair invoice codes against item codes",
+  "_tradeFlow": "IMPORT",
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.93,
+      "data": {
+        "invoice_number": "INV-2024-M700",
+        "invoice_date": "2024-04-02",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 30000.0,
+        "country_of_origin": "DE",
+        "gtip_code": "84137020"
+      }
+    },
+    {
+      "docType": "INVOICE",
+      "confidence": 0.92,
+      "data": {
+        "invoice_number": "INV-2024-M701",
+        "invoice_date": "2024-04-03",
+        "seller_name": "ACME Manufacturing GmbH",
+        "buyer_name": "Türk İthalat A.Ş.",
+        "currency": "EUR",
+        "total_amount": 12500.0,
+        "country_of_origin": "DE",
+        "gtip_code": "85015290"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.92,
+      "data": {
+        "declaration_number": "24010000456805",
+        "declaration_date": "2024-04-10",
+        "regime_code": "4000",
+        "customs_office_code": "TR341500",
+        "importer_tax_id": "1234567890",
+        "goods_description": "Pumps and electric motors",
+        "currency": "EUR",
+        "gtip_code": null,
+        "items": [
+          {
+            "line_number": 1,
+            "gtip_code": "8413702000",
+            "goods_description": "Santrifüj pompa",
+            "quantity": 100,
+            "unit": "PCS",
+            "net_weight": 1200.0,
+            "gross_weight": 1300.0,
+            "value": 30000.0,
+            "currency": "EUR"
+          },
+          {
+            "line_number": 2,
+            "gtip_code": "8501529000",
+            "goods_description": null,
+            "quantity": 40,
+            "unit": "PCS",
+            "net_weight": 800.0,
+            "gross_weight": 860.0,
+            "value": 12500.0,
+            "currency": "EUR"
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null,
+  "_expectedResults": {
+    "GTIP-001": "PASS",
+    "GTIP-002": "FAIL",
+    "GTIP-003": "PASS"
+  }
+}
