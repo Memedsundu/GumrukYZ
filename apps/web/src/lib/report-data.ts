@@ -23,7 +23,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
   const submission = await prisma.submission.findFirst({
     where: { id: submissionId, tenantId },
     include: {
-      riskReports: { orderBy: { generatedAt: 'desc' }, take: 1 },
+      riskReports: { orderBy: { generatedAt: 'desc' }, take: 10 },
       documents: {
         include: { latestVersion: true },
         orderBy: { createdAt: 'asc' },
@@ -69,16 +69,20 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
 
   const report = submission.riskReports[0]
   if (!report) return null
+  const currentReport = pickCurrentReport(submission.riskReports, submission.currentReportJobId) ?? report
+  const effectiveReportJobId = currentReport.processingJobId ?? submission.currentReportJobId
+  const ruleResults = filterByReportJob(submission.ruleResults, effectiveReportJobId)
+  const expertReviews = filterByReportJob(submission.expertReviews, effectiveReportJobId)
   // Superseded reviews (stale after reprocess) are kept for audit but never
   // shown as the current expert review.
-  const currentExpertReviews = submission.expertReviews.filter((review) => !review.supersededAt)
+  const currentExpertReviews = expertReviews.filter((review) => !review.supersededAt)
   const expertReview = currentExpertReviews.find(shouldIntegrateExpertReview) ?? currentExpertReviews[0] ?? null
   const expertCounts = countIntegratedExpertFindings(expertReview)
-  const mergedSummaryText = mergeReportSummaryText(report.summaryText, expertReview)
-  const mergedWarnings = report.totalWarnings + expertCounts.warnings
-  const mergedReviewNeeded = report.totalReviewNeeded + expertCounts.reviewNeeded
+  const mergedSummaryText = mergeReportSummaryText(currentReport.summaryText, expertReview)
+  const mergedWarnings = currentReport.totalWarnings + expertCounts.warnings
+  const mergedReviewNeeded = currentReport.totalReviewNeeded + expertCounts.reviewNeeded
 
-  const deterministicActionSummary = submission.ruleResults
+  const deterministicActionSummary = ruleResults
     .filter((result) => result.result !== 'PASS' && result.result !== 'SKIP')
     .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
     .map((result) => ({
@@ -103,7 +107,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
     .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
     .slice(0, 8)
 
-  const findingExplanations = parseFindingExplanations(report.findingExplanationsJson)
+  const findingExplanations = parseFindingExplanations(currentReport.findingExplanationsJson)
 
   return {
     generatedAt: new Date().toISOString(),
@@ -117,16 +121,16 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       updatedAt: submission.updatedAt.toISOString(),
     },
     report: {
-      id: report.id,
-      generatedAt: report.generatedAt.toISOString(),
+      id: currentReport.id,
+      generatedAt: currentReport.generatedAt.toISOString(),
       summaryText: mergedSummaryText,
-      totalErrors: report.totalErrors,
+      totalErrors: currentReport.totalErrors,
       totalWarnings: mergedWarnings,
       totalReviewNeeded: mergedReviewNeeded,
       deterministicTotals: {
-        totalErrors: report.totalErrors,
-        totalWarnings: report.totalWarnings,
-        totalReviewNeeded: report.totalReviewNeeded,
+        totalErrors: currentReport.totalErrors,
+        totalWarnings: currentReport.totalWarnings,
+        totalReviewNeeded: currentReport.totalReviewNeeded,
       },
       expertIncluded: shouldIntegrateExpertReview(expertReview),
     },
@@ -140,10 +144,10 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       uploadedAt: document.latestVersion?.uploadedAt.toISOString() ?? document.createdAt.toISOString(),
     })),
     counts: {
-      errors: submission.ruleResults.filter((result) => result.result === 'FAIL').length,
-      warnings: submission.ruleResults.filter((result) => result.result === 'WARN').length + expertCounts.warnings,
-      reviewNeeded: submission.ruleResults.filter((result) => result.result === 'REVIEW_NEEDED').length + expertCounts.reviewNeeded,
-      passes: submission.ruleResults.filter((result) => result.result === 'PASS').length,
+      errors: ruleResults.filter((result) => result.result === 'FAIL').length,
+      warnings: ruleResults.filter((result) => result.result === 'WARN').length + expertCounts.warnings,
+      reviewNeeded: ruleResults.filter((result) => result.result === 'REVIEW_NEEDED').length + expertCounts.reviewNeeded,
+      passes: ruleResults.filter((result) => result.result === 'PASS').length,
     },
     actionSummary,
     expertReview: expertReview
@@ -183,7 +187,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
           })),
         }
       : null,
-    ruleResults: submission.ruleResults.map((result) => {
+    ruleResults: ruleResults.map((result) => {
       const sourceRefs = parseSourceRefs(result.sourceRefsJson)
       return {
         aiSummaryExplanation: findingExplanations.get(result.id)
@@ -234,6 +238,24 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       }
     }),
   }
+}
+
+function pickCurrentReport<T extends { processingJobId: string | null }>(
+  reports: T[],
+  currentReportJobId: string | null,
+): T | null {
+  if (currentReportJobId) {
+    return reports.find((report) => report.processingJobId === currentReportJobId) ?? null
+  }
+  return reports[0] ?? null
+}
+
+function filterByReportJob<T extends { processingJobId: string | null }>(
+  rows: T[],
+  reportJobId: string | null,
+): T[] {
+  if (reportJobId) return rows.filter((row) => row.processingJobId === reportJobId)
+  return rows.filter((row) => row.processingJobId === null)
 }
 
 function resultPriority(result: string): number {

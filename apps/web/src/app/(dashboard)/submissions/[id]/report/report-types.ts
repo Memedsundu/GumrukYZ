@@ -24,6 +24,14 @@ export type ReportDocumentItem = {
   classificationConfidence: number | null
 }
 
+export type ReportState = {
+  stale: boolean
+  readonly: boolean
+  staleReason: string | null
+  activeJobId: string | null
+  validationRequired: boolean
+}
+
 export type ReportCitationItem = {
   id: string
   title: string
@@ -47,6 +55,19 @@ export type ReportGtipCandidate = {
   requiredEvidence: string[]
 }
 
+export type ReportChecklistState = {
+  completedAt: string | null
+  completedByEmail: string | null
+  note: string | null
+}
+
+export type ReportSourceDocumentItem = {
+  id: string
+  label: string
+  filename: string
+  docType: string
+}
+
 export type ReportFindingItem = {
   id: string
   kind: 'rule' | 'expert'
@@ -67,7 +88,12 @@ export type ReportFindingItem = {
   gtipCandidates: ReportGtipCandidate[]
   /** AI risk-summary explanation persisted for this specific finding. */
   summaryExplanation: string | null
+  sourceDocuments: ReportSourceDocumentItem[]
+  checklistFingerprint: string
+  sourceVersionHash: string
+  processingJobId: string | null
   overrideReason: string | null
   canOverride: boolean
   defaultOpen: boolean
+  checklist: ReportChecklistState
 }

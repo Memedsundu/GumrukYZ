@@ -1,5 +1,5 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
-import { prisma } from '@gumrukyz/db'
+import { prisma, type Prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
@@ -13,6 +13,12 @@ import {
   recommendedActionForRuleResult,
   resultLabel,
 } from '@/lib/report-format'
+import {
+  expertFindingFingerprint,
+  ruleFindingFingerprint,
+  sourceDocumentLinks,
+  sourceVersionHash,
+} from '@/lib/report-checklist-fingerprint'
 import {
   countIntegratedExpertFindings,
   mergeReportSummaryText,
@@ -33,6 +39,16 @@ interface Props {
   params: Promise<{ id: string }>
 }
 
+const ACTIVE_REPORT_JOB_STATUSES = [
+  'PENDING',
+  'CLASSIFYING',
+  'EXTRACTING',
+  'NORMALIZING',
+  'RUNNING_RULES',
+  'AI_RULE_VALIDATING',
+  'GENERATING_REPORT',
+]
+
 export default async function ReportPage({ params }: Props) {
   const { id } = await params
   const user = await getAuthenticatedUser()
@@ -50,7 +66,12 @@ export default async function ReportPage({ params }: Props) {
           },
         },
       },
-      riskReports: { orderBy: { generatedAt: 'desc' }, take: 1 },
+      riskReports: { orderBy: { generatedAt: 'desc' }, take: 10 },
+      processingJobs: {
+        where: { status: { in: ACTIVE_REPORT_JOB_STATUSES } },
+        orderBy: { updatedAt: 'desc' },
+        take: 1,
+      },
       ruleResults: {
         orderBy: [{ severity: 'asc' }, { ruleCode: 'asc' }],
         include: {
@@ -100,13 +121,28 @@ export default async function ReportPage({ params }: Props) {
     )
   }
 
-  const errors = submission.ruleResults.filter((result) => result.result === 'FAIL')
-  const warnings = submission.ruleResults.filter((result) => result.result === 'WARN')
-  const reviewNeeded = submission.ruleResults.filter((result) => result.result === 'REVIEW_NEEDED')
-  const passes = submission.ruleResults.filter((result) => result.result === 'PASS')
+  const currentReport = pickCurrentReport(submission.riskReports, submission.currentReportJobId) ?? report
+  const effectiveReportJobId = currentReport.processingJobId ?? submission.currentReportJobId
+  const reportRuleResults = filterByReportJob(submission.ruleResults, effectiveReportJobId)
+  const reportExpertReviews = filterByReportJob(submission.expertReviews, effectiveReportJobId)
+  const activeJob = submission.processingJobs[0] ?? null
+  const reportState = {
+    stale: Boolean(submission.reportStaleAt) || Boolean(activeJob),
+    readonly: Boolean(submission.reportStaleAt) || Boolean(activeJob),
+    staleReason: activeJob
+      ? 'Düzeltilen belge yeniden analiz ediliyor. Bu sırada eski rapor referans olarak gösterilir.'
+      : submission.reportStaleReason,
+    activeJobId: activeJob?.id ?? null,
+    validationRequired: Boolean(submission.reportStaleAt) && submission.classificationStatus !== 'VALIDATED',
+  }
+
+  const errors = reportRuleResults.filter((result) => result.result === 'FAIL')
+  const warnings = reportRuleResults.filter((result) => result.result === 'WARN')
+  const reviewNeeded = reportRuleResults.filter((result) => result.result === 'REVIEW_NEEDED')
+  const passes = reportRuleResults.filter((result) => result.result === 'PASS')
   // Superseded reviews (stale after reprocess) stay in the DB for audit but
   // are never shown as the current expert review.
-  const currentExpertReviews = submission.expertReviews.filter((review) => !review.supersededAt)
+  const currentExpertReviews = reportExpertReviews.filter((review) => !review.supersededAt)
   const expertReview = currentExpertReviews.find(shouldIntegrateExpertReview) ?? currentExpertReviews[0] ?? null
   const expertCounts = countIntegratedExpertFindings(expertReview)
   const expertQuota = await getExpertReviewQuota(user.tenantId)
@@ -122,12 +158,23 @@ export default async function ReportPage({ params }: Props) {
     extractionConfidence: document.latestVersion?.extractions[0]?.confidence ?? null,
     classificationConfidence: document.suggestedDocTypeConfidence,
   }))
+  const documentVersionRefs = submission.documents.map((document) => ({
+    id: document.id,
+    label: document.label,
+    filename: document.latestVersion?.originalFilename ?? document.label,
+    docType: document.docType,
+    latestVersionId: document.latestVersionId,
+  }))
 
-  const findingExplanations = parseFindingExplanations(report.findingExplanationsJson)
+  const emptyChecklist = { completedAt: null, completedByEmail: null, note: null }
 
-  const ruleFindings: ReportFindingItem[] = submission.ruleResults.map((result) => {
+  const findingExplanations = parseFindingExplanations(currentReport.findingExplanationsJson)
+
+  const ruleFindings: ReportFindingItem[] = reportRuleResults.map((result) => {
     const metadata = getRuleDisplayMetadata(result.ruleCode)
     const override = result.overrides[0]
+    const message = formatRuleResultMessage(result)
+    const action = recommendedActionForRuleResult(result.ruleCode, result.result)
 
     return {
       id: result.id,
@@ -139,8 +186,8 @@ export default async function ReportPage({ params }: Props) {
       sourceType: 'Kural sonucu',
       title: metadata.turkishTitle,
       explanation: metadata.operationalExplanation,
-      message: formatRuleResultMessage(result),
-      action: recommendedActionForRuleResult(result.ruleCode, result.result),
+      message,
+      action,
       blocking: metadata.blocking,
       confidence: null,
       sourceRefs: parseSourceRefs(result.sourceRefsJson).map(formatSourceRef),
@@ -165,9 +212,26 @@ export default async function ReportPage({ params }: Props) {
       summaryExplanation: findingExplanations.get(result.id)
         ?? findingExplanations.get(`ai-rule:${result.id}`)
         ?? null,
+      sourceDocuments: sourceDocumentLinks({
+        sourceRefsJson: result.sourceRefsJson,
+        documents: documentVersionRefs,
+      }),
+      checklistFingerprint: ruleFindingFingerprint({
+        ruleCode: result.ruleCode,
+        result: result.result,
+        message,
+        action,
+        sourceRefsJson: result.sourceRefsJson,
+      }),
+      sourceVersionHash: sourceVersionHash({
+        sourceRefsJson: result.sourceRefsJson,
+        documents: documentVersionRefs,
+      }),
+      processingJobId: result.processingJobId ?? null,
       overrideReason: override?.reason ?? null,
-      canOverride: canOverride && result.result !== 'PASS' && !override,
+      canOverride: canOverride && !reportState.readonly && result.result !== 'PASS' && !override,
       defaultOpen: result.result === 'FAIL' || result.result === 'REVIEW_NEEDED',
+      checklist: emptyChecklist,
     }
   })
 
@@ -208,21 +272,47 @@ export default async function ReportPage({ params }: Props) {
             requiredEvidence: candidate.requiredEvidence,
           })),
           summaryExplanation: null,
+          sourceDocuments: sourceDocumentLinks({
+            evidenceRefsJson: finding.evidenceRefsJson,
+            documents: documentVersionRefs,
+          }),
+          checklistFingerprint: expertFindingFingerprint({
+            area: finding.area,
+            severity: finding.severity,
+            title: finding.title,
+            recommendation: finding.recommendation,
+            evidenceRefsJson: finding.evidenceRefsJson,
+          }),
+          sourceVersionHash: sourceVersionHash({
+            evidenceRefsJson: finding.evidenceRefsJson,
+            documents: documentVersionRefs,
+          }),
+          processingJobId: expertReview.processingJobId ?? null,
           overrideReason: null,
           canOverride: false,
           defaultOpen: true,
+          checklist: emptyChecklist,
         }
       })
     : []
 
-  const findings = [...ruleFindings, ...expertFindings].sort(sortFindings)
+  const findingsWithoutChecklist = [...ruleFindings, ...expertFindings].sort(sortFindings)
+  const checklistByFinding = await loadChecklistStates({
+    tenantId: user.tenantId,
+    submissionId: id,
+    findings: findingsWithoutChecklist,
+  })
+  const findings = findingsWithoutChecklist.map((finding) => ({
+    ...finding,
+    checklist: checklistByFinding.get(`${finding.kind}:${finding.id}`) ?? emptyChecklist,
+  }))
 
   return (
     <ReportWorkspace
       submissionId={id}
       submissionTitle={submission.title}
-      generatedAt={formatDateTime(report.generatedAt)}
-      summaryText={mergeReportSummaryText(report.summaryText, expertReview)}
+      generatedAt={formatDateTime(currentReport.generatedAt)}
+      summaryText={mergeReportSummaryText(currentReport.summaryText, expertReview)}
       counts={{
         errors: errors.length,
         warnings: warnings.length + expertCounts.warnings,
@@ -233,8 +323,94 @@ export default async function ReportPage({ params }: Props) {
       hasCompletedExpertReview={expertReview?.status === 'COMPLETED'}
       documents={documents}
       findings={findings}
+      reportState={reportState}
     />
   )
+}
+
+function pickCurrentReport<T extends { processingJobId: string | null }>(
+  reports: T[],
+  currentReportJobId: string | null,
+): T | null {
+  if (currentReportJobId) {
+    return reports.find((report) => report.processingJobId === currentReportJobId) ?? null
+  }
+  return reports[0] ?? null
+}
+
+function filterByReportJob<T extends { processingJobId: string | null }>(
+  rows: T[],
+  reportJobId: string | null,
+): T[] {
+  if (reportJobId) return rows.filter((row) => row.processingJobId === reportJobId)
+  return rows.filter((row) => row.processingJobId === null)
+}
+
+async function loadChecklistStates({
+  tenantId,
+  submissionId,
+  findings,
+}: {
+  tenantId: string
+  submissionId: string
+  findings: ReportFindingItem[]
+}) {
+  const ruleIds = findings.filter((finding) => finding.kind === 'rule').map((finding) => finding.id)
+  const expertIds = findings.filter((finding) => finding.kind === 'expert').map((finding) => finding.id)
+  const fingerprints = [...new Set(findings.map((finding) => finding.checklistFingerprint))]
+  const sourceHashes = [...new Set(findings.map((finding) => finding.sourceVersionHash))]
+  const filters: Prisma.FindingChecklistStateWhereInput[] = []
+
+  if (ruleIds.length > 0) filters.push({ findingKind: 'rule', findingId: { in: ruleIds } })
+  if (expertIds.length > 0) filters.push({ findingKind: 'expert', findingId: { in: expertIds } })
+  if (fingerprints.length > 0 && sourceHashes.length > 0) {
+    filters.push({
+      findingFingerprint: { in: fingerprints },
+      sourceVersionHash: { in: sourceHashes },
+    })
+  }
+
+  if (filters.length === 0) return new Map<string, { completedAt: string | null; completedByEmail: string | null; note: string | null }>()
+
+  const states = await prisma.findingChecklistState.findMany({
+    where: {
+      tenantId,
+      submissionId,
+      OR: filters,
+    },
+    orderBy: { updatedAt: 'desc' },
+    include: {
+      completedBy: { select: { email: true } },
+    },
+  })
+
+  const exactStates = new Map<string, (typeof states)[number]>()
+  const carryStates = new Map<string, (typeof states)[number]>()
+  for (const state of states) {
+    const exactKey = `${state.findingKind}:${state.findingId}`
+    if (!exactStates.has(exactKey)) exactStates.set(exactKey, state)
+
+    if (state.findingFingerprint && state.sourceVersionHash) {
+      const carryKey = `${state.findingKind}:${state.findingFingerprint}:${state.sourceVersionHash}`
+      if (!carryStates.has(carryKey)) carryStates.set(carryKey, state)
+    }
+  }
+
+  const checklistByFinding = new Map<string, { completedAt: string | null; completedByEmail: string | null; note: string | null }>()
+  for (const finding of findings) {
+    const exactKey = `${finding.kind}:${finding.id}`
+    const carryKey = `${finding.kind}:${finding.checklistFingerprint}:${finding.sourceVersionHash}`
+    const state = exactStates.get(exactKey) ?? carryStates.get(carryKey)
+    if (!state) continue
+
+    checklistByFinding.set(exactKey, {
+      completedAt: state.completedAt?.toISOString() ?? null,
+      completedByEmail: state.completedBy?.email ?? null,
+      note: state.note ?? null,
+    })
+  }
+
+  return checklistByFinding
 }
 
 function normalizeReportCategory(category: string, ruleCode: string): string {

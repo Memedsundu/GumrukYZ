@@ -44,6 +44,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const reservation = await reserveExpertReviewSlot({
       tenantId: user.tenantId,
       submissionId,
+      processingJobId: input.currentReportJobId,
       forceNew,
     })
 
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       submissionId,
       tenantId: user.tenantId,
       reviewId: reservation.reviewId,
+      processingJobId: input.currentReportJobId,
       tradeFlow: input.tradeFlow,
       documents: input.documents,
       ruleResults: input.ruleResults,
@@ -117,6 +119,7 @@ async function loadExpertReviewInput(submissionId: string, tenantId: string) {
     select: {
       id: true,
       status: true,
+      currentReportJobId: true,
       tradeFlow: true,
       documents: {
         orderBy: { createdAt: 'asc' },
@@ -134,6 +137,7 @@ async function loadExpertReviewInput(submissionId: string, tenantId: string) {
       ruleResults: {
         orderBy: [{ severity: 'asc' }, { ruleCode: 'asc' }],
         select: {
+          processingJobId: true,
           ruleCode: true,
           severity: true,
           result: true,
@@ -148,6 +152,7 @@ async function loadExpertReviewInput(submissionId: string, tenantId: string) {
 
   return {
     status: submission.status,
+    currentReportJobId: submission.currentReportJobId,
     tradeFlow: submission.tradeFlow,
     documents: submission.documents
       .filter((document) => !document.isIgnored && document.docType !== 'UNCLASSIFIED')
@@ -159,7 +164,11 @@ async function loadExpertReviewInput(submissionId: string, tenantId: string) {
           confidence: typeof extraction?.confidence === 'number' ? extraction.confidence : 0,
         }
       }),
-    ruleResults: submission.ruleResults,
+    ruleResults: submission.ruleResults.filter((result) => (
+      submission.currentReportJobId
+        ? result.processingJobId === submission.currentReportJobId
+        : result.processingJobId === null
+    )),
   }
 }
 

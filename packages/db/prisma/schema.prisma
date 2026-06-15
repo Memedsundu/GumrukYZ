@@ -49,6 +49,7 @@ model Tenant {
   expertReviews      ExpertReview[]
   expertReviewFindings ExpertReviewFinding[]
   classificationSuggestions DocumentClassificationSuggestion[]
+  findingChecklistStates FindingChecklistState[]
 
   @@map("tenants")
 }
@@ -68,6 +69,7 @@ model User {
   uploadedVersions DocumentVersion[]
   overrides        OverrideAction[]
   reviewedRules    CandidateRule[]
+  completedChecklistStates FindingChecklistState[]
 
   @@unique([clerkUserId, tenantId])
   @@map("users")
@@ -87,6 +89,9 @@ model Submission {
   suggestedTradeFlowConfidence Float? @map("suggested_trade_flow_confidence")
   classificationValidatedAt DateTime? @map("classification_validated_at")
   classificationValidatedBy String? @map("classification_validated_by")
+  currentReportJobId String? @map("current_report_job_id")
+  reportStaleAt     DateTime? @map("report_stale_at")
+  reportStaleReason String? @map("report_stale_reason")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
@@ -100,12 +105,15 @@ model Submission {
   aiRuleValidations   AiRuleValidation[]
   riskReports         RiskReport[]
   processingJobs      ProcessingJob[]
+  currentReportJob    ProcessingJob?       @relation("CurrentReportJob", fields: [currentReportJobId], references: [id], onDelete: SetNull)
   expertReviews       ExpertReview[]
+  findingChecklistStates FindingChecklistState[]
 
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, classificationStatus])
   @@index([brokerClientId])
+  @@index([currentReportJobId])
   @@map("submissions")
 }
 
@@ -236,6 +244,7 @@ model DeclarationSnapshot {
   id                      String    @id @default(uuid())
   submissionId            String    @map("submission_id")
   tenantId                String    @map("tenant_id")
+  processingJobId         String?   @map("processing_job_id")
   sourceDocumentVersionId String    @map("source_document_version_id")
   declarationNumber       String?   @map("declaration_number")
   declarationDate         DateTime? @map("declaration_date")
@@ -252,11 +261,13 @@ model DeclarationSnapshot {
 
   tenant        Tenant          @relation(fields: [tenantId], references: [id])
   submission    Submission      @relation(fields: [submissionId], references: [id])
+  processingJob ProcessingJob?  @relation(fields: [processingJobId], references: [id], onDelete: SetNull)
   sourceVersion DocumentVersion @relation(fields: [sourceDocumentVersionId], references: [id])
   items         DeclarationItem[]
 
   @@index([submissionId])
   @@index([tenantId])
+  @@index([processingJobId])
   @@map("declaration_snapshots")
 }
 
@@ -382,6 +393,7 @@ model RuleResult {
   id           String   @id @default(uuid())
   submissionId String   @map("submission_id")
   tenantId     String   @map("tenant_id")
+  processingJobId String? @map("processing_job_id")
   ruleCode     String   @map("rule_code")
   severity     String   // RuleSeverity
   result       String   // RuleResultOutcome
@@ -392,6 +404,7 @@ model RuleResult {
 
   tenant     Tenant     @relation(fields: [tenantId], references: [id])
   submission Submission @relation(fields: [submissionId], references: [id])
+  processingJob ProcessingJob? @relation(fields: [processingJobId], references: [id], onDelete: SetNull)
   rule       Rule?      @relation(fields: [ruleId], references: [id])
   overrides  OverrideAction[]
   citations RuleResultCitation[]
@@ -399,6 +412,7 @@ model RuleResult {
 
   @@index([submissionId])
   @@index([tenantId])
+  @@index([processingJobId])
   @@map("rule_results")
 }
 
@@ -407,6 +421,7 @@ model AiRuleValidation {
   ruleResultId   String   @map("rule_result_id")
   submissionId   String   @map("submission_id")
   tenantId       String   @map("tenant_id")
+  processingJobId String? @map("processing_job_id")
   providerRunId  String?  @map("provider_run_id")
   status         String
   confidence     Float
@@ -417,12 +432,14 @@ model AiRuleValidation {
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   submission  Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  processingJob ProcessingJob? @relation(fields: [processingJobId], references: [id], onDelete: SetNull)
   ruleResult  RuleResult   @relation(fields: [ruleResultId], references: [id], onDelete: Cascade)
   providerRun ProviderRun? @relation(fields: [providerRunId], references: [id])
 
   @@index([ruleResultId])
   @@index([submissionId])
   @@index([tenantId])
+  @@index([processingJobId])
   @@index([providerRunId])
   @@map("ai_rule_validations")
 }
@@ -445,6 +462,7 @@ model RiskReport {
   id               String   @id @default(uuid())
   submissionId     String   @map("submission_id")
   tenantId         String   @map("tenant_id")
+  processingJobId  String?  @map("processing_job_id")
   providerRunId    String?  @map("provider_run_id")
   totalErrors      Int      @default(0) @map("total_errors")
   totalWarnings    Int      @default(0) @map("total_warnings")
@@ -456,10 +474,12 @@ model RiskReport {
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   submission  Submission   @relation(fields: [submissionId], references: [id])
+  processingJob ProcessingJob? @relation(fields: [processingJobId], references: [id], onDelete: SetNull)
   providerRun ProviderRun? @relation(fields: [providerRunId], references: [id])
 
   @@index([submissionId])
   @@index([tenantId])
+  @@index([processingJobId])
   @@index([providerRunId])
   @@map("risk_reports")
 }
@@ -468,6 +488,7 @@ model ExpertReview {
   id                 String    @id @default(uuid())
   submissionId       String    @map("submission_id")
   tenantId           String    @map("tenant_id")
+  processingJobId    String?   @map("processing_job_id")
   providerRunId      String?   @map("provider_run_id")
   status             String    @default("PENDING")
   legalContextStatus String    @default("READY") @map("legal_context_status")
@@ -480,11 +501,13 @@ model ExpertReview {
 
   tenant      Tenant                @relation(fields: [tenantId], references: [id])
   submission  Submission            @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  processingJob ProcessingJob?       @relation(fields: [processingJobId], references: [id], onDelete: SetNull)
   providerRun ProviderRun?          @relation(fields: [providerRunId], references: [id])
   findings    ExpertReviewFinding[]
 
   @@index([submissionId])
   @@index([tenantId])
+  @@index([processingJobId])
   @@index([providerRunId])
   @@map("expert_reviews")
 }
@@ -544,6 +567,35 @@ model OverrideAction {
 
   @@index([tenantId])
   @@map("override_actions")
+}
+
+model FindingChecklistState {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  submissionId  String   @map("submission_id")
+  processingJobId String? @map("processing_job_id")
+  findingKind   String   @map("finding_kind")
+  findingId     String   @map("finding_id")
+  findingFingerprint String? @map("finding_fingerprint")
+  sourceVersionHash String? @map("source_version_hash")
+  completedAt   DateTime? @map("completed_at")
+  completedById String?  @map("completed_by_id")
+  note          String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  submission  Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  processingJob ProcessingJob? @relation(fields: [processingJobId], references: [id], onDelete: SetNull)
+  completedBy User?      @relation(fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, submissionId, findingKind, findingId])
+  @@index([tenantId])
+  @@index([submissionId])
+  @@index([processingJobId])
+  @@index([tenantId, submissionId, findingKind, findingFingerprint, sourceVersionHash])
+  @@index([completedById])
+  @@map("finding_checklist_states")
 }
 
 // ============================================================
@@ -611,6 +663,13 @@ model ProcessingJob {
 
   tenant     Tenant     @relation(fields: [tenantId], references: [id])
   submission Submission @relation(fields: [submissionId], references: [id])
+  currentForSubmissions Submission[] @relation("CurrentReportJob")
+  declarationSnaps DeclarationSnapshot[]
+  ruleResults RuleResult[]
+  aiRuleValidations AiRuleValidation[]
+  riskReports RiskReport[]
+  expertReviews ExpertReview[]
+  findingChecklistStates FindingChecklistState[]
 
   @@index([submissionId])
   @@index([tenantId, status])

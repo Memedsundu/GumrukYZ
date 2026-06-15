@@ -3,6 +3,7 @@ import { prisma, Prisma } from '@gumrukyz/db'
 import { z } from 'zod'
 import { FINAL_DOC_TYPES, normalizePartyName, normalizeTaxId } from '@/lib/classification'
 import { requireApiUser } from '@/lib/auth'
+import { startSubmissionProcessing } from '@/lib/processing-runner'
 
 const DocumentDecisionSchema = z.object({
   id: z.string().uuid(),
@@ -111,11 +112,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       })
     })
 
+    const processing = submission.reportStaleAt
+      ? await startSubmissionProcessing({ submissionId, tenantId: user.tenantId })
+      : null
+
     return NextResponse.json({
       id: submissionId,
       tradeFlow: parsed.data.tradeFlow,
       brokerClientId,
       classificationStatus: 'VALIDATED',
+      processingJobId: processing?.ok ? processing.jobId : undefined,
+      processingError: processing
+        ? processing.ok
+          ? processing.status === 'FAILED'
+            ? processing.errorMessage ?? 'Analiz tamamlanamadı'
+            : undefined
+          : processing.error
+        : undefined,
     })
   } catch (err) {
     if (err instanceof Error && err.message === 'Broker client not found') {

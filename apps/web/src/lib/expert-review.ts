@@ -123,6 +123,7 @@ export async function runExpertReviewForSubmission(params: {
   submissionId: string
   tenantId: string
   reviewId?: string
+  processingJobId?: string | null
   tradeFlow: string
   documents: ExtractionData[]
   ruleResults: RuleResultForExpertReview[]
@@ -154,6 +155,7 @@ export async function runExpertReviewForSubmission(params: {
         where: { id: params.reviewId },
         data: {
           providerRunId: providerRun.id,
+          processingJobId: params.processingJobId ?? null,
           status: 'RUNNING',
           legalContextStatus: 'READY',
           model,
@@ -166,6 +168,7 @@ export async function runExpertReviewForSubmission(params: {
         data: {
           submissionId: params.submissionId,
           tenantId: params.tenantId,
+          processingJobId: params.processingJobId ?? null,
           providerRunId: providerRun.id,
           status: 'RUNNING',
           legalContextStatus: 'READY',
@@ -254,10 +257,12 @@ async function createSkippedExpertReview(
     submissionId: string
     tenantId: string
     reviewId?: string
+    processingJobId?: string | null
   },
   summary: string,
 ): Promise<ExpertReviewSummary> {
   const data = {
+    processingJobId: params.processingJobId ?? null,
     status: 'SKIPPED',
     legalContextStatus: 'NOT_RUN',
     summary,
@@ -293,10 +298,12 @@ async function createLegalContextIncompleteReview(
     submissionId: string
     tenantId: string
     reviewId?: string
+    processingJobId?: string | null
   },
   missingSources: string[],
 ): Promise<ExpertReviewSummary> {
   const data = {
+    processingJobId: params.processingJobId ?? null,
     status: 'LEGAL_CONTEXT_INCOMPLETE',
     legalContextStatus: 'LEGAL_CONTEXT_INCOMPLETE',
     overallRisk: 'UNKNOWN',

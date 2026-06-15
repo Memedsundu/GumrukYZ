@@ -80,7 +80,16 @@ async function updateJobStatus(
   })
   await prisma.submission.update({
     where: { id: submissionId },
-    data: { status },
+    data: {
+      status,
+      ...(status === 'COMPLETED'
+        ? {
+            currentReportJobId: jobId,
+            reportStaleAt: null,
+            reportStaleReason: null,
+          }
+        : {}),
+    },
   })
 }
 
@@ -119,7 +128,7 @@ export async function processSubmission(
     if (!submission) throw new Error('Submission not found')
     if (submission.tenantId !== tenantId) throw new Error('Submission tenant mismatch')
 
-    await clearGeneratedArtifacts(submissionId, tenantId, submission.documents)
+    await clearProcessingJobArtifacts(submissionId, tenantId, jobId)
 
     const ai = new OpenAIProvider()
     const extractionResults: ExtractionData[] = []
@@ -543,6 +552,7 @@ export async function processSubmission(
           data: {
             submissionId,
             tenantId,
+            processingJobId: jobId,
             sourceDocumentVersionId: sourceDoc.latestVersionId,
             declarationNumber: stringOrNull(d['declaration_number']),
             declarationDate: dateOrNull(d['declaration_date']),
@@ -583,7 +593,7 @@ export async function processSubmission(
     await updateJobStatus(jobId, submissionId, 'RUNNING_RULES', 'RUNNING_RULES')
 
     const declarationSnap = await prisma.declarationSnapshot.findFirst({
-      where: { submissionId },
+      where: { submissionId, tenantId, processingJobId: jobId },
     })
 
     const ctx: SubmissionContext = {
@@ -670,6 +680,7 @@ export async function processSubmission(
     const resultRows = ruleResults.map((r) => ({
       submissionId,
       tenantId,
+      processingJobId: jobId,
       ruleCode: r.ruleCode,
       severity: r.severity,
       result: r.result,
@@ -731,6 +742,7 @@ export async function processSubmission(
     const aiRuleValidation = await runAiRuleValidationForSubmission({
       submissionId,
       tenantId,
+      processingJobId: jobId,
       tradeFlow: submission.tradeFlow,
       documents: extractionResults,
       ruleResults: persistedRuleResults,
@@ -880,6 +892,7 @@ export async function processSubmission(
       data: {
         submissionId,
         tenantId,
+        processingJobId: jobId,
         providerRunId: summaryProviderRunId,
         totalErrors: errors,
         totalWarnings: warnings,
@@ -893,6 +906,7 @@ export async function processSubmission(
     })
 
     // ─── COMPLETED ─────────────────────────────────────────────────────────────
+    await supersedeExpertReviewsForNewReport(submissionId, tenantId, jobId)
     await updateJobStatus(jobId, submissionId, 'COMPLETED', 'COMPLETED')
 
     logger.info('processSubmission.complete', {
@@ -1137,59 +1151,47 @@ function parseLocaleNumber(value: string): number | null {
   return toFiniteNumber(value)
 }
 
-async function clearGeneratedArtifacts(
+async function clearProcessingJobArtifacts(
   submissionId: string,
   tenantId: string,
-  documents: Array<{ latestVersionId: string | null }>,
+  jobId: string,
 ) {
-  const latestVersionIds = documents
-    .map((doc) => doc.latestVersionId)
-    .filter((id): id is string => Boolean(id))
-
   await prisma.$transaction(async (tx) => {
     await tx.overrideAction.deleteMany({
       where: {
         tenantId,
-        ruleResult: { submissionId, tenantId },
+        ruleResult: { submissionId, tenantId, processingJobId: jobId },
       },
     })
-    await tx.ruleResult.deleteMany({ where: { submissionId, tenantId } })
-
-    // Expert reviews are paid (quota) artifacts whose model cost was already
-    // spent — never delete them on reprocess. Stale-mark them instead so the
-    // new report does not integrate findings computed from old extractions.
-    const supersededAt = new Date()
-    await tx.expertReview.updateMany({
-      where: { submissionId, tenantId, status: 'RUNNING' },
-      data: {
-        status: 'ERROR',
-        summary: 'Uzman yapay zeka incelemesi, dosya yeniden işlendiği için iptal edildi.',
-        completedAt: supersededAt,
-        supersededAt,
-      },
-    })
-    await tx.expertReview.updateMany({
-      where: { submissionId, tenantId, supersededAt: null },
-      data: { supersededAt },
-    })
-
-    await tx.riskReport.deleteMany({ where: { submissionId, tenantId } })
+    await tx.ruleResult.deleteMany({ where: { submissionId, tenantId, processingJobId: jobId } })
+    await tx.riskReport.deleteMany({ where: { submissionId, tenantId, processingJobId: jobId } })
     await tx.declarationItem.deleteMany({
       where: {
         tenantId,
-        snapshot: { submissionId, tenantId },
+        snapshot: { submissionId, tenantId, processingJobId: jobId },
       },
     })
-    await tx.declarationSnapshot.deleteMany({ where: { submissionId, tenantId } })
+    await tx.declarationSnapshot.deleteMany({ where: { submissionId, tenantId, processingJobId: jobId } })
+  })
+}
 
-    if (latestVersionIds.length > 0) {
-      await tx.documentExtraction.deleteMany({
-        where: {
-          tenantId,
-          documentVersionId: { in: latestVersionIds },
-        },
-      })
-    }
+async function supersedeExpertReviewsForNewReport(
+  submissionId: string,
+  tenantId: string,
+  jobId: string,
+) {
+  const supersededAt = new Date()
+  await prisma.expertReview.updateMany({
+    where: {
+      submissionId,
+      tenantId,
+      supersededAt: null,
+      OR: [
+        { processingJobId: null },
+        { processingJobId: { not: jobId } },
+      ],
+    },
+    data: { supersededAt },
   })
 }
 

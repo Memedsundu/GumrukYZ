@@ -53,6 +53,7 @@ export async function getExpertReviewQuota(tenantId: string): Promise<ExpertRevi
 export async function reserveExpertReviewSlot(params: {
   tenantId: string
   submissionId: string
+  processingJobId?: string | null
   forceNew?: boolean
 }): Promise<ExpertReviewReservation> {
   const quotaDay = getCurrentQuotaDay()
@@ -63,7 +64,9 @@ export async function reserveExpertReviewSlot(params: {
           where: {
             tenantId: params.tenantId,
             submissionId: params.submissionId,
+            processingJobId: params.processingJobId ?? null,
             status: 'COMPLETED',
+            supersededAt: null,
           },
           orderBy: { createdAt: 'desc' },
           select: { id: true },
@@ -101,6 +104,7 @@ export async function reserveExpertReviewSlot(params: {
         data: {
           tenantId: params.tenantId,
           submissionId: params.submissionId,
+          processingJobId: params.processingJobId ?? null,
           status: 'RUNNING',
           legalContextStatus: 'NOT_RUN',
           summary: 'Uzman yapay zeka incelemesi hazırlanıyor.',

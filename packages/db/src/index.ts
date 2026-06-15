@@ -29,4 +29,5 @@ export type {
   ExpertReview,
   ExpertReviewFinding,
   ExpertReviewFindingCitation,
+  FindingChecklistState,
 } from '@prisma/client'

@@ -107,6 +107,20 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     return
   }
 
+  if (!isPublicRoute(request) && pathname.startsWith('/api/')) {
+    const { userId, orgId } = await auth()
+    if (!userId) {
+      return NextResponse.json({ error: 'Oturum açmanız gerekiyor' }, { status: 401 })
+    }
+    if (!orgId) {
+      return NextResponse.json(
+        { error: 'Devam etmek için bir organizasyon seçmeniz gerekiyor' },
+        { status: 403 },
+      )
+    }
+    return
+  }
+
   if (!isPublicRoute(request)) {
     await auth.protect()
 

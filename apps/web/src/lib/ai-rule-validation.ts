@@ -67,6 +67,7 @@ export function isAiRuleValidationEnabled(): boolean {
 export async function runAiRuleValidationForSubmission(params: {
   submissionId: string
   tenantId: string
+  processingJobId?: string
   tradeFlow: string
   documents: ExtractionData[]
   ruleResults: RuleResultForAiValidation[]
@@ -128,6 +129,7 @@ export async function runAiRuleValidationForSubmission(params: {
             ruleResultId: finding.rule_result_id,
             submissionId: params.submissionId,
             tenantId: params.tenantId,
+            processingJobId: params.processingJobId ?? null,
             providerRunId: providerRun.id,
             status: finding.status,
             confidence: normalizeConfidence(finding.confidence),
@@ -280,4 +282,3 @@ function getTimeoutMs(): number {
 function normalizeConfidence(value: number): number {
   return Math.max(0, Math.min(1, Math.round(value * 100) / 100))
 }
-
