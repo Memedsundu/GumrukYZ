@@ -1,9 +1,11 @@
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { createRequire } from 'module'
+import path from 'path'
 import React from 'react'
 import {
   Document,
   Font,
+  Image,
   Page,
   StyleSheet,
   Text,
@@ -45,6 +47,11 @@ function registerFonts() {
   fontsRegistered = true
 }
 
+const logoPath = path.join(process.cwd(), 'public/brand/mizan-logo.png')
+const logoBuffer = readFileSync(logoPath)
+const LOGO_HEIGHT = 24
+const LOGO_ASPECT = 640 / 183
+
 /** Mirrors the Mizan web design tokens in globals.css — keep the two in sync. */
 const COLORS = {
   ink: '#232934',
@@ -83,17 +90,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: COLORS.brand,
   },
-  brandName: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: COLORS.ink,
-  },
-  brandSub: {
-    fontSize: 7,
-    fontWeight: 700,
-    letterSpacing: 1.2,
-    color: COLORS.brand,
-    marginLeft: 6,
+  brandLogo: {
+    height: LOGO_HEIGHT,
+    width: LOGO_HEIGHT * LOGO_ASPECT,
   },
   brandTag: {
     fontSize: 8,
@@ -194,8 +193,8 @@ const STAT_TONES: Record<string, { border: string; background: string; number: s
 function BrandHeader() {
   return (
     <View style={styles.brandRow}>
-      <Text style={styles.brandName}>Mizan</Text>
-      <Text style={styles.brandSub}>A ZANAI PRODUCT</Text>
+      {/* eslint-disable-next-line jsx-a11y/alt-text -- decorative brand logo in PDF output */}
+      <Image src={logoBuffer} style={styles.brandLogo} />
       <Text style={styles.brandTag}>Akıllı Gümrük Kontrol Sistemi</Text>
     </View>
   )

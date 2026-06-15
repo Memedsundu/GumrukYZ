@@ -22,6 +22,7 @@ const nextConfig: NextConfig = {
       '../../node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
       '../../node_modules/.pnpm/@fontsource+noto-sans@*/node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-400-normal.woff',
       '../../node_modules/.pnpm/@fontsource+noto-sans@*/node_modules/@fontsource/noto-sans/files/noto-sans-latin-ext-700-normal.woff',
+      './public/brand/mizan-logo.png',
     ],
   },
   typescript: {

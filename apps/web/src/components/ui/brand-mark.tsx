@@ -3,48 +3,54 @@ import { cn } from '@/lib/utils'
 
 export interface BrandMarkProps {
   size?: 'sm' | 'md' | 'lg'
-  /** Render the "A ZANAI product" descriptor under the wordmark. */
+  /** Kept for API compatibility; tagline is included in the lockup image. */
   subtitle?: boolean
-  /** Compact "M" monogram for collapsed rails (text only — no logo image). */
+  /** Compact square mark for collapsed rails and icon contexts. */
   monogram?: boolean
   className?: string
 }
 
 const sizeMap = {
-  sm: { name: 'text-base', sub: 'text-[9px]' },
-  md: { name: 'text-lg', sub: 'text-[10px]' },
-  lg: { name: 'text-2xl', sub: 'text-[11px]' },
-}
+  sm: { lockupHeight: 28, markSize: 32 },
+  md: { lockupHeight: 36, markSize: 40 },
+  lg: { lockupHeight: 48, markSize: 48 },
+} as const
 
 /**
- * Mizan text wordmark — "Mizan" with the "A ZANAI product" descriptor.
- * Intentionally logo-free for now; a dedicated mark will be designed later.
+ * Mizan brand mark — horizontal lockup or square document/gauge mark.
  */
-export function BrandMark({ size = 'md', subtitle = true, monogram = false, className }: BrandMarkProps) {
+export function BrandMark(props: BrandMarkProps) {
+  const { size = 'md', monogram = false, className } = props
   const s = sizeMap[size]
 
   if (monogram) {
     return (
-      <span
-        className={cn('font-display text-xl font-bold tracking-tight text-brand-700', className)}
-        aria-label="Mizan"
-      >
-        M
+      <span className={cn('inline-flex shrink-0 items-center justify-center', className)} aria-label="Mizan">
+        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, dimensions fixed */}
+        <img
+          src="/brand/mizan-mark.png"
+          alt=""
+          width={s.markSize}
+          height={s.markSize}
+          className="block object-contain"
+          style={{ width: s.markSize, height: s.markSize }}
+        />
       </span>
     )
   }
 
   return (
     <span
-      className={cn('inline-flex flex-col leading-none', className)}
+      className={cn('inline-flex max-w-full shrink-0 items-center', className)}
       aria-label="Mizan — A ZANAI product"
     >
-      <span className={cn('font-display font-bold tracking-tight text-ink', s.name)}>Mizan</span>
-      {subtitle && (
-        <span className={cn('mt-1 font-semibold uppercase tracking-[0.2em] text-ink-subtle', s.sub)}>
-          A ZANAI product
-        </span>
-      )}
+      {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, dimensions fixed */}
+      <img
+        src="/brand/mizan-logo.png"
+        alt=""
+        className="block max-w-full object-contain"
+        style={{ height: s.lockupHeight, width: 'auto' }}
+      />
     </span>
   )
 }
