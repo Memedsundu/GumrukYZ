@@ -44,7 +44,7 @@ export default function PilotConsentForm() {
     <form onSubmit={handleSubmit} className="mt-6 space-y-6">
       <div className="max-h-64 overflow-y-auto rounded-lg border border-line bg-surface-muted p-4 text-sm text-ink-muted space-y-3">
         <p>
-          <strong>GümrükYZ</strong> bir gümrük beyanname ön kontrol ve risk analiz aracıdır. Hukuki
+          <strong>Mizan</strong> bir gümrük beyanname ön kontrol ve risk analiz aracıdır. Hukuki
           tavsiye vermez, BİLGE / YKTS / TPS ile entegre değildir ve lisanslı gümrük müşavirinin
           yerini almaz.
         </p>

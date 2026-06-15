@@ -1,18 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BrandMark } from '@/components/ui/brand-mark'
 import { SidebarNav } from './sidebar-nav'
 
 function Brand({ collapsed }: { collapsed: boolean }) {
   return (
     <div className={cn('flex h-16 items-center border-b border-line px-4', collapsed && 'justify-center px-0')}>
-      <Link href="/dashboard" className="flex items-center gap-2" aria-label="GümrükYZ">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">
-          <ShieldCheck className="size-5" />
-        </span>
-        {!collapsed && <span className="font-display text-lg font-bold tracking-tight text-ink">GümrükYZ</span>}
+      <Link href="/dashboard" className="flex items-center" aria-label="Mizan">
+        <BrandMark size="sm" monogram={collapsed} subtitle={!collapsed} />
       </Link>
     </div>
   )

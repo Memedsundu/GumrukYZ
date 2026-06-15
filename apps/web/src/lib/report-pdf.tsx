@@ -5,9 +5,7 @@ import {
   Document,
   Font,
   Page,
-  Path,
   StyleSheet,
-  Svg,
   Text,
   View,
   renderToBuffer,
@@ -47,26 +45,26 @@ function registerFonts() {
   fontsRegistered = true
 }
 
-/** Mirrors the web design tokens in globals.css — keep the two in sync. */
+/** Mirrors the Mizan web design tokens in globals.css — keep the two in sync. */
 const COLORS = {
-  ink: '#1c1917',
-  inkMuted: '#57534e',
-  line: '#e7e5e4',
-  surfaceMuted: '#f5f4f2',
-  brand: '#2b57e0',
-  brand50: '#eef4ff',
-  brand100: '#dbe6fe',
-  brand700: '#1e40c4',
-  success50: '#ecfdf5',
-  success200: '#a7f3d0',
-  success700: '#047857',
-  warning50: '#fffbeb',
-  warning200: '#fde68a',
-  warning700: '#b45309',
-  danger50: '#fef2f2',
-  danger200: '#fecaca',
-  danger700: '#be123c',
-  ai600: '#7c3aed',
+  ink: '#232934',
+  inkMuted: '#667085',
+  line: '#e6dfd2',
+  surfaceMuted: '#f4f0e6',
+  brand: '#006b5f',
+  brand50: '#e6f4f1',
+  brand100: '#c9e9e2',
+  brand700: '#00584e',
+  success50: '#e7f5ee',
+  success200: '#97d5b7',
+  success700: '#0c5f45',
+  warning50: '#fbf3e0',
+  warning200: '#efce83',
+  warning700: '#9a6500',
+  danger50: '#fceae8',
+  danger200: '#f1aba3',
+  danger700: '#a81d13',
+  ai600: '#006b5f',
 }
 
 const styles = StyleSheet.create({
@@ -86,9 +84,16 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.brand,
   },
   brandName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 700,
+    color: COLORS.ink,
+  },
+  brandSub: {
+    fontSize: 7,
+    fontWeight: 700,
+    letterSpacing: 1.2,
     color: COLORS.brand,
+    marginLeft: 6,
   },
   brandTag: {
     fontSize: 8,
@@ -189,21 +194,8 @@ const STAT_TONES: Record<string, { border: string; background: string; number: s
 function BrandHeader() {
   return (
     <View style={styles.brandRow}>
-      <Svg width={16} height={16} viewBox="0 0 24 24">
-        {/* shield */}
-        <Path
-          d="M12 2 L20 5 V11 C20 16.5 16.6 20.6 12 22 C7.4 20.6 4 16.5 4 11 V5 Z"
-          fill={COLORS.brand}
-        />
-        {/* check */}
-        <Path
-          d="M8.5 11.8 L11 14.3 L15.5 9.4"
-          stroke="#ffffff"
-          strokeWidth={1.8}
-          fill="none"
-        />
-      </Svg>
-      <Text style={styles.brandName}>GümrükYZ</Text>
+      <Text style={styles.brandName}>Mizan</Text>
+      <Text style={styles.brandSub}>A ZANAI PRODUCT</Text>
       <Text style={styles.brandTag}>Akıllı Gümrük Kontrol Sistemi</Text>
     </View>
   )
@@ -223,7 +215,7 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
   ]
 
   return (
-    <Document title={`GümrükYZ Risk Raporu - ${payload.submission.title}`}>
+    <Document title={`Mizan Risk Raporu - ${payload.submission.title}`}>
       <Page size="A4" style={styles.page}>
         <BrandHeader />
         <Text style={styles.title}>Risk Raporu</Text>

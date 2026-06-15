@@ -18,7 +18,7 @@ export default async function PilotConsentPage() {
         <BrandMark size="sm" className="mb-5" />
         <h1 className="font-display text-xl font-bold text-ink">Pilot kullanım koşulları</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          {user.tenant.name} — GümrükYZ beta pilot programı
+          {user.tenant.name} — Mizan beta pilot programı
         </p>
         <PilotConsentForm />
       </div>

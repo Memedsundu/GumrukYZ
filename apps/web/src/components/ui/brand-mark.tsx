@@ -1,27 +1,50 @@
 import * as React from 'react'
-import { ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface BrandMarkProps {
   size?: 'sm' | 'md' | 'lg'
+  /** Render the "A ZANAI product" descriptor under the wordmark. */
+  subtitle?: boolean
+  /** Compact "M" monogram for collapsed rails (text only — no logo image). */
+  monogram?: boolean
   className?: string
 }
 
 const sizeMap = {
-  sm: { box: 'size-7 rounded-lg', icon: 'size-4', text: 'text-base' },
-  md: { box: 'size-8 rounded-xl', icon: 'size-5', text: 'text-lg' },
-  lg: { box: 'size-10 rounded-xl', icon: 'size-6', text: 'text-xl' },
+  sm: { name: 'text-base', sub: 'text-[9px]' },
+  md: { name: 'text-lg', sub: 'text-[10px]' },
+  lg: { name: 'text-2xl', sub: 'text-[11px]' },
 }
 
-/** GümrükYZ wordmark: shield tile + display-font name. */
-export function BrandMark({ size = 'md', className }: BrandMarkProps) {
+/**
+ * Mizan text wordmark — "Mizan" with the "A ZANAI product" descriptor.
+ * Intentionally logo-free for now; a dedicated mark will be designed later.
+ */
+export function BrandMark({ size = 'md', subtitle = true, monogram = false, className }: BrandMarkProps) {
   const s = sizeMap[size]
-  return (
-    <span className={cn('inline-flex items-center gap-2.5', className)}>
-      <span className={cn('flex items-center justify-center bg-brand-600 text-white shadow-sm', s.box)}>
-        <ShieldCheck className={s.icon} aria-hidden />
+
+  if (monogram) {
+    return (
+      <span
+        className={cn('font-display text-xl font-bold tracking-tight text-brand-700', className)}
+        aria-label="Mizan"
+      >
+        M
       </span>
-      <span className={cn('font-display font-bold tracking-tight text-ink', s.text)}>GümrükYZ</span>
+    )
+  }
+
+  return (
+    <span
+      className={cn('inline-flex flex-col leading-none', className)}
+      aria-label="Mizan — A ZANAI product"
+    >
+      <span className={cn('font-display font-bold tracking-tight text-ink', s.name)}>Mizan</span>
+      {subtitle && (
+        <span className={cn('mt-1 font-semibold uppercase tracking-[0.2em] text-ink-subtle', s.sub)}>
+          A ZANAI product
+        </span>
+      )}
     </span>
   )
 }

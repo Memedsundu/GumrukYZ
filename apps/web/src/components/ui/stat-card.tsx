@@ -6,6 +6,7 @@ const toneStyles = {
   brand: 'bg-brand-50 text-brand-600',
   success: 'bg-success-50 text-success-600',
   warning: 'bg-warning-50 text-warning-600',
+  high: 'bg-high-50 text-high-600',
   danger: 'bg-danger-50 text-danger-600',
   ai: 'bg-ai-50 text-ai-600',
   neutral: 'bg-surface-muted text-ink-muted',

@@ -1,69 +1,79 @@
 @import "tailwindcss";
 
 @theme {
-  /* Typography */
+  /* Typography — Inter (UI), Sora (display/headings), IBM Plex Mono (codes/IDs) */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
 
-  /* Warm neutrals (stone-based) */
-  --color-canvas: #faf9f7;
+  /* Mizan neutrals — warm off-white canvas, dark ink, sand borders */
+  --color-canvas: #f7f4ed;
   --color-surface: #ffffff;
-  --color-surface-muted: #f5f4f2;
-  --color-ink: #1c1917;
-  --color-ink-muted: #57534e;
-  --color-ink-subtle: #a8a29e;
-  --color-line: #e7e5e4;
-  --color-line-strong: #d6d3d1;
+  --color-surface-muted: #f4f0e6;
+  --color-ink: #232934;
+  --color-ink-soft: #3a4250;
+  --color-ink-muted: #667085;
+  --color-ink-subtle: #98a1b0;
+  --color-line: #e6dfd2;
+  --color-line-strong: #d8cfbe;
 
-  /* Brand — friendly trustworthy blue */
-  --color-brand-50: #eef4ff;
-  --color-brand-100: #dbe6fe;
-  --color-brand-200: #bcd0fd;
-  --color-brand-500: #3b6cf6;
-  --color-brand-600: #2b57e0;
-  --color-brand-700: #1e40c4;
+  /* Brand — deep teal (primary actions, links) */
+  --color-brand-50: #e6f4f1;
+  --color-brand-100: #c9e9e2;
+  --color-brand-200: #9bd6cb;
+  --color-brand-500: #0e8576;
+  --color-brand-600: #006b5f;
+  --color-brand-700: #00584e;
 
-  /* Accent — warm coral for human/illustrative touches */
-  --color-accent-50: #fff1ed;
-  --color-accent-100: #ffe1d6;
-  --color-accent-500: #ff7a59;
-  --color-accent-600: #f2613f;
+  /* Accent — fresh mint (highlights only, never dominant) */
+  --color-accent-50: #e8f8f1;
+  --color-accent-100: #cff3e2;
+  --color-accent-200: #91f2ca;
+  --color-accent-500: #2bc495;
+  --color-accent-600: #0b7a5b;
 
-  /* Risk: success / clean */
-  --color-success-50: #ecfdf5;
-  --color-success-100: #d1fae5;
-  --color-success-200: #a7f3d0;
-  --color-success-500: #10b981;
-  --color-success-600: #059669;
-  --color-success-700: #047857;
+  /* Risk: success / clean (green) */
+  --color-success-50: #e7f5ee;
+  --color-success-100: #c7e9d8;
+  --color-success-200: #97d5b7;
+  --color-success-500: #1a9e73;
+  --color-success-600: #12805c;
+  --color-success-700: #0c5f45;
 
-  /* Risk: warning */
-  --color-warning-50: #fffbeb;
-  --color-warning-100: #fef3c7;
-  --color-warning-200: #fde68a;
-  --color-warning-500: #f59e0b;
-  --color-warning-600: #d97706;
-  --color-warning-700: #b45309;
+  /* Risk: warning (amber) */
+  --color-warning-50: #fbf3e0;
+  --color-warning-100: #f6e4bd;
+  --color-warning-200: #efce83;
+  --color-warning-500: #e8a20d;
+  --color-warning-600: #d68a00;
+  --color-warning-700: #9a6500;
 
-  /* Risk: danger / error */
-  --color-danger-50: #fef2f2;
-  --color-danger-100: #fee2e2;
-  --color-danger-200: #fecaca;
-  --color-danger-500: #f43f5e;
-  --color-danger-600: #e11d48;
-  --color-danger-700: #be123c;
+  /* Risk: high (orange) — severity between warning and critical */
+  --color-high-50: #feeee3;
+  --color-high-100: #fbd5bd;
+  --color-high-200: #f6b78c;
+  --color-high-500: #f4690f;
+  --color-high-600: #ea580c;
+  --color-high-700: #b5430a;
 
-  /* AI / expert-review moments */
-  --color-ai-50: #f5f3ff;
-  --color-ai-100: #ede9fe;
-  --color-ai-500: #8b5cf6;
-  --color-ai-600: #7c3aed;
-  --color-ai-700: #6d28d9;
+  /* Risk: danger / critical (red) */
+  --color-danger-50: #fceae8;
+  --color-danger-100: #f9d2cd;
+  --color-danger-200: #f1aba3;
+  --color-danger-500: #e5392b;
+  --color-danger-600: #d92d20;
+  --color-danger-700: #a81d13;
 
-  /* Soft, warm-tinted elevation */
-  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.06);
-  --shadow-pop: 0 10px 30px -10px rgba(28, 25, 23, 0.18), 0 4px 12px -4px rgba(28, 25, 23, 0.1);
+  /* AI / expert-review moments — on-brand teal (calm, never neon) */
+  --color-ai-50: #e6f4f1;
+  --color-ai-100: #c9e9e2;
+  --color-ai-500: #0e8576;
+  --color-ai-600: #006b5f;
+  --color-ai-700: #00514a;
+
+  /* Soft, warm ink-tinted elevation */
+  --shadow-card: 0 1px 2px rgba(35, 41, 52, 0.04), 0 1px 3px rgba(35, 41, 52, 0.06);
+  --shadow-pop: 0 10px 30px -10px rgba(35, 41, 52, 0.18), 0 4px 12px -4px rgba(35, 41, 52, 0.1);
 
   /* Motion */
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);

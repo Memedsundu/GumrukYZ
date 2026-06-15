@@ -1,13 +1,18 @@
 import type { Metadata } from 'next'
-import { Inter, Space_Grotesk } from 'next/font/google'
+import { Inter, Sora, IBM_Plex_Mono } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 import { trTR } from '@clerk/localizations'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
-const spaceGrotesk = Space_Grotesk({
+const sora = Sora({
   subsets: ['latin', 'latin-ext'],
-  variable: '--font-space-grotesk',
+  variable: '--font-sora',
+})
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-ibm-plex-mono',
 })
 const clerkLocalization = {
   ...trTR,
@@ -15,44 +20,45 @@ const clerkLocalization = {
     ...trTR.signIn,
     emailCode: {
       ...(trTR.signIn?.emailCode ?? {}),
-      subtitle: 'GümrükYZ ile devam etmek için',
+      subtitle: 'Mizan ile devam etmek için',
     },
     password: {
       ...(trTR.signIn?.password ?? {}),
-      subtitle: 'GümrükYZ ile devam etmek için',
+      subtitle: 'Mizan ile devam etmek için',
     },
     start: {
       ...(trTR.signIn?.start ?? {}),
-      subtitle: 'GümrükYZ ile devam etmek için',
-      subtitleCombined: 'GümrükYZ ile devam etmek için',
+      subtitle: 'Mizan ile devam etmek için',
+      subtitleCombined: 'Mizan ile devam etmek için',
     },
   },
   signUp: {
     ...trTR.signUp,
     continue: {
       ...(trTR.signUp?.continue ?? {}),
-      subtitle: 'GümrükYZ ile devam etmek için',
+      subtitle: 'Mizan ile devam etmek için',
     },
     emailCode: {
       ...(trTR.signUp?.emailCode ?? {}),
-      subtitle: 'GümrükYZ ile devam etmek için',
+      subtitle: 'Mizan ile devam etmek için',
     },
     start: {
       ...(trTR.signUp?.start ?? {}),
-      subtitle: 'GümrükYZ ile devam etmek için',
-      subtitleCombined: 'GümrükYZ ile devam etmek için',
+      subtitle: 'Mizan ile devam etmek için',
+      subtitleCombined: 'Mizan ile devam etmek için',
     },
   },
 }
 
 export const metadata: Metadata = {
-  title: 'GümrükYZ — Akıllı Gümrük Kontrol',
-  description: 'Gümrük beyanname ön kontrol ve risk analiz sistemi',
+  title: 'Mizan — Gümrük kontrolü, yapay zekâ ile dengelenir',
+  description:
+    'Mizan, gümrük beyannamesi ve ticari belgeler için yapay zekâ destekli ön kontrol ve risk analizi sağlar.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" className={`${inter.variable} ${spaceGrotesk.variable}`}>
+    <html lang="tr" className={`${inter.variable} ${sora.variable} ${ibmPlexMono.variable}`}>
       <body className="font-sans antialiased">
         <ClerkProvider localization={clerkLocalization}>{children}</ClerkProvider>
       </body>
