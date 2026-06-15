@@ -13,7 +13,7 @@ export interface BrandMarkProps {
 const sizeMap = {
   sm: { lockupHeight: 28, markSize: 32 },
   md: { lockupHeight: 36, markSize: 40 },
-  lg: { lockupHeight: 48, markSize: 48 },
+  lg: { lockupHeight: 56, markSize: 48 },
 } as const
 
 /**

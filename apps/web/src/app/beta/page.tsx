@@ -21,7 +21,7 @@ export default async function BetaPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-brand-700">Beta sürüm</p>
             <h1 className="mt-4 max-w-2xl font-display text-4xl font-bold tracking-tight text-ink md:text-5xl">
-              Gümrük kontrolü, yapay zekâ ile dengelenir
+              Gümrük risklerini beyan öncesi dengeleyin
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-ink-muted">
               Mizan; faturaları, çeki listelerini, taşıma belgelerini, GTİP tutarlılığını, menşei, kıymet ve
@@ -53,7 +53,7 @@ export default async function BetaPage() {
                 {
                   icon: <Sparkles className="size-5 text-ai-600" />,
                   tint: 'bg-ai-50',
-                  title: 'Mizan kontrolünü çalıştır',
+                  title: 'Yapay zeka kontrolü çalıştır',
                   text: 'Kurallar ve hızlı yapay zekâ kural kontrolü otomatik çalışır.',
                 },
                 {

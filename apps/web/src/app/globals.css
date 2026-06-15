@@ -150,3 +150,15 @@ body {
 .cl-footer > :not(.cl-footerAction) {
   display: none !important;
 }
+
+/* Clerk auth: keep optional hints on the same row as their field label */
+.cl-formFieldRow .cl-formFieldLabelRow {
+  align-items: baseline;
+  column-gap: 0.375rem;
+  row-gap: 0;
+}
+
+.cl-formFieldRow .cl-formFieldHintText {
+  margin-left: 0;
+  white-space: nowrap;
+}
