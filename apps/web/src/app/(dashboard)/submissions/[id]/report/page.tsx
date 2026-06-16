@@ -21,7 +21,6 @@ import {
 } from '@/lib/report-checklist-fingerprint'
 import {
   countIntegratedExpertFindings,
-  mergeReportSummaryText,
   parseExpertEvidenceRefs,
   parseExpertGtipCandidates,
   shouldIntegrateExpertReview,
@@ -244,11 +243,11 @@ export default async function ReportPage({ params }: Props) {
         return {
           id: finding.id,
           kind: 'expert',
-          code: `YAPAY-ZEKA-${index + 1}`,
+          code: `UZMAN-INCELEME-${index + 1}`,
           result: finding.severity,
           resultLabel: resultLabel(finding.severity),
           category: expertFindingCategory(finding.area),
-          sourceType: 'Yapay zeka yorumu',
+          sourceType: 'Uzman İncelemesi',
           title: finding.title,
           explanation: expertAreaLabel(finding.area),
           message: finding.explanation,
@@ -314,7 +313,6 @@ export default async function ReportPage({ params }: Props) {
       submissionId={id}
       submissionTitle={submission.title}
       generatedAt={formatDateTime(currentReport.generatedAt)}
-      summaryText={mergeReportSummaryText(currentReport.summaryText, expertReview)}
       counts={{
         errors: errors.length,
         warnings: warnings.length + expertCounts.warnings,
@@ -447,9 +445,9 @@ function expertFindingCategory(area: string): string {
     ORIGIN_PREFERENTIAL: 'Menşe',
     INCOTERM: 'Kıymet',
     DOCUMENT_CONSISTENCY: 'Belge seti',
-    LEGAL_CONTEXT: 'Yapay zeka',
+    LEGAL_CONTEXT: 'Uzman İncelemesi',
   }
-  return map[area] ?? 'Yapay zeka'
+  return map[area] ?? 'Uzman İncelemesi'
 }
 
 function sortFindings(a: ReportFindingItem, b: ReportFindingItem): number {
@@ -468,7 +466,7 @@ function resultPriority(result: string): number {
 }
 
 function categoryPriority(category: string): number {
-  const order = ['Belge seti', 'Belge kalitesi', 'Fatura', 'Çeki listesi', 'Beyanname', 'GTİP', 'Menşe', 'Kıymet', 'Taşıma', 'Yapay zeka']
+  const order = ['Belge seti', 'Belge kalitesi', 'Fatura', 'Çeki listesi', 'Beyanname', 'GTİP', 'Menşe', 'Kıymet', 'Taşıma', 'Uzman İncelemesi']
   const index = order.indexOf(category)
   return index === -1 ? order.length : index
 }

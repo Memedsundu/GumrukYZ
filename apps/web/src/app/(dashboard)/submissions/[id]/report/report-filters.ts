@@ -13,7 +13,7 @@ export const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'FAIL', label: 'Hatalar' },
   { key: 'REVIEW_NEEDED', label: 'İnceleme gerekli' },
   { key: 'WARN', label: 'Uyarılar' },
-  { key: 'EXPERT', label: 'Yapay zeka' },
+  { key: 'EXPERT', label: 'Uzman İncelemesi' },
   { key: 'PASS', label: 'Geçen kontroller' },
 ]
 
@@ -27,7 +27,7 @@ export const CATEGORY_ORDER = [
   'Menşe',
   'Kıymet',
   'Taşıma',
-  'Yapay zeka',
+  'Uzman İncelemesi',
   'Diğer',
 ]
 

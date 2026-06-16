@@ -5,7 +5,7 @@ import { Metric } from './finding-badges'
 import type { ReportCounts } from './report-types'
 
 /**
- * The verdict surface: gauge, counts, and AI summary.
+ * The verdict surface: gauge, counts, and file summary.
  * When nothing blocks the file, leads with a restrained all-clear band.
  */
 export function CommandDeck({
@@ -53,7 +53,7 @@ export function CommandDeck({
         <div className="mt-5 rounded-xl border-l-2 border-brand-500 bg-brand-50/50 py-4 pl-4 pr-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-ink">
             <Info className="h-4 w-4 text-brand-600" />
-            Yapay zeka özeti
+            Dosya Özeti
           </div>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-ink-muted">{summaryText}</p>
           <p className="mt-2 text-xs text-ink-subtle">

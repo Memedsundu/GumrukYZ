@@ -1,0 +1,6 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic "Mizan — A ZANAI product" [ref=e5]
+    - paragraph [ref=e6]: Mizan ile devam etmek için
+  - button "Open Next.js Dev Tools" [ref=e12] [cursor=pointer]:
+    - img [ref=e13]

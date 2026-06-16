@@ -130,36 +130,40 @@ export default async function SubmissionDetailPage({ params }: Props) {
         <div className="space-y-6">
           {latestReport && (
             <div className="rounded-lg border border-line bg-surface p-6">
-              <h2 className="mb-4 text-base font-semibold text-ink">Risk Özeti</h2>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <XCircle className="mr-2 h-4 w-4 text-danger-500" />
-                    <span className="text-sm text-ink-muted">Hatalar</span>
-                  </div>
-                  <span className="text-sm font-bold text-danger-600">{latestReport.totalErrors}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <AlertCircle className="mr-2 h-4 w-4 text-warning-500" />
-                    <span className="text-sm text-ink-muted">Uyarılar</span>
-                  </div>
-                  <span className="text-sm font-bold text-warning-600">{latestReport.totalWarnings}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Clock className="mr-2 h-4 w-4 text-brand-500" />
-                    <span className="text-sm text-ink-muted">İnceleme Gerekli</span>
-                  </div>
-                  <span className="text-sm font-bold text-brand-600">{latestReport.totalReviewNeeded}</span>
-                </div>
+              <h2 className="mb-3 text-base font-semibold text-ink">Dosya Özeti</h2>
+
+              <div className="rounded-lg bg-surface-muted p-3 text-sm leading-6 text-ink-muted">
+                {latestReport.summaryText ?? 'Bu dosya için otomatik risk kontrolü tamamlandı. Ayrıntılı bulgular tam raporda görüntülenebilir.'}
               </div>
 
-              {latestReport.summaryText && (
-                <div className="mt-4 rounded-lg bg-surface-muted p-3 text-sm text-ink-muted">
-                  {latestReport.summaryText}
+              <div className="mt-5">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                  Otomatik risk kontrolü sonucu
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <XCircle className="mr-2 h-4 w-4 text-danger-500" />
+                      <span className="text-sm text-ink-muted">Hatalar</span>
+                    </div>
+                    <span className="text-sm font-bold text-danger-600">{latestReport.totalErrors}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <AlertCircle className="mr-2 h-4 w-4 text-warning-500" />
+                      <span className="text-sm text-ink-muted">Uyarılar</span>
+                    </div>
+                    <span className="text-sm font-bold text-warning-600">{latestReport.totalWarnings}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Clock className="mr-2 h-4 w-4 text-brand-500" />
+                      <span className="text-sm text-ink-muted">İnceleme Gerekli</span>
+                    </div>
+                    <span className="text-sm font-bold text-brand-600">{latestReport.totalReviewNeeded}</span>
+                  </div>
                 </div>
-              )}
+              </div>
 
               <Link
                 href={`/submissions/${submission.id}/report`}
@@ -216,7 +220,7 @@ function ProcessingTimeline({ status, job }: { status: string; job: { status: st
     { key: 'EXTRACTING', label: 'Veri Çıkarılıyor' },
     { key: 'NORMALIZING', label: 'Normalleştiriliyor' },
     { key: 'RUNNING_RULES', label: 'Kurallar Çalışıyor' },
-    { key: 'AI_RULE_VALIDATING', label: 'Yapay zeka kural kontrolü' },
+    { key: 'AI_RULE_VALIDATING', label: 'Otomatik Risk Kontrolü' },
     { key: 'GENERATING_REPORT', label: 'Rapor Üretiliyor' },
     { key: 'COMPLETED', label: 'Tamamlandı' },
   ]

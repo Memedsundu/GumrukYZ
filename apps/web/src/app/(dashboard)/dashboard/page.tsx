@@ -82,7 +82,7 @@ export default async function DashboardPage() {
             <p className="text-sm font-medium text-white/80">Hoş geldiniz</p>
             <h1 className="mt-1 truncate font-display text-2xl font-bold tracking-tight sm:text-3xl">{user.tenant.name}</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/80">
-              Aktif dosyalarınızı, risk analizlerini ve uzman yapay zeka incelemelerini tek ekrandan yönetin.
+              Aktif dosyalarınızı, risk analizlerini ve Uzman İncelemelerini tek ekrandan yönetin.
             </p>
             <Link
               href="/submissions/new"
@@ -109,7 +109,7 @@ export default async function DashboardPage() {
         <StatCard icon={AlertCircle} label="Hatalı" value={stats.failed} tone="danger" />
         <StatCard
           icon={Sparkles}
-          label="Uzman yapay zeka hakkı"
+          label="Uzman İncelemesi hakkı"
           value={expertQuota.remaining}
           sub={`Bu ay ${expertQuota.used}/${expertQuota.limit} kullanıldı`}
           tone="ai"
@@ -238,7 +238,7 @@ export default async function DashboardPage() {
             <CardContent>
               <div className="flex items-center gap-2 text-sm font-semibold text-ink">
                 <Sparkles className="size-4 text-ai-600" />
-                Uzman yapay zeka hakkı
+                Uzman İncelemesi hakkı
               </div>
               <p className="mt-3 text-3xl font-bold tracking-tight text-ink">
                 {expertQuota.remaining}

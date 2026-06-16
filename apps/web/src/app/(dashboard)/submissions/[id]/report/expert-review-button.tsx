@@ -17,10 +17,12 @@ export default function ExpertReviewButton({
   submissionId,
   quota,
   hasCompletedExpertReview,
+  recommended,
 }: {
   submissionId: string
   quota: Quota
   hasCompletedExpertReview: boolean
+  recommended: boolean
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -30,11 +32,11 @@ export default function ExpertReviewButton({
   const disabled = loading || currentQuota.remaining <= 0
   const cta = hasCompletedExpertReview
     ? currentQuota.remaining <= 0
-      ? 'Uzman yapay zeka inceleme hakkınız kalmadı'
-      : 'Uzman yapay zeka incelemesini yenile'
+      ? 'Uzman İncelemesi hakkınız kalmadı'
+      : 'Uzman İncelemesini yenile'
     : currentQuota.remaining <= 0
-      ? 'Uzman yapay zeka inceleme hakkınız kalmadı'
-      : 'Uzman yapay zeka incelemesi başlat'
+      ? 'Uzman İncelemesi hakkınız kalmadı'
+      : 'Uzman İncelemesi başlat'
 
   async function startExpertReview() {
     setLoading(true)
@@ -47,10 +49,10 @@ export default function ExpertReviewButton({
       })
       const data = await res.json() as { error?: string; quota?: Quota }
       if (data.quota) setCurrentQuota(data.quota)
-      if (!res.ok) throw new Error(data.error ?? 'Uzman yapay zeka incelemesi başlatılamadı')
+      if (!res.ok) throw new Error(data.error ?? 'Uzman İncelemesi başlatılamadı')
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Uzman yapay zeka incelemesi başlatılamadı')
+      setError(err instanceof Error ? err.message : 'Uzman İncelemesi başlatılamadı')
     } finally {
       setLoading(false)
     }
@@ -59,13 +61,31 @@ export default function ExpertReviewButton({
   return (
     <div className={cn(loading && 'animate-pulse-soft')}>
       <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-ai-700">
+              <Sparkles className="h-4 w-4" />
+              Uzman İncelemesi
+            </p>
+            <p className="mt-1 text-sm leading-5 text-ai-700">
+              GTİP, kıymet, menşe, ürün mevzuatı veya belge çelişkisi gibi yorum gerektiren risklerde ikinci kontrol sağlar.
+            </p>
+          </div>
+          <span
+            className={cn(
+              'shrink-0 rounded-full px-2 py-1 text-xs font-semibold',
+              recommended ? 'bg-warning-100 text-warning-700' : 'bg-ai-100 text-ai-700',
+            )}
+          >
+            {recommended ? 'Önerilir' : 'İsteğe bağlı'}
+          </span>
+        </div>
         <div>
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-ai-700">
-            <Sparkles className="h-4 w-4" />
-            Uzman yapay zeka incelemesi
+          <p className="text-sm leading-5 text-ai-600">
+            Bu ay kalan hak: {currentQuota.remaining}/{currentQuota.limit}.
           </p>
-          <p className="mt-1 text-sm leading-5 text-ai-600">
-            İsteğe bağlı çalışır. Bugünkü kalan hak: {currentQuota.remaining}/{currentQuota.limit}.
+          <p className="mt-1 text-xs leading-5 text-ai-600">
+            Başlatmak veya yenilemek 1 Uzman İncelemesi hakkı kullanır.
           </p>
         </div>
         <button
@@ -79,7 +99,7 @@ export default function ExpertReviewButton({
         </button>
       </div>
       <p className="mt-3 text-xs leading-5 text-ai-600">
-        Hızlı yapay zeka kural kontrolü her analizde otomatik çalışır; uzman incelemesini başlatmak veya yenilemek haktan düşer.
+        Otomatik Risk Kontrolü her analizde çalışır ve Uzman İncelemesi hakkından düşmez.
       </p>
       {error && (
         <div className="mt-3 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">

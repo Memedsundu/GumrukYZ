@@ -95,9 +95,9 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
     }))
   const expertActionSummary = shouldIntegrateExpertReview(expertReview)
     ? expertReview.findings.map((finding, index) => ({
-        ruleCode: `YAPAY-ZEKA-${index + 1}`,
+        ruleCode: `UZMAN-INCELEME-${index + 1}`,
         result: finding.severity,
-        title: `Uzman yapay zeka: ${finding.title}`,
+        title: `Uzman İncelemesi: ${finding.title}`,
         description: finding.explanation,
         action: finding.recommendation,
         source: 'EXPERT_REVIEW' as const,

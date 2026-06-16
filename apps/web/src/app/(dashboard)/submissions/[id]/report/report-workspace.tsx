@@ -50,7 +50,6 @@ export type ReportWorkspaceProps = {
   submissionId: string
   submissionTitle: string
   generatedAt: string
-  summaryText: string | null
   counts: ReportCounts
   expertQuota: ExpertQuota
   hasCompletedExpertReview: boolean
@@ -71,7 +70,6 @@ export default function ReportWorkspace({
   submissionId,
   submissionTitle,
   generatedAt,
-  summaryText,
   counts,
   expertQuota,
   hasCompletedExpertReview,
@@ -141,6 +139,7 @@ export default function ReportWorkspace({
   const progressPercent = actionableFindings.length === 0
     ? 100
     : Math.round((completedCount / actionableFindings.length) * 100)
+  const expertReviewRecommended = counts.errors > 0 || counts.reviewNeeded > 0 || counts.warnings >= 2
 
   function toggleExpanded(key: string) {
     setExpandedKeys((current) => {
@@ -383,12 +382,12 @@ export default function ReportWorkspace({
                 submissionId={submissionId}
                 expertQuota={expertQuota}
                 hasCompletedExpertReview={hasCompletedExpertReview}
+                recommended={expertReviewRecommended}
               />
               <SuggestionChips
                 submissionId={submissionId}
                 onSelectPrompt={(suggestion) => askAssistant(suggestion.prompt_to_assistant)}
               />
-              <ReportSummaryCard summaryText={summaryText} />
               <details className="group rounded-2xl border border-line bg-surface shadow-card">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
                   <span className="font-display text-base font-semibold text-ink">Kanıt ve kaynaklar</span>
@@ -425,12 +424,12 @@ export default function ReportWorkspace({
                 submissionId={submissionId}
                 expertQuota={expertQuota}
                 hasCompletedExpertReview={hasCompletedExpertReview}
+                recommended={expertReviewRecommended}
               />
               <SuggestionChips
                 submissionId={submissionId}
                 onSelectPrompt={(suggestion) => askAssistant(suggestion.prompt_to_assistant)}
               />
-              <ReportSummaryCard summaryText={summaryText} />
               <EvidencePanel
                 documents={documents}
                 categoryCounts={categoryCounts}
@@ -458,7 +457,7 @@ export default function ReportWorkspace({
           className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-pop transition-colors hover:bg-brand-700"
         >
           <MessageCircleQuestion className="size-5" />
-          GümrükYZ&apos;ye sor
+          Dosya asistanına sor
         </button>
       )}
 
@@ -944,13 +943,13 @@ function ChecklistDetails({
           />
 
           {finding.summaryExplanation && (
-            <DetailBlock title="Yapay zeka açıklaması">
+            <DetailBlock title="Otomatik Risk Kontrolü açıklaması">
               <p className="rounded-md bg-ai-50 px-3 py-2 text-ai-700">{finding.summaryExplanation}</p>
             </DetailBlock>
           )}
 
           {finding.aiValidations.length > 0 && (
-            <DetailBlock title="Yapay zeka doğrulaması">
+            <DetailBlock title="Otomatik Risk Kontrolü doğrulaması">
               <div className="space-y-3">
                 {finding.aiValidations.map((validation) => (
                   <div key={validation.id} className="rounded-md bg-ai-50 px-3 py-2 text-ai-700">
@@ -1117,28 +1116,16 @@ function ChecklistNote({
   )
 }
 
-function ReportSummaryCard({ summaryText }: { summaryText: string | null }) {
-  if (!summaryText) return null
-
-  return (
-    <section className="rounded-2xl border border-line bg-surface p-4 shadow-card">
-      <div className="flex items-center gap-2">
-        <Info className="h-4 w-4 text-ink-muted" />
-        <h2 className="text-sm font-semibold text-ink">Dosya özeti</h2>
-      </div>
-      <p className="mt-3 text-sm leading-6 text-ink-muted">{summaryText}</p>
-    </section>
-  )
-}
-
 function ExpertReviewCard({
   submissionId,
   expertQuota,
   hasCompletedExpertReview,
+  recommended,
 }: {
   submissionId: string
   expertQuota: ExpertQuota
   hasCompletedExpertReview: boolean
+  recommended: boolean
 }) {
   return (
     <section className="rounded-2xl border border-ai-100 bg-ai-50/60 p-4 shadow-card">
@@ -1146,6 +1133,7 @@ function ExpertReviewCard({
         submissionId={submissionId}
         quota={expertQuota}
         hasCompletedExpertReview={hasCompletedExpertReview}
+        recommended={recommended}
       />
     </section>
   )

@@ -19,7 +19,7 @@ export type ExpertReviewReservation =
 
 export class ExpertReviewAlreadyRunningError extends Error {
   constructor() {
-    super('Bu dosya için uzman yapay zeka incelemesi zaten devam ediyor')
+    super('Bu dosya için Uzman İncelemesi zaten devam ediyor')
     this.name = 'ExpertReviewAlreadyRunningError'
   }
 }
@@ -75,7 +75,7 @@ export async function reserveExpertReviewSlot(params: {
           processingJobId: params.processingJobId ?? null,
           status: 'RUNNING',
           legalContextStatus: 'NOT_RUN',
-          summary: 'Uzman yapay zeka incelemesi hazırlanıyor.',
+          summary: 'Uzman İncelemesi hazırlanıyor.',
         },
         select: { id: true },
       })

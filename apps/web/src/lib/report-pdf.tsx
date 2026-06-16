@@ -232,7 +232,7 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
 
         {payload.report.summaryText && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Yapay zeka özeti</Text>
+            <Text style={styles.sectionTitle}>Dosya Özeti</Text>
             <View style={styles.summaryBox}>
               <Text>{payload.report.summaryText}</Text>
               <Text style={styles.sourceRef}>
@@ -257,7 +257,7 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
 
         {payload.expertReview && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Yapay zeka uzman incelemesi</Text>
+            <Text style={styles.sectionTitle}>Uzman İncelemesi</Text>
             {payload.expertReview.summary && (
               <View style={styles.summaryBox}>
                 <Text>{payload.expertReview.summary}</Text>
@@ -335,7 +335,7 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
               )}
               {result.aiValidations.length > 0 && (
                 <View style={styles.legalRef}>
-                  <Text style={styles.legalTitle}>Yapay zeka kural kontrolü</Text>
+                  <Text style={styles.legalTitle}>Otomatik Risk Kontrolü</Text>
                   {result.aiValidations.map((validation) => (
                     <Text key={validation.id}>
                       {aiRuleValidationLabel(validation.status)} (%{Math.round(validation.confidence * 100)}): {validation.explanation} Öneri: {validation.recommendation}

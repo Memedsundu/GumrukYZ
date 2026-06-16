@@ -12,8 +12,8 @@ const STEPS = [
   {
     icon: <Sparkles className="size-5 text-ai-600" />,
     tint: 'bg-ai-50',
-    title: 'Yapay zeka kontrolü çalıştır',
-    text: 'Kurallar ve yapay zekâ kontrolü beyan öncesi otomatik çalışır.',
+    title: 'Otomatik Risk Kontrolü çalıştır',
+    text: 'Kurallar ve otomatik risk kontrolü beyan öncesi çalışır.',
   },
   {
     icon: <ShieldCheck className="size-5 text-success-600" />,

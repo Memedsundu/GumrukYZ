@@ -1,0 +1,32 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - generic "Mizan — A ZANAI product" [ref=e5]
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - paragraph [ref=e8]: Beta sürüm
+        - heading "Gümrük kontrolü, yapay zekâ ile dengelenir" [level=1] [ref=e9]
+        - paragraph [ref=e10]: Mizan; faturaları, çeki listelerini, taşıma belgelerini, GTİP tutarlılığını, menşei, kıymet ve ağırlıkları beyan öncesinde inceleyerek riskleri ortaya çıkarır. E-posta adresinizle kayıt olun, firmanızı oluşturun ve gerçek test dosyalarınızı yükleyin.
+        - generic [ref=e11]:
+          - link "Beta kullanıma başla" [ref=e12] [cursor=pointer]:
+            - /url: /sign-up
+            - text: Beta kullanıma başla
+            - img [ref=e13]
+          - link "Hesabım var" [ref=e15] [cursor=pointer]:
+            - /url: /sign-in
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - img [ref=e20]
+          - generic [ref=e23]:
+            - paragraph [ref=e24]: Dosya oluştur
+            - paragraph [ref=e25]: Referans adını girip belgeleri yükleyin.
+        - generic [ref=e26]:
+          - img [ref=e28]
+          - generic [ref=e30]:
+            - paragraph [ref=e31]: Mizan kontrolünü çalıştır
+            - paragraph [ref=e32]: Kurallar ve hızlı yapay zekâ kural kontrolü otomatik çalışır.
+        - generic [ref=e33]:
+          - img [ref=e35]
+          - generic [ref=e38]:
+            - paragraph [ref=e39]: Raporu incele
+            - paragraph [ref=e40]: Riskleri, önerileri ve kalan uzman yapay zekâ hakkınızı aynı ekranda görün.
+    - generic [ref=e41]: Beta erişimi e-posta kaydı ve firma oluşturma adımıyla başlar.

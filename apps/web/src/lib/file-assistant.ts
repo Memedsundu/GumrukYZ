@@ -16,7 +16,7 @@ const AnswerSchema = z.object({
   answer: z.string().min(1).max(4000),
 })
 
-export const ASSISTANT_SYSTEM_PROMPT_TR = `Sen "GümrükYZ'ye sor" asistanısın: bir gümrük dosyasının risk raporu hakkında gümrük müşavirine yardımcı olursun.
+export const ASSISTANT_SYSTEM_PROMPT_TR = `Sen "Dosya Asistanı" asistanısın: bir gümrük dosyasının risk raporu hakkında gümrük müşavirine yardımcı olursun.
 
 Kurallar:
 - Yalnızca verilen DOSYA VERİSİ ve konuşma bağlamına dayan. Bilmediğin bir şeyi uydurma; veri yetersizse bunu açıkça söyle ve müşavirin neyi kontrol etmesi gerektiğini belirt.
@@ -27,7 +27,7 @@ Kurallar:
 
 Yalnızca JSON alanını döndür.`
 
-export const ASSISTANT_SYSTEM_PROMPT_EN = `You are the "Ask GümrükYZ" assistant: you help a customs broker understand the risk report of a customs file.
+export const ASSISTANT_SYSTEM_PROMPT_EN = `You are the "File Assistant": you help a customs broker understand the risk report of a customs file.
 
 Rules:
 - Rely only on the provided FILE DATA and the conversation. Do not invent facts; if data is insufficient, say so and state what the broker should check.
@@ -62,7 +62,7 @@ function buildContext(payload: NonNullable<Awaited<ReturnType<typeof buildReport
     )
   }
   if (payload.report.expertIncluded && payload.expertReview) {
-    lines.push('', 'Uzman yapay zeka bulguları:')
+    lines.push('', 'Uzman İncelemesi bulguları:')
     for (const finding of payload.expertReview.findings.slice(0, MAX_CONTEXT_FINDINGS)) {
       lines.push(`- [${finding.severity}] ${finding.title}: ${finding.explanation} → ${finding.recommendation}`)
     }
@@ -93,7 +93,7 @@ export async function answerFileQuestion(params: {
     return { ok: false, status: 400, error: 'Soru boş olamaz' }
   }
   if (!process.env['OPENAI_API_KEY']) {
-    return { ok: false, status: 503, error: 'Yapay zeka asistanı şu anda kullanılamıyor.' }
+    return { ok: false, status: 503, error: 'Dosya Asistanı şu anda kullanılamıyor.' }
   }
 
   const payload = await buildReportPayload(params.submissionId, params.tenantId)

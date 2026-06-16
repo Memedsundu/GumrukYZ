@@ -36,7 +36,7 @@ export function AssistantChat({ open, onClose, messages, sending, error, onSend 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="GümrükYZ'ye sor">
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Dosya asistanına sor">
       <div
         className="absolute inset-0 bg-ink/30 backdrop-blur-sm"
         onClick={onClose}
@@ -46,7 +46,7 @@ export function AssistantChat({ open, onClose, messages, sending, error, onSend 
         <header className="flex items-center justify-between border-b border-line px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-ink">
             <MessageCircleQuestion className="size-4 text-brand-600" />
-            GümrükYZ&apos;ye sor
+            Dosya asistanına sor
           </div>
           <button
             type="button"
@@ -61,7 +61,7 @@ export function AssistantChat({ open, onClose, messages, sending, error, onSend 
         <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {messages.length === 0 && !sending ? (
             <div className="rounded-xl bg-surface-muted/60 p-4 text-sm text-ink-muted">
-              Bu dosya hakkında bir soru yazın ya da rapordaki öneri butonlarından birini seçin. Yanıtlar yalnızca bu
+              Dosya Asistanı bu raporu açıklamak için çalışır; yeni Uzman İncelemesi başlatmaz. Bu dosya hakkında bir soru yazın ya da rapordaki öneri butonlarından birini seçin. Yanıtlar yalnızca bu
               dosyanın analizine dayanır ve bağlayıcı hukuki karar yerine geçmez.
             </div>
           ) : null}

@@ -806,7 +806,7 @@ function getNextAction(params: {
 
   return {
     title: 'Analizi başlatın',
-    description: 'Doğrulanan belgeler üzerinden okuma, kurallar ve hızlı yapay zeka kural kontrolü çalışacak.',
+    description: 'Doğrulanan belgeler üzerinden okuma, kurallar ve Otomatik Risk Kontrolü çalışacak.',
     cta: params.processing ? 'İşleniyor' : 'Analizi başlat',
     action: 'process',
     disabled: params.processing || !params.canProcess,

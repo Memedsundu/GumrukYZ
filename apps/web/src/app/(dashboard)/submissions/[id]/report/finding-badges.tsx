@@ -15,7 +15,7 @@ export function ResultBadge({ result, label }: { result: string; label: string }
 }
 
 export function SourceTypeBadge({ label }: { label: string }) {
-  const isExpert = label.includes('Yapay zeka')
+  const isExpert = label.includes('Uzman İncelemesi')
   return (
     <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium', isExpert ? 'bg-ai-50 text-ai-700' : 'bg-surface-muted text-ink-muted')}>
       {isExpert && <Sparkles className="h-3 w-3" />}

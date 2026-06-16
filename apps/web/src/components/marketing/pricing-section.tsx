@@ -83,7 +83,7 @@ export function PricingSection() {
               <ul className="mt-6 space-y-2.5 text-sm text-ink-soft">
                 <Feature>{`Aylık ${plan.limits.analysesPerMonth} analiz`}</Feature>
                 <Feature>{`${plan.limits.users} kullanıcı`}</Feature>
-                <Feature>{`Aylık ${plan.limits.expertReviewsPerMonth} uzman yapay zeka incelemesi`}</Feature>
+                <Feature>{`Aylık ${plan.limits.expertReviewsPerMonth} Uzman İncelemesi hakkı`}</Feature>
                 <Feature>{`Dosya başına ${plan.limits.documentsPerSubmission} belge`}</Feature>
               </ul>
 

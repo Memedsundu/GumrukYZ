@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
     if (input.status !== 'COMPLETED') {
       return NextResponse.json(
-        { error: 'Uzman yapay zeka incelemesi için önce dosya analizinin tamamlanması gerekiyor' },
+        { error: 'Uzman İncelemesi için önce dosya analizinin tamamlanması gerekiyor' },
         { status: 409 },
       )
     }
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         expertReview: await getExpertReviewSummary(reservation.reviewId, user.tenantId),
         quota: await getExpertReviewQuota(user.tenantId),
         consumed: false,
-        message: 'Uzman yapay zeka incelemesi daha önce tamamlandı.',
+        message: 'Uzman İncelemesi daha önce tamamlandı.',
       })
     }
 
@@ -85,14 +85,14 @@ export async function POST(req: NextRequest, { params }: Params) {
             where: { id: reservation.reviewId },
             data: {
               status: 'ERROR',
-              summary: 'Uzman yapay zeka inceleme hakkınız kalmadı.',
+              summary: 'Uzman İncelemesi hakkınız kalmadı.',
               completedAt: new Date(),
             },
           })
           .catch(() => null)
         return NextResponse.json(
           {
-            error: 'Uzman yapay zeka inceleme hakkınız kalmadı',
+            error: 'Uzman İncelemesi hakkınız kalmadı',
             code: 'ENTITLEMENT_EXHAUSTED',
             quota: await getExpertReviewQuota(user.tenantId),
             entitlement: await getEntitlementsState(user.tenantId),
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   } catch (error) {
     if (error instanceof ExpertReviewAlreadyRunningError) {
       return NextResponse.json(
-        { error: 'Bu dosya için uzman yapay zeka incelemesi zaten devam ediyor' },
+        { error: 'Bu dosya için Uzman İncelemesi zaten devam ediyor' },
         { status: 409 },
       )
     }
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           where: { id: reservedReviewId },
           data: {
             status: 'ERROR',
-            summary: 'Uzman yapay zeka incelemesi tamamlanamadı. Lütfen daha sonra tekrar deneyin.',
+            summary: 'Uzman İncelemesi tamamlanamadı. Lütfen daha sonra tekrar deneyin.',
             completedAt: new Date(),
           },
         }).catch(() => null),
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     console.error('POST /api/submissions/[id]/expert-review error:', error)
-    return NextResponse.json({ error: 'Uzman yapay zeka incelemesi başlatılamadı' }, { status: 500 })
+    return NextResponse.json({ error: 'Uzman İncelemesi başlatılamadı' }, { status: 500 })
   }
 }
 

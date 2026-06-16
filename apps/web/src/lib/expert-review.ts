@@ -129,7 +129,7 @@ export async function runExpertReviewForSubmission(params: {
   ruleResults: RuleResultForExpertReview[]
 }): Promise<ExpertReviewSummary | null> {
   if (!isExpertReviewEnabled()) {
-    return createSkippedExpertReview(params, 'Uzman yapay zeka incelemesi OpenAI yapılandırması olmadığı için atlandı.')
+    return createSkippedExpertReview(params, 'Uzman İncelemesi OpenAI yapılandırması olmadığı için atlandı.')
   }
 
   const readiness = await getLegalContextReadiness()
@@ -235,7 +235,7 @@ export async function runExpertReviewForSubmission(params: {
       where: { id: review.id },
       data: {
         status: 'ERROR',
-        summary: 'Uzman yapay zeka incelemesi tamamlanamadı; deterministik kontroller üzerinden rapor üretildi.',
+        summary: 'Uzman İncelemesi tamamlanamadı; deterministik kontroller üzerinden rapor üretildi.',
         completedAt: new Date(),
       },
     })
@@ -244,7 +244,7 @@ export async function runExpertReviewForSubmission(params: {
       status: 'ERROR',
       legalContextStatus: 'READY',
       overallRisk: null,
-      summary: 'Uzman yapay zeka incelemesi tamamlanamadı; deterministik kontroller üzerinden rapor üretildi.',
+      summary: 'Uzman İncelemesi tamamlanamadı; deterministik kontroller üzerinden rapor üretildi.',
       warningCount: 0,
       reviewNeededCount: 0,
       findings: [],
@@ -308,7 +308,7 @@ async function createLegalContextIncompleteReview(
     legalContextStatus: 'LEGAL_CONTEXT_INCOMPLETE',
     overallRisk: 'UNKNOWN',
     summary:
-      'Uzman yapay zeka incelemesi için gerekli mevzuat kapsamı eksik. GTİP, ürün kontrolü veya yorum gerektiren alanlarda manuel uzman incelemesi gerekir.',
+      'Uzman İncelemesi için gerekli mevzuat kapsamı eksik. GTİP, ürün kontrolü veya yorum gerektiren alanlarda manuel uzman incelemesi gerekir.',
     completedAt: new Date(),
   }
   const review = params.reviewId
@@ -333,7 +333,7 @@ async function completeReviewWithContextFinding(
   missingSources: string[],
 ): Promise<ExpertReviewSummary> {
   const title = 'Mevzuat bağlamı eksik'
-  const explanation = `Uzman yapay zeka incelemesi için gerekli kaynaklar eksik veya gömülü mevzuat parçası bulunamadı: ${missingSources.join(', ')}. Bu nedenle GTİP/ürün kontrolü gibi yoruma açık alanlarda manuel uzman incelemesi gerekir.`
+  const explanation = `Uzman İncelemesi için gerekli kaynaklar eksik veya gömülü mevzuat parçası bulunamadı: ${missingSources.join(', ')}. Bu nedenle GTİP/ürün kontrolü gibi yoruma açık alanlarda manuel uzman incelemesi gerekir.`
   const recommendation = 'Eksik resmi mevzuat kaynaklarını içe aktarın ve analizi tekrar çalıştırın.'
 
   await prisma.expertReview.update({
@@ -364,7 +364,7 @@ async function completeReviewWithContextFinding(
     status: legalContextStatus,
     legalContextStatus,
     overallRisk: 'UNKNOWN',
-    summary: 'Uzman yapay zeka incelemesi için gerekli mevzuat kapsamı eksik.',
+    summary: 'Uzman İncelemesi için gerekli mevzuat kapsamı eksik.',
     warningCount: 0,
     reviewNeededCount: 1,
     findings: [{ area: 'LEGAL_CONTEXT', severity: 'REVIEW_NEEDED', title, explanation }],

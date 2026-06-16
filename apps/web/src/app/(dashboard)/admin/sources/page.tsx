@@ -104,7 +104,7 @@ export default async function AdminSourcesPage() {
 
       {expertReviewEnabled && legalContextReadiness.missingRequiredSources.length > 0 && (
         <div className="mb-6 rounded-lg border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
-          <span className="font-medium">Yapay zeka uzman incelemesi mevzuat bağlamı eksik.</span>{' '}
+          <span className="font-medium">Uzman İncelemesi mevzuat bağlamı eksik.</span>{' '}
           Eksik veya embedding olmayan kaynaklar: {legalContextReadiness.missingRequiredSources.join(', ')}.{' '}
           <code className="rounded bg-danger-100 px-1 text-xs">pnpm db:bootstrap-regulations</code>{' '}
           komutunu çalıştırın.

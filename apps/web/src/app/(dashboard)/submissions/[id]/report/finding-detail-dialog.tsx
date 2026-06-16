@@ -59,13 +59,13 @@ export function FindingDetailDialog({
                   </DetailBlock>
 
                   {finding.summaryExplanation && (
-                    <DetailBlock title="Yapay zeka özet açıklaması">
+                    <DetailBlock title="Otomatik Risk Kontrolü açıklaması">
                       <p className="rounded-md bg-ai-50 px-3 py-2 text-ai-700">{finding.summaryExplanation}</p>
                     </DetailBlock>
                   )}
 
                   {finding.aiValidations.length > 0 && (
-                    <DetailBlock title="Yapay zeka ikinci kontrol">
+                    <DetailBlock title="Otomatik Risk Kontrolü doğrulaması">
                       <div className="space-y-3">
                         {finding.aiValidations.map((validation) => (
                           <div key={validation.id} className="rounded-md bg-ai-50 px-3 py-2 text-ai-700">

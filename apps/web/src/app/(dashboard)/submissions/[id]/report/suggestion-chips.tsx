@@ -8,8 +8,8 @@ import type { Suggestion, SuggestionsResult } from '@/lib/review-suggestions/typ
 interface SuggestionChipsProps {
   submissionId: string
   /**
-   * Where a clicked chip's prompt should go. When the contextual "Ask GümrükYZ
-   * about this file" assistant exists, pass a handler that opens it with the
+   * Where a clicked chip's prompt should go. When the contextual file assistant
+   * exists, pass a handler that opens it with the
    * prompt. Until then, chips fall back to copying the prompt to the clipboard.
    */
   onSelectPrompt?: (suggestion: Suggestion) => void
@@ -68,7 +68,7 @@ export function SuggestionChips({ submissionId, onSelectPrompt }: SuggestionChip
     <section className="rounded-2xl border border-line bg-surface p-4 shadow-card">
       <div className="flex items-center gap-2 text-sm font-semibold text-ink">
         <MessageCircleQuestion className="size-4 text-brand-600" />
-        GümrükYZ&apos;ye sor
+        Dosya asistanına sor
       </div>
       {data.assistant_intro ? (
         <p className="mt-2 text-xs leading-5 text-ink-muted">{data.assistant_intro}</p>
