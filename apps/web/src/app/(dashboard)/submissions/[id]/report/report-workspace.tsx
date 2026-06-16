@@ -25,6 +25,7 @@ import { FindingDetailDialog } from './finding-detail-dialog'
 import { PassControlsSection } from './findings-list'
 import OverrideButton from './override-button'
 import ExpertReviewButton from './expert-review-button'
+import { SuggestionChips } from './suggestion-chips'
 import { buildCategoryCounts, buildReportSources, sortFindings } from './report-filters'
 import type {
   ExpertQuota,
@@ -350,6 +351,7 @@ export default function ReportWorkspace({
                 expertQuota={expertQuota}
                 hasCompletedExpertReview={hasCompletedExpertReview}
               />
+              <SuggestionChips submissionId={submissionId} />
               <ReportSummaryCard summaryText={summaryText} />
               <details className="group rounded-2xl border border-line bg-surface shadow-card">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
@@ -388,6 +390,7 @@ export default function ReportWorkspace({
                 expertQuota={expertQuota}
                 hasCompletedExpertReview={hasCompletedExpertReview}
               />
+              <SuggestionChips submissionId={submissionId} />
               <ReportSummaryCard summaryText={summaryText} />
               <EvidencePanel
                 documents={documents}
