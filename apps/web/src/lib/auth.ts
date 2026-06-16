@@ -121,18 +121,19 @@ export async function getAuthenticatedUser(): Promise<AuthenticatedUser> {
     redirect('/onboarding')
   }
 
+  let user: AuthenticatedUser
   try {
-    const user = await findOrProvisionUser(session.userId, session.orgId)
-    if (!user.pilotConsentAt) {
-      redirect('/pilot-consent')
-    }
-    return user
+    user = await findOrProvisionUser(session.userId, session.orgId)
   } catch (err) {
     console.error('User provisioning failed:', err)
     forbidden()
   }
 
-  forbidden()
+  if (!user.pilotConsentAt) {
+    redirect('/pilot-consent')
+  }
+
+  return user
 }
 
 export type ApiAuthResult =
