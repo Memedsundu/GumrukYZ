@@ -3,12 +3,16 @@ import { parseStructuredOutput } from '@gumrukyz/ai'
 import { prisma, Prisma } from '@gumrukyz/db'
 import type { ExtractionData } from '@gumrukyz/rules'
 import { estimateModelCostUsd, logger } from '@gumrukyz/shared'
+import {
+  AI_RULE_VALIDATION_SAFETY_GUARDRAILS,
+  applyAiRuleValidationSafetyFilters,
+} from './ai-rule-validation-safety'
 
 const DEFAULT_MODEL = 'gpt-5.4-mini'
 const DEFAULT_TIMEOUT_MS = 60_000
 const DEFAULT_MAX_FINDINGS = 10
 /** Bump when the validation prompt or schema changes. */
-const RULE_VALIDATION_PROMPT_VERSION = '2026-06-10.1'
+const RULE_VALIDATION_PROMPT_VERSION = '2026-06-16.1'
 
 const ValidationStatusSchema = z.enum([
   'LIKELY_CORRECT',
@@ -107,9 +111,12 @@ export async function runAiRuleValidationForSubmission(params: {
     })
 
     const allowedRuleResults = new Map(params.ruleResults.map((ruleResult) => [ruleResult.id, ruleResult]))
-    const findings = parsed.validations
-      .filter((validation) => allowedRuleResults.has(validation.rule_result_id))
-      .slice(0, maxFindings)
+    const findings = applyAiRuleValidationSafetyFilters(
+      parsed.validations
+        .filter((validation) => allowedRuleResults.has(validation.rule_result_id))
+        .slice(0, maxFindings),
+      params.ruleResults,
+    )
 
     await prisma.$transaction(async (tx) => {
       await tx.providerRun.update({
@@ -221,6 +228,8 @@ Kesin kurallar:
 - Yalnızca anlamlı bulgu döndür; her geçen kontrol için gereksiz yorum yazma.
 - Mevzuat atfı uydurma; sadece payload içindeki legalCitations bağlamını kullan.
 - Ağırlık, kıymet veya miktar farkı 980.00/98000, 1,185.00/1.185 veya 33,600.00/33.600 gibi ondalık-binlik ayırıcı farkına benziyorsa POTENTIAL_FALSE_POSITIVE kullan ve kaynak belgedeki sayı formatının doğrulanmasını öner.
+- Ek güvenlik kuralları:
+${AI_RULE_VALIDATION_SAFETY_GUARDRAILS}
 - Eğer emin değilsen NEEDS_HUMAN_REVIEW kullan.
 
 Veri:

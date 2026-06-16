@@ -1,0 +1,94 @@
+export const AI_RULE_VALIDATION_SAFETY_GUARDRAILS = `
+- Farklı ambalaj seviyelerini toplama: "5 wooden boxes / 2 pallets" değeri 7 kap anlamına gelmez.
+- CROSS-008 veya PL-001 PASS ise paket/kap sayısı için POTENTIAL_FALSE_NEGATIVE üretme; aynı alan ve aynı birimde açık çelişki gerekir.
+- Deterministik kural PASS ise yalnızca açık, aynı alan ve aynı birim kanıtı varsa POTENTIAL_FALSE_NEGATIVE üret.
+- Incoterm kodu ile teslim yeri birlikte yazılabilir: "DAP" ile "DAP Warszawa, Poland" uyumludur.
+`.trim()
+
+export type AiRuleValidationSafetyItem = {
+  rule_result_id: string
+  status: string
+  confidence: number
+  explanation: string
+  recommendation: string
+  evidence_refs: Array<{
+    docType?: string | null
+    field?: string | null
+    value?: string | null
+  }>
+}
+
+export type AiRuleValidationSafetyRuleResult = {
+  id: string
+  ruleCode: string
+  result: string
+  message?: string | null
+}
+
+export function applyAiRuleValidationSafetyFilters<T extends AiRuleValidationSafetyItem>(
+  validations: T[],
+  ruleResults: AiRuleValidationSafetyRuleResult[],
+): T[] {
+  const byId = new Map(ruleResults.map((ruleResult) => [ruleResult.id, ruleResult]))
+  return validations.filter((validation) => {
+    if (shouldDropPackageCountAdvisory(validation, ruleResults, byId)) return false
+    if (shouldDropPassedIncotermAdvisory(validation, ruleResults, byId)) return false
+    return true
+  })
+}
+
+function shouldDropPackageCountAdvisory(
+  validation: AiRuleValidationSafetyItem,
+  ruleResults: AiRuleValidationSafetyRuleResult[],
+  byId: Map<string, AiRuleValidationSafetyRuleResult>,
+): boolean {
+  if (validation.status === 'LIKELY_CORRECT') return false
+  if (!hasPassedRule(ruleResults, 'CROSS-008') && !hasPassedRule(ruleResults, 'PL-001')) return false
+  if (!mentions(validation, /(kap|paket|package|ambalaj|pallet|palet|box|sand[ıi]k)/i)) return false
+
+  const rule = byId.get(validation.rule_result_id)
+  const isPassedRuleAdvisory = rule?.result === 'PASS'
+  const evidenceIsPackageOnly = validation.evidence_refs.length > 0 &&
+    validation.evidence_refs.every((ref) => {
+      const field = normalize(ref.field)
+      const value = normalize(ref.value)
+      return field.includes('package') ||
+        field.includes('paket') ||
+        field.includes('kap') ||
+        /(wooden|box|pallet|palet|package|paket|kap|sandik|\d+)/.test(value)
+    })
+
+  return isPassedRuleAdvisory || evidenceIsPackageOnly
+}
+
+function shouldDropPassedIncotermAdvisory(
+  validation: AiRuleValidationSafetyItem,
+  ruleResults: AiRuleValidationSafetyRuleResult[],
+  byId: Map<string, AiRuleValidationSafetyRuleResult>,
+): boolean {
+  if (validation.status === 'LIKELY_CORRECT') return false
+  if (!hasPassedRule(ruleResults, 'CROSS-003')) return false
+  const rule = byId.get(validation.rule_result_id)
+  if (rule?.result !== 'PASS' && rule?.ruleCode !== 'CROSS-003') return false
+  if (!mentions(validation, /(incoterm|teslim|dap|delivery)/i)) return false
+  return mentions(validation, /(dap|warszawa|poland|teslim yeri|delivery place)/i)
+}
+
+function hasPassedRule(ruleResults: AiRuleValidationSafetyRuleResult[], ruleCode: string): boolean {
+  return ruleResults.some((ruleResult) => ruleResult.ruleCode === ruleCode && ruleResult.result === 'PASS')
+}
+
+function mentions(validation: AiRuleValidationSafetyItem, pattern: RegExp): boolean {
+  const evidence = validation.evidence_refs
+    .map((ref) => `${ref.field ?? ''} ${ref.value ?? ''}`)
+    .join(' ')
+  return pattern.test(`${validation.explanation} ${validation.recommendation} ${evidence}`)
+}
+
+function normalize(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[İIı]/g, 'i')
+    .toLowerCase()
+}

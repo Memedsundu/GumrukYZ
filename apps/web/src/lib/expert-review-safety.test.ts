@@ -13,9 +13,21 @@ const gtipFinding: ExpertReviewSafetyFinding = {
   evidence_refs: [{ docType: 'DECLARATION_OUTPUT', field: 'gtip_code', value: '870829909000' }],
 }
 
+const valuationFinding: ExpertReviewSafetyFinding = {
+  area: 'VALUATION',
+  title: 'Fatura ve beyan toplamı ciddi farklı',
+  explanation: 'Fatura toplamı 8.830 EUR, beyanname toplamı 52.056,03 EUR.',
+  recommendation: 'Fatura, beyan ve varsa ek masraf kayıtlarını birlikte kontrol edin.',
+  evidence_refs: [
+    { docType: 'INVOICE', field: 'total_amount', value: '8830' },
+    { docType: 'DECLARATION_OUTPUT', field: 'total_value', value: '52056.03' },
+  ],
+}
+
 function testGuardrailsMentionCleanExportFalsePositives() {
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /CROSS-008/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /CMR/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /DAP Warszawa, Poland/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /A\.TR/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /870829909000/)
 }
@@ -85,9 +97,44 @@ function testDropsUnsupportedFindingsButKeepsGtipReview() {
   assert.match(filtered.summary, /yalnızca GTİP/)
 }
 
+function testDropsPassedIncotermNoiseButKeepsValuationAndGtip() {
+  const filtered = applyExpertReviewSafetyFilters(
+    {
+      overallRisk: 'HIGH',
+      summary: 'Kıymet farkı ve DAP teslim ifadesi var.',
+      findings: [
+        gtipFinding,
+        valuationFinding,
+        {
+          area: 'INCOTERM',
+          title: 'DAP teslim ifadesi tam eşleşmiyor',
+          explanation:
+            'Beyanname ve faturada Incoterm DAP, yükleme talimatında ise DAP Warszawa, Poland yer alıyor.',
+          recommendation: 'DAP teslim yerini tüm belgelerde aynı ifadeyle yazın.',
+          evidence_refs: [
+            { docType: 'DECLARATION_OUTPUT', field: 'incoterm', value: 'DAP' },
+            { docType: 'LOADING_INSTRUCTION', field: 'delivery_term', value: 'DAP Warszawa, Poland' },
+          ],
+        },
+      ],
+    },
+    {
+      documents: [],
+      ruleResults: [
+        { ruleCode: 'CROSS-001', result: 'FAIL' },
+        { ruleCode: 'CROSS-003', result: 'PASS' },
+      ],
+    },
+  )
+
+  assert.deepEqual(filtered.findings.map((finding) => finding.area), ['GTIP_PLAUSIBILITY', 'VALUATION'])
+  assert.equal(filtered.overallRisk, 'HIGH')
+}
+
 const tests = [
   testGuardrailsMentionCleanExportFalsePositives,
   testDropsUnsupportedFindingsButKeepsGtipReview,
+  testDropsPassedIncotermNoiseButKeepsValuationAndGtip,
 ]
 
 let failed = 0

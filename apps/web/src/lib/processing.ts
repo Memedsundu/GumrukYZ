@@ -794,6 +794,7 @@ export async function processSubmission(
       }))
     const nonPassRuleFindings = persistedRuleResults
       .filter((r) => r.result !== 'PASS' && r.result !== 'SKIP')
+      .sort((a, b) => summaryRulePriority(a.result) - summaryRulePriority(b.result))
       .map((r) => ({
         findingId: r.id,
         ruleCode: r.ruleCode,
@@ -1288,6 +1289,13 @@ function dateOrNull(val: unknown): Date | null {
     ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
     : new Date(value)
   return isNaN(d.getTime()) ? null : d
+}
+
+function summaryRulePriority(result: string): number {
+  if (result === 'FAIL') return 0
+  if (result === 'REVIEW_NEEDED') return 1
+  if (result === 'WARN') return 2
+  return 3
 }
 
 type NormalizedDeclarationItem = {

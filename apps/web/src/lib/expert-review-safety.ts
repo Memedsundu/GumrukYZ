@@ -2,6 +2,7 @@ export const EXPERT_REVIEW_SAFETY_GUARDRAILS = `
 - Deterministik kural PASS ise aynı alan için açık ve farklı belge kanıtı olmadan çelişki üretme.
 - CROSS-008 paket/kap sayısı PASS ise 10 wooden boxes / 3 pallets gibi farklı ambalaj seviyelerini toplayıp 13 kap uyumsuzluğu yazma.
 - CMR, konşimento, AWB veya taşıma belgesi eksikliği yalnızca ilgili deterministik belge-varlığı kuralı eksik belge göstermişse ya da dosya metni açıkça bu belgenin beklendiğini söylüyorsa bulgu olabilir.
+- CROSS-003 Incoterm uyumu PASS ise "DAP" ile "DAP Warszawa, Poland" gibi kod ve kod+teslim yeri ifadelerini uyumsuzluk sayma.
 - A.TR, EUR.1, tercihli menşe veya preferential origin uyarısı yalnızca tercihli rejim, tariff_preference=true, A.TR/EUR.1 metni veya açık tercihli tarife talebi varsa üretilebilir.
 - 870829909000 / 8708 / 870829 otobüs gövde aksamı veya aksesuarı bağlamında makul aday olabilir; nihai teyit için teknik çizim, malzeme, işlev, montaj yeri ve parçanın gövde bileşeni mi HVAC/mekanik parça mı olduğunu gösteren kanıt iste.
 - Aynı GTİP teknik belirsizliğini GTİP_PLAUSIBILITY ve PERMIT_PRODUCT_CONTROL olarak iki ayrı uyarıya bölme; mümkünse tek GTİP teknik teyit bulgusunda birleştir.
@@ -41,6 +42,7 @@ export function applyExpertReviewSafetyFilters<T extends ExpertReviewSafetyFindi
   const hasGtipPlausibility = review.findings.some((finding) => finding.area === 'GTIP_PLAUSIBILITY')
   const findings = review.findings.filter((finding) => {
     if (shouldDropPackageCountFinding(finding, context.ruleResults)) return false
+    if (shouldDropPassedIncotermCompatibilityFinding(finding, context.ruleResults)) return false
     if (shouldDropMissingTransportFinding(finding, context.ruleResults)) return false
     if (shouldDropPreferentialOriginFinding(finding, context)) return false
     if (shouldDropDuplicatePermitFinding(finding, hasGtipPlausibility)) return false
@@ -71,6 +73,16 @@ function shouldDropPackageCountFinding(
       field.includes('kap') ||
       /(wooden|box|pallet|palet|package|paket|kap|sandik|\d+)/.test(value)
   })
+}
+
+function shouldDropPassedIncotermCompatibilityFinding(
+  finding: ExpertReviewSafetyFinding,
+  ruleResults: ExpertReviewSafetyRuleResult[],
+): boolean {
+  if (finding.area !== 'INCOTERM') return false
+  if (!hasPassedRule(ruleResults, 'CROSS-003')) return false
+  if (!mentions(finding, /(incoterm|teslim|delivery|dap)/i)) return false
+  return mentions(finding, /(dap|warszawa|poland|teslim yeri|delivery place|tam e[şs]le[şs]miyor|da[ğg][ıi]n[ıi]k)/i)
 }
 
 function shouldDropMissingTransportFinding(
