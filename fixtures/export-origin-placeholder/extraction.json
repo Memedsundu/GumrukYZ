@@ -1,10 +1,10 @@
 {
   "_fixture": "export-origin-placeholder",
-  "_description": "Placeholder origin on an export invoice should be one export-origin warning, not duplicate DECL-002 hard failure",
+  "_description": "Placeholder origin on an export invoice should be one export-origin review item, not duplicate DECL-002 hard failure",
   "_tradeFlow": "EXPORT",
   "_expectedResults": {
     "DECL-002": null,
-    "EXP-004": "WARN"
+    "EXP-004": "REVIEW_NEEDED"
   },
   "documents": [
     {

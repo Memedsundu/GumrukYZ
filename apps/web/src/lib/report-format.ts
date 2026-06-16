@@ -120,7 +120,7 @@ export const PASS_MESSAGES: Record<string, string> = {
   'EXP-001': 'İhracat fatura numarası mevcut.',
   'EXP-002': 'İhracatçı/satıcı bilgisi mevcut.',
   'EXP-003': 'İhracat rejim kodu geçerli.',
-  'EXP-004': 'İhracat faturasında menşe bilgisi mevcut.',
+  'EXP-004': 'İhracat dosyasında menşe bilgisi mevcut.',
   'EXP-005': 'Geçici ihracat için yükleme talimatı mevcut.',
 }
 
@@ -172,7 +172,7 @@ export const ISSUE_MESSAGES: Record<string, string> = {
   'EXP-001': 'İhracat faturasında fatura numarası eksik.',
   'EXP-002': 'İhracat faturası satıcı/ihracatçı bilgisi içermiyor.',
   'EXP-003': 'Beyannamedeki rejim kodu ihracat rejimleriyle uyumlu değil.',
-  'EXP-004': 'İhracat faturasında menşe ülkesi eksik veya standart ülke adı olarak doğrulanamadı.',
+  'EXP-004': 'İhracat dosyasında menşe ülkesi eksik, boş bırakılmış veya standart ülke adı olarak doğrulanamadı.',
   'EXP-005': 'Geçici ihracat için yükleme talimatı eksik.',
 }
 

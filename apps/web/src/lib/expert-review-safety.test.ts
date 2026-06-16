@@ -33,6 +33,8 @@ function testGuardrailsMentionCleanExportFalsePositives() {
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /CMR/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /DAP Warszawa, Poland/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /A\.TR/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /EXP-004/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /sahtecilik\/fraud/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /870829909000/)
 }
 
@@ -269,12 +271,54 @@ function testDropsPackageVsItemAndLoadingNoiseButKeepsGtip() {
   assert.equal(filtered.overallRisk, 'LOW')
 }
 
+function testKeepsMissingOriginFindingWhenExportOriginRuleNeedsReview() {
+  const missingOriginFinding: ExpertReviewSafetyFinding = {
+    area: 'ORIGIN_PREFERENTIAL',
+    title: 'Menşe ülkesi belgelerde boş bırakılmış',
+    explanation:
+      'Fatura, çeki listesi ve beyanname özetinde country_of_origin alanı ":" olarak görünüyor; bu geçerli menşe bilgisi değildir.',
+    recommendation:
+      'Menşe ülkesini belge üzerinde düzelttirin veya menşe kanıtı isteyin; bunu tercihli menşe/fraud iddiasına dönüştürmeden manuel doğrulayın.',
+    evidence_refs: [
+      { docType: 'INVOICE', field: 'country_of_origin', value: ':' },
+      { docType: 'PACKING_LIST', field: 'country_of_origin', value: ':' },
+      { docType: 'DECLARATION_OUTPUT', field: 'country_of_origin', value: ':' },
+    ],
+  }
+
+  const filtered = applyExpertReviewSafetyFilters(
+    {
+      overallRisk: 'MEDIUM',
+      summary: 'Menşe eksik ve GTİP teknik teyit istiyor.',
+      findings: [missingOriginFinding, gtipFinding],
+    },
+    {
+      documents: [
+        { docType: 'INVOICE', data: { country_of_origin: ':' } },
+        { docType: 'PACKING_LIST', data: { country_of_origin: ':' } },
+        { docType: 'DECLARATION_OUTPUT', data: { country_of_origin: ':' } },
+      ],
+      ruleResults: [
+        { ruleCode: 'EXP-004', result: 'REVIEW_NEEDED' },
+        { ruleCode: 'GTIP-001', result: 'PASS' },
+      ],
+    },
+  )
+
+  assert.deepEqual(filtered.findings.map((finding) => finding.area), [
+    'ORIGIN_PREFERENTIAL',
+    'GTIP_PLAUSIBILITY',
+  ])
+  assert.equal(filtered.overallRisk, 'MEDIUM')
+}
+
 const tests = [
   testGuardrailsMentionCleanExportFalsePositives,
   testDropsUnsupportedFindingsButKeepsGtipReview,
   testDropsPassedIncotermNoiseButKeepsValuationAndGtip,
   testDropsGrossOnlyFalseNoiseButKeepsMissingNetAndGtip,
   testDropsPackageVsItemAndLoadingNoiseButKeepsGtip,
+  testKeepsMissingOriginFindingWhenExportOriginRuleNeedsReview,
 ]
 
 let failed = 0

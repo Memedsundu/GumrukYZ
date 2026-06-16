@@ -1,0 +1,147 @@
+{
+  "_fixture": "missing-origin-export",
+  "_description": "Export file where invoice, packing list, and declaration summary leave country of origin blank/placeholder; all other core logistics and value checks are consistent.",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "CROSS-001": "PASS",
+    "CROSS-002": "PASS",
+    "CROSS-004": "PASS",
+    "CROSS-006": "PASS",
+    "CROSS-007": "PASS",
+    "CROSS-008": "PASS",
+    "CROSS-009": "PASS",
+    "EXP-004": "REVIEW_NEEDED",
+    "GTIP-001": "PASS",
+    "GTIP-003": "PASS",
+    "INV-001": "PASS",
+    "INV-002": "PASS",
+    "INV-003": "PASS",
+    "INV-004": "PASS",
+    "INV-005": "PASS",
+    "INV-006": "PASS",
+    "PL-001": "PASS",
+    "PL-002": "PASS",
+    "VAL-001": "PASS",
+    "VAL-002": "PASS",
+    "VAL-003": "PASS"
+  },
+  "_expectedAbsentResults": ["DECL-002", "DECL-003", "DECL-005"],
+  "_assertNoFailures": true,
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.98,
+      "data": {
+        "invoice_number": "FI2026-00073",
+        "invoice_date": "2026-05-25",
+        "seller_name": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "seller_address": "Kurgusal OSB, Selimpaşa / İstanbul, Türkiye",
+        "buyer_name": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "buyer_address": "ul. Testowa 14, 00-999 Warszawa, Poland",
+        "currency": "EUR",
+        "total_amount": 15600,
+        "incoterm": "DAP",
+        "delivery_place": "Warszawa, Poland",
+        "country_of_origin": ":",
+        "gtip_code": "870829909000",
+        "gross_weight": 1010,
+        "net_weight": 850,
+        "items": [
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "hs_code": "870829909000",
+            "quantity": 200,
+            "unit": "pcs/adet",
+            "unit_price": 78,
+            "total_price": 15600,
+            "country_of_origin": ":"
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.98,
+      "data": {
+        "package_count": 6,
+        "package_type": "wooden boxes on 2 pallets",
+        "gross_weight": 1010,
+        "net_weight": 850,
+        "goods_description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+        "shipper": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "consignee": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "country_of_origin": ":",
+        "destination": "Poland",
+        "items": [
+          {
+            "description": "Otobüs havalandırma kanalı aksamı",
+            "quantity": 100,
+            "package_count": 3,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": 425,
+            "gross_weight": 505
+          },
+          {
+            "description": "Otobüs havalandırma kanalı aksamı",
+            "quantity": 100,
+            "package_count": 3,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": 425,
+            "gross_weight": 505
+          }
+        ]
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.98,
+      "data": {
+        "_filename": "declaration_summary_SYN-EXP-2026-00073.pdf",
+        "declaration_number": "SYN-EXP-2026-00073",
+        "declaration_date": "2026-05-26",
+        "exporter": null,
+        "importer": null,
+        "exporter_tax_id": null,
+        "importer_tax_id": null,
+        "customs_office_code": null,
+        "regime_code": "1000",
+        "gtip_code": "870829909000",
+        "goods_description": "Otobüs havalandırma kanalı aksamı",
+        "country_of_origin": ":",
+        "package_count": 6,
+        "gross_weight": 1010,
+        "net_weight": 850,
+        "total_value": 15600,
+        "currency": "EUR",
+        "incoterm": "DAP",
+        "items": [
+          {
+            "line_number": 1,
+            "gtip_code": "870829909000",
+            "goods_description": "Otobüs havalandırma kanalı aksamı",
+            "quantity": 200,
+            "unit": "adet",
+            "net_weight": 850,
+            "gross_weight": 1010,
+            "value": 15600,
+            "currency": "EUR",
+            "country_of_origin": ":"
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "SYN-EXP-2026-00073",
+    "regimeCode": "1000",
+    "incoterm": "DAP",
+    "totalValue": 15600,
+    "currency": "EUR",
+    "totalNetWeight": 850,
+    "totalGrossWeight": 1010,
+    "packageCount": 6,
+    "gtipCode": "870829909000"
+  }
+}

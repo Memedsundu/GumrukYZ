@@ -13,6 +13,8 @@ function testGuardrailsMentionPackageAndIncotermSemantics() {
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /CROSS-004/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /DAP Warszawa, Poland/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /_native_text_length/)
+  assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /EXP-004 REVIEW_NEEDED/)
+  assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /sahtecilik/)
 }
 
 function testDropsPackageCountFalseNegativeWhenPackageRulePassed() {

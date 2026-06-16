@@ -6,6 +6,7 @@ export const EXPERT_REVIEW_SAFETY_GUARDRAILS = `
 - Yükleme talimatı eksikliği yalnızca PRES-006 veya EXP-005 non-pass ise Incoterm/operasyon bulgusu olabilir.
 - CROSS-003 Incoterm uyumu PASS ise "DAP" ile "DAP Warszawa, Poland" gibi kod ve kod+teslim yeri ifadelerini uyumsuzluk sayma.
 - A.TR, EUR.1, tercihli menşe veya preferential origin uyarısı yalnızca tercihli rejim, tariff_preference=true, A.TR/EUR.1 metni veya açık tercihli tarife talebi varsa üretilebilir.
+- EXP-004 non-pass ise menşe eksikliğini ana inceleme konusu olarak ele al; ":" veya boş menşe değerlerini geçerli menşe sayma, GTİP teknik teyidini ikincil tut ve bunu sahtecilik/fraud olarak büyütme.
 - Dosya setinde beyanname yoksa ve deterministik belge-varlığı/kıymet/rejim kuralı bunu non-pass olarak işaretlemediyse, yalnızca beyanname eksik diye REGIME_CHOICE veya VALUATION bulgusu üretme.
 - 870829909000 / 8708 / 870829 otobüs gövde aksamı veya aksesuarı bağlamında makul aday olabilir; nihai teyit için teknik çizim, malzeme, işlev, montaj yeri ve parçanın gövde bileşeni mi HVAC/mekanik parça mı olduğunu gösteren kanıt iste.
 - Aynı GTİP teknik belirsizliğini GTİP_PLAUSIBILITY ve PERMIT_PRODUCT_CONTROL olarak iki ayrı uyarıya bölme; mümkünse tek GTİP teknik teyit bulgusunda birleştir.
@@ -125,6 +126,7 @@ function shouldDropPreferentialOriginFinding(
   },
 ): boolean {
   if (finding.area !== 'ORIGIN_PREFERENTIAL') return false
+  if (hasNonPassRule(context.ruleResults, 'EXP-004') && mentionsMissingOrigin(finding)) return false
   if (hasNonPassRule(context.ruleResults, 'PRES-004')) return false
   return !hasPreferentialSignal(context.documents)
 }
@@ -216,6 +218,13 @@ function hasAnyNonPassRule(ruleResults: ExpertReviewSafetyRuleResult[], ruleCode
 function hasPreferentialSignal(documents: ExpertReviewSafetyDocument[]): boolean {
   const text = normalize(JSON.stringify(documents.map((document) => document.data)))
   return /tariff_preference"?\s*:\s*true|a\.?\s*t\.?\s*r|eur\.?\s*1|preferential|tercihli|mense ispat|dolasim belgesi/.test(text)
+}
+
+function mentionsMissingOrigin(finding: ExpertReviewSafetyFinding): boolean {
+  return mentions(
+    finding,
+    /(men[şs]e|mense|origin).*(eksik|bo[şs]|bos|yok|bulunmuyor|okunam[ıi]yor|missing|blank|placeholder|yer tutucu)|(:).*(men[şs]e|mense|origin)/i,
+  )
 }
 
 function mentions(finding: ExpertReviewSafetyFinding, pattern: RegExp): boolean {

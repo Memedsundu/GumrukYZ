@@ -341,8 +341,8 @@ export const RULE_METADATA: Record<string, RuleDisplayMetadata> = {
   'EXP-004': {
     category: 'İhracat',
     turkishTitle: 'İhracat menşe bilgisi',
-    operationalExplanation: 'Menşe bilgisi tercihli işlem ve alıcı ülke kontrollerinde kullanılabilir.',
-    recommendedAction: 'Faturada menşe bilgisini ve varsa tercih belgesini doğrulayın.',
+    operationalExplanation: 'Menşe bilgisi ihracat dosyasında ürün, ülke ve belge tutarlılığı için temel kontroldür.',
+    recommendedAction: 'Menşe ülkesini fatura, çeki listesi veya beyanname üzerinde düzeltin ya da menşe kanıtı isteyin; ":" gibi yer tutucu değerleri kabul etmeyin.',
     blocking: false,
   },
   'EXP-005': {

@@ -7,6 +7,7 @@ export const AI_RULE_VALIDATION_SAFETY_GUARDRAILS = `
 - Deterministik kural PASS ise yalnızca açık, aynı alan ve aynı birim kanıtı varsa POTENTIAL_FALSE_NEGATIVE üret.
 - Incoterm kodu ile teslim yeri birlikte yazılabilir: "DAP" ile "DAP Warszawa, Poland" uyumludur.
 - PRES-006 PASS ve yapılandırılmış yükleme talimatı alanları mevcutsa, yalnızca _native_text_length=0 veya ilk metin okuma sinyaline dayanarak "yükleme talimatı içeriği doğrulanamadı" bulgusu üretme.
+- EXP-004 REVIEW_NEEDED ve kanıt ":"/boş menşe ise sonuç muhtemelen doğrudur; bunu sahtecilik veya tercihli menşe belgesi eksikliği olarak genişletme.
 `.trim()
 
 export type AiRuleValidationSafetyItem = {

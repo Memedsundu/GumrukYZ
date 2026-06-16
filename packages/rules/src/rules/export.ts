@@ -6,7 +6,7 @@
  * - Dış Ticaret Mevzuatı (İhracat Yönetmeliği)
  */
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
-import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
+import type { ExtractionData, RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
 import {
   failOrReview,
   failResult,
@@ -14,7 +14,106 @@ import {
   isPlaceholderValue,
   normalizeCountryCode,
   passResult,
+  reviewResult,
 } from '../helpers.js'
+
+type OriginEvidence = {
+  doc: ExtractionData
+  field: string
+  value: unknown
+  normalized: string | null
+}
+
+const EXPORT_ORIGIN_DOC_TYPES = new Set<string>([
+  DocumentType.INVOICE,
+  DocumentType.PACKING_LIST,
+  DocumentType.DECLARATION_OUTPUT,
+  DocumentType.ORIGIN_DOC,
+])
+
+const ORIGIN_FIELDS = [
+  'country_of_origin',
+  'origin_country',
+  'goods_origin',
+  'origin',
+  'mense_ulke',
+  'menşe_ülke',
+]
+
+function collectExportOriginEvidence(ctx: SubmissionContext): OriginEvidence[] {
+  const evidence: OriginEvidence[] = []
+
+  for (const doc of ctx.documents) {
+    if (!EXPORT_ORIGIN_DOC_TYPES.has(doc.docType)) continue
+
+    const topLevel = collectTopLevelOriginEvidence(doc)
+    evidence.push(...topLevel)
+    evidence.push(...collectItemOriginEvidence(doc))
+
+    if (
+      topLevel.length === 0 &&
+      (
+        doc.docType === DocumentType.INVOICE ||
+        doc.docType === DocumentType.PACKING_LIST ||
+        doc.docType === DocumentType.DECLARATION_OUTPUT
+      )
+    ) {
+      evidence.push({
+        doc,
+        field: 'country_of_origin',
+        value: null,
+        normalized: null,
+      })
+    }
+  }
+
+  return evidence
+}
+
+function collectTopLevelOriginEvidence(doc: ExtractionData): OriginEvidence[] {
+  const evidence: OriginEvidence[] = []
+  for (const field of ORIGIN_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(doc.data, field)) continue
+    const value = doc.data[field]
+    evidence.push({
+      doc,
+      field,
+      value,
+      normalized: normalizeCountryCode(value),
+    })
+  }
+  return evidence
+}
+
+function collectItemOriginEvidence(doc: ExtractionData): OriginEvidence[] {
+  const items = doc.data['items']
+  if (!Array.isArray(items)) return []
+
+  const evidence: OriginEvidence[] = []
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    const data = item as Record<string, unknown>
+    for (const field of ORIGIN_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(data, field)) continue
+      const value = data[field]
+      evidence.push({
+        doc,
+        field: `items[].${field}`,
+        value,
+        normalized: normalizeCountryCode(value),
+      })
+    }
+  }
+  return evidence
+}
+
+function sourceRefsFromOriginEvidence(evidence: OriginEvidence[]) {
+  return evidence.map((entry) => ({
+    docType: entry.doc.docType,
+    field: entry.field,
+    value: entry.value,
+  }))
+}
 
 /** EXP-001 — İhracat faturasında fatura numarası bulunmalı. */
 export const EXP_001: RuleDefinition = {
@@ -108,12 +207,12 @@ export const EXP_003: RuleDefinition = {
   },
 }
 
-/** EXP-004 — İhracat faturasında menşe ülke belirtilmeli (tercihli menşe için). */
+/** EXP-004 — İhracat dosyasında menşe ülke belirtilmeli. */
 export const EXP_004: RuleDefinition = {
   code: 'EXP-004',
-  name: 'İhracat faturasında menşe ülke belirtilmeli',
+  name: 'İhracat dosyasında menşe ülke belirtilmeli',
   severity: RuleSeverity.WARNING,
-  appliesToDocTypes: [DocumentType.INVOICE],
+  appliesToDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST, DocumentType.DECLARATION_OUTPUT],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     if (ctx.tradeFlow !== 'EXPORT') return null
@@ -121,28 +220,45 @@ export const EXP_004: RuleDefinition = {
     const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
     if (!invoice) return null
 
-    const coo = invoice.data['country_of_origin']
-    const normalized = normalizeCountryCode(coo)
-    if (normalized) {
-      return passResult(this.code, this.severity, `Faturada menşe ülke belirtilmiş: ${coo} (${normalized}).`)
-    }
-    if (hasValue(coo) && !isPlaceholderValue(coo)) {
-      return failOrReview(
+    const evidence = collectExportOriginEvidence(ctx)
+    const meaningfulEvidence = evidence.filter(
+      (entry) => hasValue(entry.value) && !isPlaceholderValue(entry.value),
+    )
+    const validEvidence = meaningfulEvidence.filter((entry) => entry.normalized)
+    const validCodes = new Set(validEvidence.map((entry) => entry.normalized))
+
+    if (validCodes.size === 1) {
+      const sample = validEvidence[0]
+      return passResult(
         this.code,
         this.severity,
-        [invoice],
-        `İhracat faturasında menşe ülke "${coo}" geçerli ISO ülke koduna normalize edilemedi. Tercihli tarife ve A.TR/EUR.1 menşe beyanlarını kontrol edin.`,
-        'Menşe ülke faturadan güvenle doğrulanamadı. Manuel kontrol gerekli.',
-        [{ docType: DocumentType.INVOICE, field: 'country_of_origin', value: coo }],
+        `İhracat dosyasında menşe ülke belirtilmiş: ${sample?.value} (${sample?.normalized}).`,
       )
     }
-    return failOrReview(
+
+    if (validCodes.size > 1) {
+      return reviewResult(
+        this.code,
+        this.severity,
+        'İhracat dosyasındaki menşe ülke bilgileri farklı ülkelere işaret ediyor; fatura, çeki listesi ve beyanname özetindeki menşe alanları manuel doğrulanmalı.',
+        sourceRefsFromOriginEvidence(meaningfulEvidence),
+      )
+    }
+
+    if (meaningfulEvidence.length > 0) {
+      return reviewResult(
+        this.code,
+        this.severity,
+        'İhracat dosyasındaki menşe ülke bilgisi standart ülke adı veya ISO ülke koduna normalize edilemedi. Menşe kanıtı ya da düzeltilmiş belge istenmeli.',
+        sourceRefsFromOriginEvidence(meaningfulEvidence),
+      )
+    }
+
+    return reviewResult(
       this.code,
       this.severity,
-      [invoice],
-      'İhracat faturasında menşe ülke eksik. Tercihli tarife ve A.TR/EUR.1 menşe beyanları için gereklidir.',
-      'Menşe ülke faturadan güvenle okunamadı. Manuel kontrol gerekli.',
-      [{ docType: DocumentType.INVOICE, field: 'country_of_origin', value: null }],
+      'İhracat dosyasında menşe ülke bilgisi bulunamadı veya ":" gibi yer tutucu değerlerle boş bırakıldı. Menşe kanıtı ya da düzeltilmiş belge istenmeli.',
+      sourceRefsFromOriginEvidence(evidence),
     )
   },
 }
