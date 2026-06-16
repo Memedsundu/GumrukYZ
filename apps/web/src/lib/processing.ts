@@ -42,6 +42,7 @@ import { runOcrFallback } from './ocr-client'
 import { formatRuleResultMessage } from './report-format'
 import { enhanceDeclarationOutputFromText } from './declaration-text-fallback'
 import { enhanceLoadingInstructionFromText } from './loading-instruction-text-fallback'
+import { enhancePackingListFromText } from './packing-list-text-fallback'
 import {
   type AzureDocumentIntelligenceResult,
   isAzureDocumentIntelligenceEnabled,
@@ -1108,32 +1109,7 @@ function enhanceStructuredDataFromText(
   }
 
   if (docType === 'PACKING_LIST') {
-    const totalPackages = firstMatch(rawText, /(?:Total Packages|Toplam\s+(?:Paket|Kap))\s+(\d+)/i)
-    const totalGrossWeight = firstMatch(rawText, /(?:Total Gross Weight|Toplam\s+Br[üu]t(?:\s+A[ğg][ıi]rl[ıi]k)?)\s+([\d.,]+)/i)
-    const totalNetWeight = firstMatch(rawText, /(?:Total Net Weight|Toplam\s+Net(?:\s+A[ğg][ıi]rl[ıi]k)?)\s+([\d.,]+)/i)
-    if (totalPackages) next['package_count'] = parseLocaleNumber(totalPackages)
-    if (totalGrossWeight) next['gross_weight'] = parseLocaleNumber(totalGrossWeight)
-    if (totalNetWeight) next['net_weight'] = parseLocaleNumber(totalNetWeight)
-
-    const itemPackageCounts = parsePackingListItemPackageCounts(rawText)
-    if (itemPackageCounts.length > 0 && Array.isArray(next['items'])) {
-      next['items'] = next['items'].map((item, index) => {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) return item
-        const packageCount = itemPackageCounts[index]
-        if (packageCount == null) return item
-        return { ...item, package_count: packageCount }
-      })
-    }
-
-    if (!hasExplicitNetWeightEvidence(rawText)) {
-      next['net_weight'] = null
-      if (Array.isArray(next['items'])) {
-        next['items'] = next['items'].map((item) => {
-          if (!item || typeof item !== 'object' || Array.isArray(item)) return item
-          return { ...item, net_weight: null }
-        })
-      }
-    }
+    Object.assign(next, enhancePackingListFromText(next, rawText))
   }
 
   if (docType === 'LOADING_INSTRUCTION') {
@@ -1200,20 +1176,6 @@ function hasExplicitNetWeightEvidence(rawText: string): boolean {
   return /\b(net\s*(weight|wt|kg)|netto|net ağırlık|net agirlik|toplam\s+net)\b/i.test(rawText)
 }
 
-function parsePackingListItemPackageCounts(rawText: string): number[] {
-  const tableSection =
-    rawText.match(/Package Details[\s\S]*?(?=Total Quantity|Total Packages|Not:|Haz[ıi]rlayan|$)/i)?.[0] ??
-    rawText.match(/Ambalaj Bilgileri[\s\S]*?(?=Total Quantity|Total Packages|Not:|Haz[ıi]rlayan|$)/i)?.[0]
-
-  if (!tableSection) return []
-  const matches = Array.from(
-    tableSection.matchAll(/\b(\d+)\s+(?:wooden\s+)?(?:boxes|box|packages?|pkg|koli|kap|sand[ıi]k)\b/gi),
-  )
-  return matches
-    .map((match) => parseLocaleNumber(match[1]))
-    .filter((value): value is number => value != null && value > 0)
-}
-
 function roundConfidence(value: number): number {
   return Math.max(0, Math.min(1, Math.round(value * 100) / 100))
 }
@@ -1221,10 +1183,6 @@ function roundConfidence(value: number): number {
 function firstMatch(text: string, pattern: RegExp): string | null {
   const match = text.match(pattern)
   return match?.[1]?.trim() ?? null
-}
-
-function parseLocaleNumber(value: string): number | null {
-  return toFiniteNumber(value)
 }
 
 async function clearProcessingJobArtifacts(

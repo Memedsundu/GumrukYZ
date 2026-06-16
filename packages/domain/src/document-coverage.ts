@@ -34,8 +34,6 @@ const IMPORT_BASELINE = [
 const EXPORT_BASELINE = [
   DocumentType.INVOICE,
   DocumentType.PACKING_LIST,
-  DocumentType.LOADING_INSTRUCTION,
-  DocumentType.DECLARATION_OUTPUT,
 ] as const
 
 export type DocumentCoverageDocument = {
@@ -91,6 +89,24 @@ function hasPermitSignal(documents: DocumentCoverageDocument[]): boolean {
   })
 }
 
+function hasLoadingInstructionSignal(
+  documents: DocumentCoverageDocument[],
+  snapshot: DocumentCoverageSnapshot | null | undefined,
+): boolean {
+  const regimeCode = String(snapshot?.regimeCode ?? '').trim()
+  if (regimeCode.startsWith('21') || regimeCode.startsWith('22')) return true
+  return documents.some((doc) => {
+    const data = doc.data ?? {}
+    const value = String(
+      data['regime_code'] ??
+      data['regimeCode'] ??
+      data['export_regime_code'] ??
+      '',
+    ).trim()
+    return value.startsWith('21') || value.startsWith('22')
+  })
+}
+
 export function classifyDocumentCoverage(params: {
   tradeFlow: string
   uploadedDocTypes: string[]
@@ -119,6 +135,13 @@ export function classifyDocumentCoverage(params: {
   }
   if (hasPermitSignal(documents) && !uploaded.has(DocumentType.PERMIT_DOC)) {
     missingConditional.push(DocumentType.PERMIT_DOC)
+  }
+  if (
+    params.tradeFlow === TradeFlow.EXPORT &&
+    hasLoadingInstructionSignal(documents, snapshot) &&
+    !hasDocType(uploaded, DocumentType.LOADING_INSTRUCTION)
+  ) {
+    missingConditional.push(DocumentType.LOADING_INSTRUCTION)
   }
 
   const missingAll = [...missingExpected, ...missingConditional]

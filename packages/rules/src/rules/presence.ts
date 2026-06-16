@@ -95,7 +95,8 @@ export const PRES_005: RuleDefinition = {
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const decls = ctx.documents.filter((d) => d.docType === DocumentType.DECLARATION_OUTPUT)
-    if (decls.length <= 1) {
+    if (decls.length === 0) return null
+    if (decls.length === 1) {
       return passResult(this.code, this.severity, 'Beklenen tek beyanname çıktısı mevcut.')
     }
     return reviewResult(
@@ -143,11 +144,6 @@ export const PRES_006: RuleDefinition = {
     if (hasLoadingInstruction) {
       return passResult(this.code, this.severity, 'Beklenen yükleme talimatı mevcut.')
     }
-    return reviewResult(
-      this.code,
-      this.severity,
-      'Beklenen yükleme talimatı dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
-      [{ field: 'doc_type', value: DocumentType.LOADING_INSTRUCTION }],
-    )
+    return null
   },
 }

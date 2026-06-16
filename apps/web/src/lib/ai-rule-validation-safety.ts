@@ -1,7 +1,9 @@
 export const AI_RULE_VALIDATION_SAFETY_GUARDRAILS = `
 - Farklı ambalaj seviyelerini toplama: "5 wooden boxes / 2 pallets" değeri 7 kap anlamına gelmez.
 - Aynı kural "8 wooden boxes / 2 pallets" için de geçerlidir: kap sayısı 8'dir, 10 değildir.
+- "480 pcs/adet" ürün adedi ile "12 wooden boxes / 3 pallets" ambalaj/taşıma seviyesi farklıdır; CROSS-004 ve PL-001 PASS ise bunu miktar/kap uyuşmazlığı sayma.
 - CROSS-008 veya PL-001 PASS ise paket/kap sayısı için POTENTIAL_FALSE_NEGATIVE üretme; aynı alan ve aynı birimde açık çelişki gerekir.
+- CROSS-004 PASS ise fatura ürün adedi ile çeki listesi Quantity Inside/Total Quantity değeri uzlaşmıştır; aynı bulguda paket sayısıyla yeniden karşılaştırma yapma.
 - Deterministik kural PASS ise yalnızca açık, aynı alan ve aynı birim kanıtı varsa POTENTIAL_FALSE_NEGATIVE üret.
 - Incoterm kodu ile teslim yeri birlikte yazılabilir: "DAP" ile "DAP Warszawa, Poland" uyumludur.
 - PRES-006 PASS ve yapılandırılmış yükleme talimatı alanları mevcutsa, yalnızca _native_text_length=0 veya ilk metin okuma sinyaline dayanarak "yükleme talimatı içeriği doğrulanamadı" bulgusu üretme.
@@ -46,7 +48,11 @@ function shouldDropPackageCountAdvisory(
   byId: Map<string, AiRuleValidationSafetyRuleResult>,
 ): boolean {
   if (validation.status === 'LIKELY_CORRECT') return false
-  if (!hasPassedRule(ruleResults, 'CROSS-008') && !hasPassedRule(ruleResults, 'PL-001')) return false
+  if (
+    !hasPassedRule(ruleResults, 'CROSS-008') &&
+    !hasPassedRule(ruleResults, 'PL-001') &&
+    !(hasPassedRule(ruleResults, 'CROSS-004') && hasPassedRule(ruleResults, 'PL-001'))
+  ) return false
   if (!mentions(validation, /(kap|paket|package|ambalaj|pallet|palet|box|sand[ıi]k)/i)) return false
 
   const rule = byId.get(validation.rule_result_id)

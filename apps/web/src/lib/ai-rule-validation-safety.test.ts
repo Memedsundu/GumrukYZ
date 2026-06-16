@@ -8,7 +8,9 @@ import {
 function testGuardrailsMentionPackageAndIncotermSemantics() {
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /5 wooden boxes \/ 2 pallets/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /8 wooden boxes \/ 2 pallets/)
+  assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /480 pcs\/adet/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /CROSS-008/)
+  assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /CROSS-004/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /DAP Warszawa, Poland/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /_native_text_length/)
 }
@@ -55,6 +57,30 @@ function testDropsMixedPackageLevelsWhenPackingRulePassed() {
   ]
 
   const filtered = applyAiRuleValidationSafetyFilters(validations, [
+    { id: 'pl-001-pass', ruleCode: 'PL-001', result: 'PASS' },
+  ])
+
+  assert.equal(filtered.length, 0)
+}
+
+function testDropsItemQuantityVsPackageCountAdvisoryWhenRulesPassed() {
+  const validations: AiRuleValidationSafetyItem[] = [
+    {
+      rule_result_id: 'cross-004-pass',
+      status: 'POTENTIAL_FALSE_NEGATIVE',
+      confidence: 0.74,
+      explanation:
+        'CROSS-004 geçti ancak fatura 480 pcs/adet, çeki listesi 12 wooden boxes / 3 pallets gösteriyor; miktar uyuşmazlığı olabilir.',
+      recommendation: '480 adet ile 12 sandık ve 3 palet tekrar karşılaştırılmalı.',
+      evidence_refs: [
+        { docType: 'INVOICE', field: 'items[].quantity', value: '480 pcs/adet' },
+        { docType: 'PACKING_LIST', field: 'package_count', value: '12 wooden boxes / 3 pallets' },
+      ],
+    },
+  ]
+
+  const filtered = applyAiRuleValidationSafetyFilters(validations, [
+    { id: 'cross-004-pass', ruleCode: 'CROSS-004', result: 'PASS' },
     { id: 'pl-001-pass', ruleCode: 'PL-001', result: 'PASS' },
   ])
 
@@ -111,6 +137,7 @@ const tests = [
   testGuardrailsMentionPackageAndIncotermSemantics,
   testDropsPackageCountFalseNegativeWhenPackageRulePassed,
   testDropsMixedPackageLevelsWhenPackingRulePassed,
+  testDropsItemQuantityVsPackageCountAdvisoryWhenRulesPassed,
   testDropsNativeTextOnlyLoadingInstructionUnverifiedFinding,
   testKeepsValuationLikelyCorrectSupport,
 ]

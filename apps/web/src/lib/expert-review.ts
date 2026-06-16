@@ -21,7 +21,7 @@ const RETRY_CONTEXT_CHUNK_LIMIT = 6
 const RETRY_PROMPT_PAYLOAD_CHARS = 14_000
 const RETRY_MAX_FINDINGS = 4
 /** Bump when the expert review prompt or schema changes. */
-const EXPERT_REVIEW_PROMPT_VERSION = '2026-06-16.2'
+const EXPERT_REVIEW_PROMPT_VERSION = '2026-06-16.3'
 
 export const REQUIRED_LEGAL_SOURCE_TITLES = [
   '4458 Sayılı Gümrük Kanunu',

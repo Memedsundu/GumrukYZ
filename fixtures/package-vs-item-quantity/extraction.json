@@ -1,0 +1,118 @@
+{
+  "_fixture": "package-vs-item-quantity",
+  "_description": "Invoice item quantity 480 pcs and packing package count 12 boxes / 3 pallets are different unit categories; packing list reconciles 480 pcs inside 12 boxes.",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "CROSS-004": "PASS",
+    "CROSS-006": "PASS",
+    "CROSS-009": "PASS",
+    "DECL-002": "PASS",
+    "EXP-004": "PASS",
+    "INV-001": "PASS",
+    "INV-002": "PASS",
+    "INV-003": "PASS",
+    "INV-004": "PASS",
+    "INV-005": "PASS",
+    "INV-006": "PASS",
+    "PL-001": "PASS",
+    "PL-002": "PASS",
+    "VAL-001": "PASS",
+    "VAL-002": "PASS",
+    "VAL-003": "PASS"
+  },
+  "_expectedAbsentResults": [
+    "PRES-005",
+    "PRES-006",
+    "CROSS-001",
+    "CROSS-002",
+    "CROSS-003",
+    "CROSS-007",
+    "CROSS-008",
+    "DECL-001",
+    "DECL-003",
+    "DECL-004",
+    "DECL-005",
+    "EXP-003",
+    "GTIP-001",
+    "GTIP-002",
+    "GTIP-003"
+  ],
+  "_assertNoFailures": true,
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.98,
+      "data": {
+        "invoice_number": "FI2026-00068",
+        "invoice_date": "2026-05-22",
+        "seller_name": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "seller_address": "Kurgusal OSB, Selimpaşa / İstanbul, Türkiye",
+        "buyer_name": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "buyer_address": "ul. Testowa 14, 00-999 Warszawa, Poland",
+        "currency": "EUR",
+        "total_amount": 33600,
+        "incoterm": "DAP",
+        "delivery_place": "Warszawa, Poland",
+        "country_of_origin": "Türkiye / Turkey",
+        "gtip_code": "870829909000",
+        "gross_weight": 1185,
+        "net_weight": 980,
+        "items": [
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "hs_code": "870829909000",
+            "quantity": 480,
+            "unit": "pcs/adet",
+            "unit_price": 70,
+            "total_price": 33600
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.98,
+      "data": {
+        "package_count": 12,
+        "package_type": "wooden boxes on 3 pallets",
+        "gross_weight": 1185,
+        "net_weight": 980,
+        "goods_description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+        "shipper": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "consignee": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "country_of_origin": "Türkiye / Turkey",
+        "destination": "Poland",
+        "items": [
+          {
+            "description": "Otobüs havalandırma kanalı aksamı",
+            "quantity": 160,
+            "package_count": 4,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": 330,
+            "gross_weight": 398
+          },
+          {
+            "description": "Otobüs havalandırma kanalı aksamı",
+            "quantity": 160,
+            "package_count": 4,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": 325,
+            "gross_weight": 392
+          },
+          {
+            "description": "Otobüs havalandırma kanalı aksamı",
+            "quantity": 160,
+            "package_count": 4,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": 325,
+            "gross_weight": 395
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

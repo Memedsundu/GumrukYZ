@@ -28,6 +28,8 @@ function testGuardrailsMentionCleanExportFalsePositives() {
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /CROSS-008/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /PL-001/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /8 wooden boxes \/ 2 pallets/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /480 pcs\/adet/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /EXP-005/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /CMR/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /DAP Warszawa, Poland/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /A\.TR/)
@@ -208,11 +210,71 @@ function testDropsGrossOnlyFalseNoiseButKeepsMissingNetAndGtip() {
   assert.equal(filtered.findings[1]?.title, missingNetFinding.title)
 }
 
+function testDropsPackageVsItemAndLoadingNoiseButKeepsGtip() {
+  const filtered = applyExpertReviewSafetyFilters(
+    {
+      overallRisk: 'MEDIUM',
+      summary: 'Miktar ve yükleme talimatı yorumları var.',
+      findings: [
+        gtipFinding,
+        {
+          area: 'DOCUMENT_CONSISTENCY',
+          title: 'Fatura miktarı paket sayısıyla uyuşmuyor',
+          explanation:
+            'Faturada 480 pcs/adet var, çeki listesinde ise 12 wooden boxes / 3 pallets görünüyor.',
+          recommendation: '480 adet ile 12 sandık/3 palet farkı kontrol edilmeli.',
+          evidence_refs: [
+            { docType: 'INVOICE', field: 'items[].quantity', value: '480 pcs/adet' },
+            { docType: 'PACKING_LIST', field: 'package_count', value: '12 wooden boxes / 3 pallets' },
+          ],
+        },
+        {
+          area: 'INCOTERM',
+          title: 'DAP teslimde yükleme talimatı yok',
+          explanation:
+            'Dosyada yükleme talimatı bulunmadığından sevk organizasyonu ve teslim sorumluluğu belgeyle teyit edilemiyor.',
+          recommendation: 'Yükleme talimatı eklenmeli.',
+          evidence_refs: [{ docType: 'INVOICE', field: 'incoterm', value: 'DAP' }],
+        },
+        {
+          area: 'REGIME_CHOICE',
+          title: 'Beyanname eksik olduğu için rejim teyidi yok',
+          explanation: 'Dosyada declaration bulunmuyor; rejim seçimi doğrulanamadı.',
+          recommendation: 'Beyanname eklenmeli.',
+          evidence_refs: [],
+        },
+      ],
+    },
+    {
+      documents: [
+        {
+          docType: 'INVOICE',
+          data: { total_amount: 33600, country_of_origin: 'Türkiye / Turkey' },
+        },
+        {
+          docType: 'PACKING_LIST',
+          data: { package_count: 12, items: [{ quantity: 160 }, { quantity: 160 }, { quantity: 160 }] },
+        },
+      ],
+      ruleResults: [
+        { ruleCode: 'CROSS-004', result: 'PASS' },
+        { ruleCode: 'PL-001', result: 'PASS' },
+        { ruleCode: 'CROSS-006', result: 'PASS' },
+      ],
+    },
+  )
+
+  assert.equal(filtered.findings.length, 1)
+  assert.equal(filtered.findings[0]?.area, 'GTIP_PLAUSIBILITY')
+  assert.equal(filtered.overallRisk, 'LOW')
+}
+
 const tests = [
   testGuardrailsMentionCleanExportFalsePositives,
   testDropsUnsupportedFindingsButKeepsGtipReview,
   testDropsPassedIncotermNoiseButKeepsValuationAndGtip,
   testDropsGrossOnlyFalseNoiseButKeepsMissingNetAndGtip,
+  testDropsPackageVsItemAndLoadingNoiseButKeepsGtip,
 ]
 
 let failed = 0

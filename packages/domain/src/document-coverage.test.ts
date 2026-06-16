@@ -12,13 +12,25 @@ function testImportMissingTransport() {
   assert.match(result.limitationNotice, /sınırlıdır/)
 }
 
-function testExportMissingLoadingInstruction() {
+function testStandardExportInvoicePackingListIsComplete() {
+  const result = classifyDocumentCoverage({
+    tradeFlow: TradeFlow.EXPORT,
+    uploadedDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST],
+  })
+  assert.equal(result.isComplete, true)
+  assert.deepEqual(result.missingExpected, [])
+  assert.deepEqual(result.missingConditional, [])
+}
+
+function testTemporaryExportConditionallyRequiresLoadingInstruction() {
   const result = classifyDocumentCoverage({
     tradeFlow: TradeFlow.EXPORT,
     uploadedDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST, DocumentType.DECLARATION_OUTPUT],
+    declarationSnapshot: { regimeCode: '2100' },
   })
   assert.equal(result.isComplete, false)
-  assert.deepEqual(result.missingExpected, [DocumentType.LOADING_INSTRUCTION])
+  assert.deepEqual(result.missingExpected, [])
+  assert.deepEqual(result.missingConditional, [DocumentType.LOADING_INSTRUCTION])
 }
 
 function testCompleteImportSet() {
@@ -54,7 +66,8 @@ function testConditionalOriginOnlyWhenSignalExists() {
 
 const tests = [
   testImportMissingTransport,
-  testExportMissingLoadingInstruction,
+  testStandardExportInvoicePackingListIsComplete,
+  testTemporaryExportConditionallyRequiresLoadingInstruction,
   testCompleteImportSet,
   testConditionalOriginOnlyWhenSignalExists,
 ]

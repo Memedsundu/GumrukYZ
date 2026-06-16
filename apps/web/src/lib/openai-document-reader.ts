@@ -126,6 +126,7 @@ Rules:
 - For customs declarations (beyanname), read each kalem (line item) row into items[] with its own GTİP code, goods description, quantity, weights and value. Leave items null only when no line-item table is visible.
 - Parse locale number formats carefully: "980.00" and "980,00" mean 980; "1,185.00" and "1.185,00" mean 1185. Do not drop decimal separators in a way that turns 980.00 into 98000.
 - For packing-list item rows, separate package_count from product quantity. If a row says "4 boxes" and "Quantity Inside 53 pcs", set item.package_count=4 and item.quantity=53.
+- For packing lists, pieces/adet, boxes/sandık, and pallets/palet are different unit categories. "480 pcs/adet in 12 wooden boxes on 3 pallets" means item quantity 480 and package_count 12; do not set package_count to 480, 3, or 15.
 - Do not infer net_weight from quantity, package count, or gross_weight. Use net_weight only when a visible label says Net Weight, Net Kg, Net Ağırlık, or Toplam Net.
 - For packing lists with only Brüt Ağırlık/Gross Weight columns, return net_weight as null at both document and item level.
 - For loading instructions too, package_count is the declared box/package count. Do not add unlike packaging levels together: "8 wooden boxes / 2 pallets" means package_count=8, not 10.
