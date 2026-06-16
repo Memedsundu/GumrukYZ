@@ -1,5 +1,4 @@
-import { existsSync, readFileSync } from 'fs'
-import { createRequire } from 'module'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import path from 'path'
 import React from 'react'
 import {
@@ -15,30 +14,53 @@ import {
 import type { ReportPayload } from './report-data'
 
 let fontsRegistered = false
-const require = createRequire(import.meta.url)
-const FONT_PACKAGE = '@fontsource/noto-sans'
+const REPORT_FONT_FAMILY = 'Mizan Sans'
+const FONT_PACKAGE = 'pdfjs-dist'
+const FONT_FILES_DIR = path.join('node_modules', FONT_PACKAGE, 'standard_fonts')
 
 function fontPath(filename: string) {
-  const resolved = require.resolve(`${FONT_PACKAGE}/files/${filename}`)
-  if (!existsSync(resolved)) {
-    throw new Error(`Report PDF font file not found: ${filename}`)
+  const directPath = path.join(process.cwd(), FONT_FILES_DIR, filename)
+  if (existsSync(directPath)) return directPath
+
+  const pnpmPath = resolvePnpmFontPath(filename)
+  if (pnpmPath) return pnpmPath
+
+  throw new Error(`Report PDF font file not found: ${filename}`)
+}
+
+function resolvePnpmFontPath(filename: string): string | null {
+  let current = process.cwd()
+
+  for (let depth = 0; depth < 6; depth += 1) {
+    const pnpmModulesDir = path.join(current, 'node_modules', '.pnpm')
+    if (existsSync(pnpmModulesDir)) {
+      const packageDir = readdirSync(pnpmModulesDir).find((entry) => entry.startsWith('pdfjs-dist@'))
+      if (packageDir) {
+        const candidate = path.join(pnpmModulesDir, packageDir, 'node_modules', FONT_PACKAGE, 'standard_fonts', filename)
+        if (existsSync(candidate)) return candidate
+      }
+    }
+
+    const parent = path.dirname(current)
+    if (parent === current) break
+    current = parent
   }
 
-  return resolved
+  return null
 }
 
 function registerFonts() {
   if (fontsRegistered) return
 
   Font.register({
-    family: 'Noto Sans',
+    family: REPORT_FONT_FAMILY,
     fonts: [
       {
-        src: fontPath('noto-sans-latin-ext-400-normal.woff'),
+        src: fontPath('LiberationSans-Regular.ttf'),
         fontWeight: 400,
       },
       {
-        src: fontPath('noto-sans-latin-ext-700-normal.woff'),
+        src: fontPath('LiberationSans-Bold.ttf'),
         fontWeight: 700,
       },
     ],
@@ -77,7 +99,7 @@ const COLORS = {
 const styles = StyleSheet.create({
   page: {
     padding: 36,
-    fontFamily: 'Noto Sans',
+    fontFamily: REPORT_FONT_FAMILY,
     fontSize: 10,
     color: COLORS.ink,
   },
