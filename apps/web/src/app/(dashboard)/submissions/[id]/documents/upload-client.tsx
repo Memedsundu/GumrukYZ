@@ -10,7 +10,13 @@ import {
   SUPPORTED_UPLOAD_LABEL,
 } from '@/lib/document-file-types'
 import { ACTIVE_PROCESSING_STATUSES } from '@/lib/submission-status'
-import { pollSubmissionUntilSettled } from '@/lib/submission-status-poll'
+import { initialAnalysisProgress } from '@/lib/processing-progress'
+import {
+  mapStatusToProgressUpdate,
+  pollSubmissionUntilSettled,
+  startProcessingWithProgress,
+} from '@/lib/submission-status-poll'
+import { useSmoothProgressPercent } from '@/lib/use-smooth-progress-percent'
 import { Button } from '@/components/ui/button'
 import { DocTypeChip } from '@/components/ui/doc-type-chip'
 import { AnimatedCheck } from '@/components/ui/animated-check'
@@ -176,8 +182,9 @@ export default function DocumentUploadClient({
       if (isClassifyActive) setClassifying(true)
       if (isAnalysisActive) {
         setProcessing(true)
+        const initial = initialAnalysisProgress()
         setProcessingProgress({
-          percent: 8,
+          percent: initial.percent,
           label: 'Analiz devam ediyor',
           description: 'Kaldığınız yerden işlem sürüyor.',
         })
@@ -187,10 +194,11 @@ export default function DocumentUploadClient({
         const result = await pollSubmissionUntilSettled(submissionId, {
           onUpdate: (data) => {
             if (cancelled) return
+            const update = mapStatusToProgressUpdate(data)
             setProcessingProgress({
-              percent: data.progressPercent,
-              label: data.progressLabel,
-              description: data.progressDescription,
+              percent: update.percent,
+              label: update.label,
+              description: update.description,
             })
             if (data.classificationStatus === 'AWAITING_VALIDATION') {
               setClassificationStatus('AWAITING_VALIDATION')
@@ -382,42 +390,26 @@ export default function DocumentUploadClient({
     }
   }
 
-  async function pollSubmissionStatus(): Promise<void> {
-    await pollSubmissionUntilSettled(submissionId, {
-      onUpdate: (data) => {
-        setProcessingProgress({
-          percent: data.progressPercent,
-          label: data.progressLabel,
-          description: data.progressDescription,
-        })
-      },
-    })
-  }
-
   async function handleProcess() {
     setProcessing(true)
     setProcessError(null)
+    const initial = initialAnalysisProgress()
     setProcessingProgress({
-      percent: 8,
-      label: 'Analiz başlatılıyor',
-      description: 'İş kuyruğu hazırlanıyor. İlerleme tahmini olarak gösterilir.',
+      percent: initial.percent,
+      label: initial.label,
+      description: initial.description,
     })
 
     try {
-      const res = await fetch(`/api/submissions/${submissionId}/process`, { method: 'POST' })
-      const data = await res.json() as { error?: string; async?: boolean }
-      if (!res.ok) {
-        throw new Error(data.error ?? 'İşleme başarısız')
-      }
-      if (res.status === 202 || data.async) {
-        await pollSubmissionStatus()
-        router.push(`/submissions/${submissionId}`)
-        return
-      }
-      setProcessingProgress({
-        percent: 100,
-        label: 'Tamamlandı',
-        description: 'Analiz tamamlandı; dosya sayfası açılıyor.',
+      await startProcessingWithProgress(submissionId, {
+        onUpdate: (data) => {
+          const update = mapStatusToProgressUpdate(data)
+          setProcessingProgress({
+            percent: update.percent,
+            label: update.label,
+            description: update.description,
+          })
+        },
       })
       router.push(`/submissions/${submissionId}`)
     } catch (err) {
@@ -715,7 +707,7 @@ export default function DocumentUploadClient({
           </div>
           {processError && <div className="mt-4 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{processError}</div>}
           {(processing || processingProgress) && (
-            <ProgressBar progress={processingProgress} />
+            <ProgressBar progress={processingProgress} active={processing} />
           )}
         </div>
       )}
@@ -778,8 +770,15 @@ function DocumentStatusBadge({
   )
 }
 
-function ProgressBar({ progress }: { progress: ProcessingProgressState | null }) {
-  const percent = Math.max(0, Math.min(100, progress?.percent ?? 8))
+function ProgressBar({
+  progress,
+  active,
+}: {
+  progress: ProcessingProgressState | null
+  active: boolean
+}) {
+  const displayPercent = useSmoothProgressPercent(progress?.percent, active)
+
   return (
     <div className="mt-5 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3">
       <div className="flex items-center justify-between gap-4">
@@ -791,12 +790,12 @@ function ProgressBar({ progress }: { progress: ProcessingProgressState | null })
             {progress?.description ?? 'Tahmini ilerleme hazırlanıyor.'}
           </p>
         </div>
-        <span className="font-mono text-sm font-semibold text-brand-600">%{Math.round(percent)}</span>
+        <span className="font-mono text-sm font-semibold text-brand-600">%{Math.round(displayPercent)}</span>
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface">
         <div
           className="h-full rounded-full bg-brand-600 transition-[width] duration-300"
-          style={{ width: `${percent}%` }}
+          style={{ width: `${displayPercent}%` }}
         />
       </div>
       <p className="mt-2 text-xs text-brand-700">

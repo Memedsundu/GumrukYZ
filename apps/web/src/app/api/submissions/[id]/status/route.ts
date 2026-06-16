@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@gumrukyz/db'
 import { requireApiUser } from '@/lib/auth'
-import { getProcessingProgress } from '@/lib/processing-progress'
+import { computeSubmissionProgress } from '@/lib/processing-progress'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -19,6 +19,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
       id: true,
       status: true,
       classificationStatus: true,
+      documents: {
+        where: { isIgnored: false, docType: { not: 'UNCLASSIFIED' } },
+        select: { status: true },
+      },
       processingJobs: {
         orderBy: { updatedAt: 'desc' },
         take: 1,
@@ -28,6 +32,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
           currentStep: true,
           errorMessage: true,
           triggerJobId: true,
+          startedAt: true,
+          updatedAt: true,
         },
       },
     },
@@ -38,7 +44,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 
   const job = submission.processingJobs[0] ?? null
-  const progress = getProcessingProgress(submission.status, job?.currentStep ?? null)
+  const documentsTotal = submission.documents.length
+  const documentsDone = submission.documents.filter((document) => document.status === 'DONE').length
+
+  const progress = computeSubmissionProgress({
+    status: submission.status,
+    currentStep: job?.currentStep ?? null,
+    documentsDone,
+    documentsTotal,
+    startedAt: job?.startedAt ?? null,
+    updatedAt: job?.updatedAt ?? null,
+  })
 
   return NextResponse.json({
     submissionId: submission.id,
@@ -47,6 +63,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     progressPercent: progress.percent,
     progressLabel: progress.label,
     progressDescription: progress.description,
+    progressDetail: progress.progressDetail ?? null,
     job,
   })
 }

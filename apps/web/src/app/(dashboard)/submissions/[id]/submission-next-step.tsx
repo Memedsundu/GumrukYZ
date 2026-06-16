@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BarChart2, CheckCircle, Loader2, Upload } from 'lucide-react'
@@ -11,7 +11,8 @@ import {
   shouldRefreshOnStatusChange,
   type SubmissionStatusSnapshot,
 } from '@/lib/submission-status'
-import { fetchSubmissionStatus } from '@/lib/submission-status-poll'
+import { fetchSubmissionStatus, mapStatusToProgressUpdate } from '@/lib/submission-status-poll'
+import { useSmoothProgressPercent } from '@/lib/use-smooth-progress-percent'
 
 type Props = {
   submissionId: string
@@ -23,6 +24,10 @@ type Props = {
   poll?: boolean
 }
 
+type KeyedSubmissionStatusSnapshot = SubmissionStatusSnapshot & {
+  snapshotKey: string
+}
+
 export function SubmissionNextStep({
   submissionId,
   initialStatus,
@@ -32,28 +37,28 @@ export function SubmissionNextStep({
   poll = variant === 'banner',
 }: Props) {
   const router = useRouter()
-  const refreshedRef = useRef(false)
-  const [snapshot, setSnapshot] = useState<SubmissionStatusSnapshot>({
-    status: initialStatus,
-    classificationStatus: initialClassificationStatus,
-  })
-
-  useEffect(() => {
-    setSnapshot({
+  const lastRefreshKeyRef = useRef<string | null>(null)
+  const snapshotKey = `${submissionId}:${initialStatus}:${initialClassificationStatus}`
+  const propSnapshot = useMemo<SubmissionStatusSnapshot>(
+    () => ({
       status: initialStatus,
       classificationStatus: initialClassificationStatus,
-    })
-    refreshedRef.current = false
-  }, [initialStatus, initialClassificationStatus])
+    }),
+    [initialStatus, initialClassificationStatus],
+  )
+  const [polledSnapshot, setPolledSnapshot] = useState<KeyedSubmissionStatusSnapshot | null>(null)
+  const polledSnapshotRef = useRef<KeyedSubmissionStatusSnapshot | null>(null)
+  const snapshot: SubmissionStatusSnapshot =
+    polledSnapshot?.snapshotKey === snapshotKey ? polledSnapshot : propSnapshot
 
   useEffect(() => {
-    if (!poll || !shouldPollSubmissionStatus(initialStatus, initialClassificationStatus)) {
+    if (!poll || !shouldPollSubmissionStatus(propSnapshot.status, propSnapshot.classificationStatus)) {
       return
     }
 
     let cancelled = false
 
-    async function poll() {
+    async function pollStatus() {
       while (!cancelled) {
         try {
           const data = await fetchSubmissionStatus(submissionId)
@@ -64,19 +69,24 @@ export function SubmissionNextStep({
             classificationStatus: data.classificationStatus,
             progressPercent: data.progressPercent,
             progressLabel: data.progressLabel,
-            progressDescription: data.progressDescription,
+            progressDescription: mapStatusToProgressUpdate(data).description,
           }
 
-          setSnapshot((current) => {
-            if (
-              !refreshedRef.current
-              && shouldRefreshOnStatusChange(current, nextSnapshot)
-            ) {
-              refreshedRef.current = true
-              router.refresh()
-            }
-            return nextSnapshot
-          })
+          const current = polledSnapshotRef.current
+          const currentSnapshot =
+            current?.snapshotKey === snapshotKey ? current : propSnapshot
+          const refreshKey = `${snapshotKey}:${nextSnapshot.status}:${nextSnapshot.classificationStatus}`
+          const keyedSnapshot = { ...nextSnapshot, snapshotKey }
+          polledSnapshotRef.current = keyedSnapshot
+          setPolledSnapshot(keyedSnapshot)
+
+          if (
+            lastRefreshKeyRef.current !== refreshKey
+            && shouldRefreshOnStatusChange(currentSnapshot, nextSnapshot)
+          ) {
+            lastRefreshKeyRef.current = refreshKey
+            router.refresh()
+          }
 
           if (!shouldPollSubmissionStatus(data.status, data.classificationStatus)) {
             return
@@ -89,14 +99,18 @@ export function SubmissionNextStep({
       }
     }
 
-    void poll()
+    void pollStatus()
 
     return () => {
       cancelled = true
     }
-  }, [submissionId, initialStatus, initialClassificationStatus, router, poll])
+  }, [submissionId, propSnapshot, snapshotKey, router, poll])
 
   const action = resolveSubmissionNextAction(snapshot, { hasReport })
+  const displayPercent = useSmoothProgressPercent(
+    action?.showProgress ? action.progressPercent : undefined,
+    Boolean(poll && action?.showProgress),
+  )
   if (!action) return null
 
   const href = action.href === 'report'
@@ -145,10 +159,14 @@ export function SubmissionNextStep({
           <p className="mt-1 text-sm leading-6 text-brand-700">{action.description}</p>
           {action.showProgress && (
             <div className="mt-3">
+              <div className="mb-1 flex items-center justify-between text-xs text-brand-700">
+                <span>{action.title}</span>
+                <span className="font-mono font-semibold">%{Math.round(displayPercent)}</span>
+              </div>
               <div className="h-2 overflow-hidden rounded-full bg-surface">
                 <div
                   className="h-full rounded-full bg-brand-600 transition-[width] duration-300"
-                  style={{ width: `${action.progressPercent}%` }}
+                  style={{ width: `${displayPercent}%` }}
                 />
               </div>
             </div>

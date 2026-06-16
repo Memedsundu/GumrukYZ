@@ -5,9 +5,26 @@ export type SubmissionStatusResponse = {
   progressPercent: number
   progressLabel: string
   progressDescription: string
+  progressDetail?: string | null
   job?: {
     errorMessage?: string | null
   } | null
+}
+
+export type ProcessingProgressUpdate = {
+  percent: number
+  label: string
+  description: string
+  detail?: string | null
+}
+
+export function mapStatusToProgressUpdate(data: SubmissionStatusResponse): ProcessingProgressUpdate {
+  return {
+    percent: data.progressPercent,
+    label: data.progressLabel,
+    description: data.progressDescription,
+    detail: data.progressDetail,
+  }
 }
 
 export async function fetchSubmissionStatus(submissionId: string): Promise<SubmissionStatusResponse> {
@@ -24,14 +41,21 @@ export async function pollSubmissionUntilSettled(
     onUpdate: (data: SubmissionStatusResponse) => void
     intervalMs?: number
     maxAttempts?: number
+    isCancelled?: () => boolean
   },
 ): Promise<SubmissionStatusResponse> {
   const intervalMs = options.intervalMs ?? 3000
   const maxAttempts = options.maxAttempts ?? 120
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (options.isCancelled?.()) {
+      throw new Error('İşlem iptal edildi')
+    }
+
     const data = await fetchSubmissionStatus(submissionId)
-    options.onUpdate(data)
+    if (!options.isCancelled?.()) {
+      options.onUpdate(data)
+    }
 
     if (data.status === 'COMPLETED') {
       return data
@@ -47,4 +71,30 @@ export async function pollSubmissionUntilSettled(
   }
 
   throw new Error('İşlem zaman aşımına uğradı. Lütfen dosya detayından durumu kontrol edin.')
+}
+
+export async function startProcessingWithProgress(
+  submissionId: string,
+  options: {
+    onUpdate: (data: SubmissionStatusResponse) => void
+    intervalMs?: number
+    maxAttempts?: number
+  },
+): Promise<SubmissionStatusResponse> {
+  let cancelled = false
+
+  const pollPromise = pollSubmissionUntilSettled(submissionId, {
+    ...options,
+    isCancelled: () => cancelled,
+  })
+
+  const processResponse = await fetch(`/api/submissions/${submissionId}/process`, { method: 'POST' })
+  const processData = await processResponse.json() as { error?: string }
+
+  if (!processResponse.ok) {
+    cancelled = true
+    throw new Error(processData.error ?? 'İşleme başarısız')
+  }
+
+  return pollPromise
 }
