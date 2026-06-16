@@ -1,6 +1,7 @@
 import { DocumentType, RuleSeverity } from '@gumrukyz/domain'
 import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
 import {
+  EXTRACTION_FILENAME_FIELD,
   failOrReview,
   failResult,
   findDocs,
@@ -10,6 +11,37 @@ import {
   parseFlexibleDate,
   passResult,
 } from '../helpers.js'
+
+function normalizeTokenText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[İIı]/g, 'i')
+    .toLowerCase()
+}
+
+function isSummaryLikeDeclaration(data: Record<string, unknown>): boolean {
+  const filename = normalizeTokenText(data[EXTRACTION_FILENAME_FIELD])
+  const hasSummarySignal = /(summary|ozet|kontrol|cikti|sentetik|synthetic)/.test(filename)
+  if (!hasSummarySignal) return false
+
+  const coreFields = [
+    data['declaration_number'],
+    data['regime_code'],
+    data['gtip_code'],
+    data['total_value'],
+    data['currency'],
+    data['gross_weight'],
+    data['package_count'],
+  ]
+  const coreFieldCount = coreFields.filter(hasValue).length
+  const lacksFullDeclarationFields =
+    !hasValue(data['exporter_tax_id']) &&
+    !hasValue(data['importer_tax_id']) &&
+    !hasValue(data['customs_office_code'])
+
+  return coreFieldCount >= 3 && lacksFullDeclarationFields
+}
 
 /** DECL-001 — Rejim kodu 4 haneli sayısal olmalı. */
 export const DECL_001: RuleDefinition = {
@@ -96,6 +128,7 @@ export const DECL_003: RuleDefinition = {
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const declarations = findDocs(ctx, DocumentType.DECLARATION_OUTPUT)
+      .filter((declaration) => !isSummaryLikeDeclaration(declaration.data))
     if (declarations.length === 0) return null
 
     const taxField = ctx.tradeFlow === 'EXPORT' ? 'exporter_tax_id' : 'importer_tax_id'
@@ -155,6 +188,7 @@ export const DECL_005: RuleDefinition = {
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const declarations = findDocs(ctx, DocumentType.DECLARATION_OUTPUT)
+      .filter((declaration) => !isSummaryLikeDeclaration(declaration.data))
     if (declarations.length === 0) return null
 
     const missing = declarations.filter((d) => !hasValue(d.data['customs_office_code']))

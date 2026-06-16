@@ -4,6 +4,10 @@ import { createStructuredOpenAIClient, parseStructuredOutput } from '@gumrukyz/a
 import { prisma, Prisma } from '@gumrukyz/db'
 import type { ExtractionData } from '@gumrukyz/rules'
 import { estimateModelCostUsd, logger } from '@gumrukyz/shared'
+import {
+  EXPERT_REVIEW_SAFETY_GUARDRAILS,
+  applyExpertReviewSafetyFilters,
+} from './expert-review-safety'
 
 const DEFAULT_MODEL = 'gpt-5.4'
 const DEFAULT_REASONING_EFFORT = 'medium'
@@ -17,7 +21,7 @@ const RETRY_CONTEXT_CHUNK_LIMIT = 6
 const RETRY_PROMPT_PAYLOAD_CHARS = 14_000
 const RETRY_MAX_FINDINGS = 4
 /** Bump when the expert review prompt or schema changes. */
-const EXPERT_REVIEW_PROMPT_VERSION = '2026-06-10.1'
+const EXPERT_REVIEW_PROMPT_VERSION = '2026-06-16.1'
 
 export const REQUIRED_LEGAL_SOURCE_TITLES = [
   '4458 Sayılı Gümrük Kanunu',
@@ -210,13 +214,25 @@ export async function runExpertReviewForSubmission(params: {
       },
     })
 
+    const safeReview = applyExpertReviewSafetyFilters(
+      {
+        overallRisk: generated.parsed.overall_risk,
+        summary: generated.parsed.summary,
+        findings: generated.parsed.findings,
+      },
+      {
+        documents: params.documents,
+        ruleResults: params.ruleResults,
+      },
+    )
+
     return persistExpertReview({
       reviewId: review.id,
       tenantId: params.tenantId,
       legalContextStatus: 'READY',
-      overallRisk: generated.parsed.overall_risk,
-      summary: generated.parsed.summary,
-      findings: generated.parsed.findings,
+      overallRisk: safeReview.overallRisk,
+      summary: safeReview.summary,
+      findings: safeReview.findings,
       allowedChunks: generated.contextChunks,
     })
   } catch (error) {
@@ -621,6 +637,8 @@ Kesin kurallar:
 - Ürün açıklaması "otobüs", "hava kanalı", "iç kapak", "karoseri", "aksam" gibi taşıt gövde/aksesuar bağlamı veriyorsa beyan edilen 8708/870829 ailesini aday olarak değerlendir; HVAC/mekanik işlev ihtimali varsa bunu gerekli kanıt olarak belirt.
 - Ağırlık, kıymet veya miktar farkı 980.00/98000, 1,185.00/1.185 veya 33,600.00/33.600 gibi ondalık-binlik ayırıcı farkına benziyorsa bunu belge tutarsızlığı gibi kesinleştirme; sayı formatı/çıkarma belirsizliği olarak REVIEW_NEEDED açıkla ve overall_risk değerini yalnızca bu nedenle HIGH yapma.
 - Beyanname, customs value veya declarationSnapshot yoksa fatura toplamı ile beyan/gümrük kıymeti uyuşmazlığı test edilemez. Böyle bir durumda kıymet bulgusunu "eksik beyanname nedeniyle test yapılamıyor" diye sınırla; var olmayan beyan kıymeti farkı üretme.
+- Ek güvenlik kuralları:
+${EXPERT_REVIEW_SAFETY_GUARDRAILS}
 - Kanıtı olmayan bulgu üretme.
 - En fazla ${options.maxFindings} bulgu üret.
 - Her bulguda en fazla 3 mevzuat atfı kullan.

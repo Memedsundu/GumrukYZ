@@ -40,6 +40,7 @@ import { randomUUID } from 'node:crypto'
 import { extractTextFromPdf } from './pdf-extractor'
 import { runOcrFallback } from './ocr-client'
 import { formatRuleResultMessage } from './report-format'
+import { enhanceDeclarationOutputFromText } from './declaration-text-fallback'
 import {
   type AzureDocumentIntelligenceResult,
   isAzureDocumentIntelligenceEnabled,
@@ -1134,8 +1135,6 @@ function enhanceStructuredDataFromText(
   }
 
   if (docType === 'DECLARATION_OUTPUT') {
-    const packageCount = firstMatch(rawText, /\b(\d+)\s*KAP\b/i)
-    const netGross = rawText.match(/Toplam Net\s*\/\s*Br[üu]t Kg:\s*([\d.,]+)\s*\/\s*([\d.,]+)/i)
     // Prefer an explicitly labeled regime code; fall back to a known-code
     // match that cannot sit inside a larger number (e.g. "1.000,00" or
     // "31500"), then to a 4-digit code at the start of a line.
@@ -1144,11 +1143,7 @@ function enhanceStructuredDataFromText(
       firstMatch(rawText, /(?<![\d.,])(1000|1040|3150|3151|3153|3171|2100)(?![\d.,])/) ??
       firstMatch(rawText, /^\s*(\d{4})\s+[\d.,]+/m)
 
-    if (packageCount) next['package_count'] = parseLocaleNumber(packageCount)
-    if (netGross) {
-      next['net_weight'] = parseLocaleNumber(netGross[1])
-      next['gross_weight'] = parseLocaleNumber(netGross[2])
-    }
+    Object.assign(next, enhanceDeclarationOutputFromText(next, rawText))
     if (regimeCode && !/^\d{4}$/.test(String(next['regime_code'] ?? ''))) {
       next['regime_code'] = regimeCode
     }
@@ -1277,9 +1272,7 @@ function stringOrNull(val: unknown): string | null {
 }
 
 function numberOrNull(val: unknown): number | null {
-  if (val == null) return null
-  const n = Number(val)
-  return isNaN(n) ? null : n
+  return toFiniteNumber(val)
 }
 
 function intOrNull(val: unknown): number | null {
