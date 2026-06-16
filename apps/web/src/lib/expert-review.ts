@@ -21,7 +21,7 @@ const RETRY_CONTEXT_CHUNK_LIMIT = 6
 const RETRY_PROMPT_PAYLOAD_CHARS = 14_000
 const RETRY_MAX_FINDINGS = 4
 /** Bump when the expert review prompt or schema changes. */
-const EXPERT_REVIEW_PROMPT_VERSION = '2026-06-17.0'
+const EXPERT_REVIEW_PROMPT_VERSION = '2026-06-17.2'
 
 export const REQUIRED_LEGAL_SOURCE_TITLES = [
   '4458 Sayılı Gümrük Kanunu',
@@ -41,6 +41,7 @@ const ExpertFindingSchema = z.object({
     'ORIGIN_PREFERENTIAL',
     'INCOTERM',
     'DOCUMENT_CONSISTENCY',
+    'DOCUMENT_QUALITY',
     'LEGAL_CONTEXT',
   ]),
   severity: z.enum(['WARN', 'REVIEW_NEEDED']),
@@ -624,6 +625,7 @@ function buildExpertReviewPrompt(
 - Menşe, tercihli rejim, A.TR/EUR.1/menşe belgesi ihtiyacı
 - Incoterms ve taşıma sorumluluğu kaynaklı operasyon riski
 - Belgeler arası yorum gerektiren tutarsızlıklar
+- Belge türü, dosya adı/içerik uyumu, OCR, tarama ve kaynak belge kalitesi
 
 Kesin kurallar:
 - Deterministik kuralların yerine geçme; sadece ek uzman yorumu üret.
@@ -637,6 +639,8 @@ Kesin kurallar:
 - Ürün açıklaması "otobüs", "hava kanalı", "iç kapak", "karoseri", "aksam" gibi taşıt gövde/aksesuar bağlamı veriyorsa beyan edilen 8708/870829 ailesini aday olarak değerlendir; HVAC/mekanik işlev ihtimali varsa bunu gerekli kanıt olarak belirt.
 - Ağırlık, kıymet veya miktar farkı 980.00/98000, 1,185.00/1.185 veya 33,600.00/33.600 gibi ondalık-binlik ayırıcı farkına benziyorsa bunu belge tutarsızlığı gibi kesinleştirme; sayı formatı/çıkarma belirsizliği olarak REVIEW_NEEDED açıkla ve overall_risk değerini yalnızca bu nedenle HIGH yapma.
 - Beyanname, customs value veya declarationSnapshot yoksa fatura toplamı ile beyan/gümrük kıymeti uyuşmazlığı test edilemez. Böyle bir durumda kıymet bulgusunu "eksik beyanname nedeniyle test yapılamıyor" diye sınırla; var olmayan beyan kıymeti farkı üretme.
+- QUAL-002 veya OCR-001 non-pass ise belge türü/kalitesi ana konudur; GTİP teknik teyidi ikincil tut ve aynı belge kalitesi sorununu uzman bulgusu olarak tekrar etme.
+- Belgelerde F.O.C/Bedelsiz destek sorunu EXP-006 ile non-pass olarak yakalandıysa aynı konuyu VALUATION veya REGIME_CHOICE altında tekrarlama; yalnızca deterministik bulgunun kapsamadığı farklı kanıt varsa ayrı bulgu üret.
 - Ek güvenlik kuralları:
 ${EXPERT_REVIEW_SAFETY_GUARDRAILS}
 - Kanıtı olmayan bulgu üretme.

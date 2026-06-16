@@ -1,0 +1,129 @@
+{
+  "_fixture": "wrong-document-type-and-low-quality",
+  "_description": "Invoice-like filename contains packing-list content, and the invoice is a low-quality raster scan recovered by vision/OCR.",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "OCR-001": "REVIEW_NEEDED",
+    "QUAL-002": "REVIEW_NEEDED",
+    "PL-001": "REVIEW_NEEDED",
+    "PL-002": "REVIEW_NEEDED",
+    "PRES-001": "PASS",
+    "PRES-002": "PASS",
+    "CROSS-004": "PASS",
+    "CROSS-006": "PASS",
+    "CROSS-009": "PASS",
+    "DECL-002": "PASS",
+    "EXP-001": "PASS",
+    "EXP-002": "PASS",
+    "EXP-004": "PASS",
+    "INV-001": "PASS",
+    "INV-002": "PASS",
+    "INV-003": "PASS",
+    "INV-004": "PASS",
+    "INV-005": "PASS",
+    "INV-006": "PASS",
+    "VAL-001": "PASS",
+    "VAL-002": "PASS",
+    "VAL-003": "PASS"
+  },
+  "_assertNoFailures": true,
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.69,
+      "data": {
+        "_filename": "low_quality_scanned_invoice_FI2026-00078.pdf",
+        "_native_text_confidence": 0.46,
+        "_native_text_length": 63,
+        "_final_extraction_confidence": 0.69,
+        "_extraction_method": "OPENAI_VISION",
+        "_pdf_image_count": 1,
+        "_pdf_pages_with_images": 1,
+        "_likely_raster_scan": true,
+        "invoice_number": "FI2026-00078",
+        "invoice_date": "2026-05-27",
+        "seller_name": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "seller_address": "Kurgusal OSB, Selimpaşa / İstanbul, Türkiye",
+        "buyer_name": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "buyer_address": "ul. Testowa 14, 00-999 Warszawa, Poland",
+        "currency": "EUR",
+        "total_amount": 12480,
+        "incoterm": "DAP",
+        "delivery_place": "Warszawa, Poland",
+        "country_of_origin": "Türkiye / Turkey",
+        "destination_country": "Poland",
+        "transport_mode": "Road / Karayolu",
+        "package_count": 7,
+        "package_type": "wooden boxes / 2 pallets",
+        "gross_weight": 850,
+        "net_weight": 700,
+        "gtip_code": "870829909000",
+        "items": [
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "hs_code": "870829909000",
+            "quantity": 160,
+            "unit": "pcs/adet",
+            "unit_price": 78,
+            "total_price": 12480
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.98,
+      "data": {
+        "_filename": "FI2026-00077.pdf",
+        "_native_text_confidence": 0.99,
+        "_native_text_length": 1980,
+        "_final_extraction_confidence": 0.98,
+        "_extraction_method": "TEXT_PDF",
+        "_pdf_image_count": 0,
+        "_pdf_pages_with_images": 0,
+        "_likely_raster_scan": false,
+        "packing_list_number": "PL2026-00077",
+        "related_invoice": "FI2026-00077",
+        "package_count": 7,
+        "package_type": "wooden boxes on 2 pallets",
+        "gross_weight": 850,
+        "net_weight": 700,
+        "goods_description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+        "shipper": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "consignee": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "country_of_origin": "Türkiye / Turkey",
+        "destination": "Poland",
+        "items": [
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "quantity": 53,
+            "package_count": 4,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": 340,
+            "gross_weight": 415
+          },
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "quantity": 53,
+            "package_count": 3,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": 310,
+            "gross_weight": 380
+          },
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "quantity": 54,
+            "package_count": 3,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": 370,
+            "gross_weight": 445
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

@@ -1,6 +1,7 @@
 export const AI_RULE_VALIDATION_SAFETY_GUARDRAILS = `
 - Farklı ambalaj seviyelerini toplama: "5 wooden boxes / 2 pallets" değeri 7 kap anlamına gelmez.
 - Aynı kural "8 wooden boxes / 2 pallets" için de geçerlidir: kap sayısı 8'dir, 10 değildir.
+- Paletler çeki listesinde ayrı paket satırı olarak listelenmiş ve Total/TOPLAM paket sayısına dahil edilmişse bu açık toplam esas alınır; "6 wooden box + 3 pallet = 9 KAP" beyanname 9 KAP ile uyumludur.
 - "480 pcs/adet" ürün adedi ile "12 wooden boxes / 3 pallets" ambalaj/taşıma seviyesi farklıdır; CROSS-004 ve PL-001 PASS ise bunu miktar/kap uyuşmazlığı sayma.
 - CROSS-008 veya PL-001 PASS ise paket/kap sayısı için POTENTIAL_FALSE_NEGATIVE üretme; aynı alan ve aynı birimde açık çelişki gerekir.
 - CROSS-004 PASS ise fatura ürün adedi ile çeki listesi Quantity Inside/Total Quantity değeri uzlaşmıştır; aynı bulguda paket sayısıyla yeniden karşılaştırma yapma.
@@ -8,6 +9,7 @@ export const AI_RULE_VALIDATION_SAFETY_GUARDRAILS = `
 - Incoterm kodu ile teslim yeri birlikte yazılabilir: "DAP" ile "DAP Warszawa, Poland" uyumludur.
 - PRES-006 PASS ve yapılandırılmış yükleme talimatı alanları mevcutsa, yalnızca _native_text_length=0 veya ilk metin okuma sinyaline dayanarak "yükleme talimatı içeriği doğrulanamadı" bulgusu üretme.
 - EXP-004 REVIEW_NEEDED ve kanıt ":"/boş menşe ise sonuç muhtemelen doğrudur; bunu sahtecilik veya tercihli menşe belgesi eksikliği olarak genişletme.
+- QUAL-002 veya OCR-001 non-pass ise belge türü/kalitesi zaten deterministik olarak yakalanmıştır; aynı sorunu ikinci bir advisory olarak tekrarlama.
 `.trim()
 
 export type AiRuleValidationSafetyItem = {
@@ -39,6 +41,7 @@ export function applyAiRuleValidationSafetyFilters<T extends AiRuleValidationSaf
     if (shouldDropPackageCountAdvisory(validation, ruleResults, byId)) return false
     if (shouldDropPassedIncotermAdvisory(validation, ruleResults, byId)) return false
     if (shouldDropUnverifiedLoadingInstructionAdvisory(validation, ruleResults, byId)) return false
+    if (shouldDropDocumentQualityDuplicateAdvisory(validation, byId)) return false
     return true
   })
 }
@@ -106,6 +109,17 @@ function shouldDropUnverifiedLoadingInstructionAdvisory(
         field === '_final_extraction_confidence' ||
         field === '_extraction_method'
     })
+}
+
+function shouldDropDocumentQualityDuplicateAdvisory(
+  validation: AiRuleValidationSafetyItem,
+  byId: Map<string, AiRuleValidationSafetyRuleResult>,
+): boolean {
+  if (validation.status === 'LIKELY_CORRECT') return false
+  const rule = byId.get(validation.rule_result_id)
+  if (!rule || rule.result === 'PASS' || rule.result === 'SKIP') return false
+  if (rule.ruleCode !== 'QUAL-002' && rule.ruleCode !== 'OCR-001') return false
+  return mentions(validation, /(belge t[üu]r[üu]|document type|filename|dosya ad[ıi]|ocr|tarama|scan|raster|d[üu][şs][üu]k kalite|low quality)/i)
 }
 
 function hasPassedRule(ruleResults: AiRuleValidationSafetyRuleResult[], ruleCode: string): boolean {

@@ -1,12 +1,18 @@
+import { filterExpertFindingsAgainstRules } from './finding-dedupe'
+
 export const EXPERT_REVIEW_SAFETY_GUARDRAILS = `
 - Deterministik kural PASS ise aynı alan için açık ve farklı belge kanıtı olmadan çelişki üretme.
 - CROSS-008 veya PL-001 paket/kap sayısı PASS ise 10 wooden boxes / 3 pallets veya 8 wooden boxes / 2 pallets gibi farklı ambalaj seviyelerini toplayıp 13/10 kap uyumsuzluğu yazma.
+- Bir çeki listesi/yükleme talimatı paletleri ayrı paket satırı olarak listeliyor ve Total/TOPLAM paket sayısı bunu içeriyorsa bu açık toplamı esas al; "6 wooden box + 3 pallet = 9 KAP" beyanname 9 KAP ile uyumludur.
 - CROSS-004 ve PL-001 PASS ise "480 pcs/adet" ürün adedi ile "12 wooden boxes / 3 pallets" ambalaj/taşıma seviyesini uyumsuzluk sayma; 480 adedin 12 sandığa dağıtılması tutarlıdır.
 - CMR, konşimento, AWB veya taşıma belgesi eksikliği yalnızca ilgili deterministik belge-varlığı kuralı eksik belge göstermişse ya da dosya metni açıkça bu belgenin beklendiğini söylüyorsa bulgu olabilir.
 - Yükleme talimatı eksikliği yalnızca PRES-006 veya EXP-005 non-pass ise Incoterm/operasyon bulgusu olabilir.
 - CROSS-003 Incoterm uyumu PASS ise "DAP" ile "DAP Warszawa, Poland" gibi kod ve kod+teslim yeri ifadelerini uyumsuzluk sayma.
 - A.TR, EUR.1, tercihli menşe veya preferential origin uyarısı yalnızca tercihli rejim, tariff_preference=true, A.TR/EUR.1 metni veya açık tercihli tarife talebi varsa üretilebilir.
 - EXP-004 non-pass ise menşe eksikliğini ana inceleme konusu olarak ele al; ":" veya boş menşe değerlerini geçerli menşe sayma, GTİP teknik teyidini ikincil tut ve bunu sahtecilik/fraud olarak büyütme.
+- QUAL-002 veya OCR-001 non-pass ise belge türü/kalitesi ana konudur; aynı konuyu uzman bulgusu olarak tekrarlama, yalnızca deterministik kuralın kapsamadığı ek bir risk varsa yaz.
+- Deterministik non-pass kural aynı sorunu zaten yakaladıysa uzman bulgusunda tekrarlama; örneğin PL-001/PL-002, QUAL-002 veya OCR-001 bulgularını DOCUMENT_CONSISTENCY/DOCUMENT_QUALITY altında ikinci kez üretme.
+- EXP-006 non-pass ise Bedelsiz/F.O.C destek faturası veya değer açıklaması sorununu VALUATION/REGIME_CHOICE altında ikinci kez üretme.
 - Dosya setinde beyanname yoksa ve deterministik belge-varlığı/kıymet/rejim kuralı bunu non-pass olarak işaretlemediyse, yalnızca beyanname eksik diye REGIME_CHOICE veya VALUATION bulgusu üretme.
 - 870829909000 / 8708 / 870829 otobüs gövde aksamı veya aksesuarı bağlamında makul aday olabilir; nihai teyit için teknik çizim, malzeme, işlev, montaj yeri ve parçanın gövde bileşeni mi HVAC/mekanik parça mı olduğunu gösteren kanıt iste.
 - Aynı GTİP teknik belirsizliğini GTİP_PLAUSIBILITY ve PERMIT_PRODUCT_CONTROL olarak iki ayrı uyarıya bölme; mümkünse tek GTİP teknik teyit bulgusunda birleştir.
@@ -54,7 +60,10 @@ export function applyExpertReviewSafetyFilters<T extends ExpertReviewSafetyFindi
     if (shouldDropDuplicatePermitFinding(finding, hasGtipPlausibility)) return false
     return true
   })
-  const dedupedFindings = dedupeGtipPlausibilityFindings(findings)
+  const dedupedFindings = filterExpertFindingsAgainstRules(
+    dedupeGtipPlausibilityFindings(findings),
+    context.ruleResults,
+  )
 
   const changed = dedupedFindings.length !== review.findings.length
   const summary = changed ? buildSafetyFilteredSummary(dedupedFindings) : review.summary
@@ -143,7 +152,7 @@ function shouldDropMissingDeclarationScopeFinding(
   if (!mentions(finding, /(beyanname|declaration|g[üu]mr[üu]k k[ıi]ymeti|customs value|rejim|regime)/i)) {
     return false
   }
-  if (!mentions(finding, /(eksik|yok|bulunmuyor|sunulmam[ıi][şs]|missing|not provided|no declaration|absent)/i)) {
+  if (!mentions(finding, /(eksik|yok|bulunmuyor|bulunmad[ıi]|sunulmam[ıi][şs]|missing|not provided|no declaration|absent)/i)) {
     return false
   }
   return !hasAnyNonPassRule(context.ruleResults, [

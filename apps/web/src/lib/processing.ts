@@ -17,8 +17,11 @@ import {
   EXTRACTION_FILENAME_FIELD,
   EXTRACTION_METHOD_FIELD,
   FINAL_EXTRACTION_CONFIDENCE_FIELD,
+  LIKELY_RASTER_SCAN_FIELD,
   NATIVE_TEXT_CONFIDENCE_FIELD,
   NATIVE_TEXT_LENGTH_FIELD,
+  PDF_IMAGE_COUNT_FIELD,
+  PDF_PAGES_WITH_IMAGES_FIELD,
   isPlaceholderValue,
   toFiniteNumber,
 } from '@gumrukyz/rules'
@@ -164,6 +167,9 @@ export async function processSubmission(
         let extractionConfidence = textResult.confidence
         const nativeTextConfidence = textResult.confidence
         const nativeTextLength = textResult.text.trim().length
+        const pdfImageCount = textResult.imageCount
+        const pdfPagesWithImages = textResult.pagesWithImages
+        const likelyRasterScan = textResult.likelyRasterScan
         let extractionMethod: string = textResult.method
         let lastReaderProviderRunId: string | null = null
         let structuredData: Record<string, unknown> = {}
@@ -396,6 +402,9 @@ export async function processSubmission(
                 nativeTextLength,
                 finalExtractionConfidence: extractionConfidence,
                 extractionMethod,
+                pdfImageCount,
+                pdfPagesWithImages,
+                likelyRasterScan,
               },
             )
             await prisma.documentExtraction.update({
@@ -504,6 +513,10 @@ export async function processSubmission(
           })
         }
 
+        if (likelyRasterScan) {
+          aiConfidence = Math.min(aiConfidence, 0.69)
+        }
+
         structuredData = attachExtractionQualitySignals(
           structuredData,
           {
@@ -512,6 +525,9 @@ export async function processSubmission(
             nativeTextLength,
             finalExtractionConfidence: aiConfidence,
             extractionMethod,
+            pdfImageCount,
+            pdfPagesWithImages,
+            likelyRasterScan,
           },
         )
 
@@ -1140,6 +1156,9 @@ type ExtractionQualitySignals = {
   nativeTextLength: number
   finalExtractionConfidence: number
   extractionMethod: string
+  pdfImageCount: number
+  pdfPagesWithImages: number
+  likelyRasterScan: boolean
 }
 
 function attachExtractionQualitySignals(
@@ -1153,6 +1172,9 @@ function attachExtractionQualitySignals(
     [NATIVE_TEXT_LENGTH_FIELD]: signals.nativeTextLength,
     [FINAL_EXTRACTION_CONFIDENCE_FIELD]: roundConfidence(signals.finalExtractionConfidence),
     [EXTRACTION_METHOD_FIELD]: signals.extractionMethod,
+    [PDF_IMAGE_COUNT_FIELD]: signals.pdfImageCount,
+    [PDF_PAGES_WITH_IMAGES_FIELD]: signals.pdfPagesWithImages,
+    [LIKELY_RASTER_SCAN_FIELD]: signals.likelyRasterScan,
   }
 }
 

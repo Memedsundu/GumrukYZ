@@ -20,6 +20,7 @@ import type {
 import {
   EXTRACTION_FILENAME_FIELD,
   FINAL_EXTRACTION_CONFIDENCE_FIELD,
+  LIKELY_RASTER_SCAN_FIELD,
   LOW_CONFIDENCE_THRESHOLD,
   NATIVE_TEXT_CONFIDENCE_FIELD,
   hasValue,
@@ -87,6 +88,10 @@ function getStringSignal(data: Record<string, unknown>, field: string): string |
   const raw = data[field]
   if (!hasValue(raw)) return null
   return String(raw).trim()
+}
+
+function getBooleanSignal(data: Record<string, unknown>, field: string): boolean {
+  return data[field] === true || data[field] === 'true'
 }
 
 function normalizedFilename(value: string): string {
@@ -285,8 +290,10 @@ export const OCR_001: RuleDefinition = {
       const nativeConfidence = toFiniteNumber(d.data[NATIVE_TEXT_CONFIDENCE_FIELD])
       const finalConfidence =
         toFiniteNumber(d.data[FINAL_EXTRACTION_CONFIDENCE_FIELD]) ?? d.confidence
+      const likelyRasterScan = getBooleanSignal(d.data, LIKELY_RASTER_SCAN_FIELD)
       return d.confidence < LOW_CONFIDENCE_THRESHOLD ||
-        shouldFlagNativeConfidence(nativeConfidence, finalConfidence)
+        shouldFlagNativeConfidence(nativeConfidence, finalConfidence) ||
+        likelyRasterScan
     })
     if (lowDocs.length === 0) return null
     const list = lowDocs
@@ -295,6 +302,11 @@ export const OCR_001: RuleDefinition = {
         const nativeConfidence = toFiniteNumber(d.data[NATIVE_TEXT_CONFIDENCE_FIELD])
         const finalConfidence =
           toFiniteNumber(d.data[FINAL_EXTRACTION_CONFIDENCE_FIELD]) ?? d.confidence
+        const likelyRasterScan = getBooleanSignal(d.data, LIKELY_RASTER_SCAN_FIELD)
+        if (likelyRasterScan) {
+          const displayNativeConfidence = nativeConfidence ?? d.confidence
+          return `${filename ?? d.docType} (raster/tarama sinyali; ilk okuma ${formatConfidence(displayNativeConfidence)}, son çıkarma ${formatConfidence(finalConfidence)})`
+        }
         if (shouldFlagNativeConfidence(nativeConfidence, finalConfidence) && finalConfidence >= LOW_CONFIDENCE_THRESHOLD) {
           const displayNativeConfidence = nativeConfidence ?? d.confidence
           return `${filename ?? d.docType} (ilk okuma ${formatConfidence(displayNativeConfidence)}, son çıkarma ${formatConfidence(finalConfidence)})`
@@ -310,13 +322,16 @@ export const OCR_001: RuleDefinition = {
         const finalConfidence =
           toFiniteNumber(d.data[FINAL_EXTRACTION_CONFIDENCE_FIELD]) ?? d.confidence
         const nativeConfidence = toFiniteNumber(d.data[NATIVE_TEXT_CONFIDENCE_FIELD])
+        const likelyRasterScan = getBooleanSignal(d.data, LIKELY_RASTER_SCAN_FIELD)
         const useNativeConfidence = shouldFlagNativeConfidence(nativeConfidence, finalConfidence)
         return {
           docType: d.docType,
-          field: useNativeConfidence
+          field: likelyRasterScan
+            ? LIKELY_RASTER_SCAN_FIELD
+            : useNativeConfidence
             ? NATIVE_TEXT_CONFIDENCE_FIELD
             : 'confidence',
-          value: useNativeConfidence ? nativeConfidence : d.confidence,
+          value: likelyRasterScan ? true : useNativeConfidence ? nativeConfidence : d.confidence,
         }
       }),
     )

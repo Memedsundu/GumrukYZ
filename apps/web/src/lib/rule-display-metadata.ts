@@ -79,6 +79,13 @@ export const RULE_METADATA: Record<string, RuleDisplayMetadata> = {
     recommendedAction: 'Dosyaya ait doğru beyanname çıktısını bırakın, diğerini yoksayın.',
     blocking: false,
   },
+  'PRES-006': {
+    category: 'Belge varlığı',
+    turkishTitle: 'Yükleme talimatı varlığı',
+    operationalExplanation: 'Yükleme talimatı sevkiyat, kap, ağırlık ve teslim şekli bilgilerini destekler.',
+    recommendedAction: 'Yükleme talimatı varsa dosyaya ekleyin; yoksa yalnızca geçici ihracat veya açık belge beklentisi bulunan dosyalarda aksiyon alın.',
+    blocking: false,
+  },
   'INV-001': {
     category: 'Fatura',
     turkishTitle: 'Fatura numarası',
@@ -350,6 +357,13 @@ export const RULE_METADATA: Record<string, RuleDisplayMetadata> = {
     turkishTitle: 'Geçici ihracat destek belgesi',
     operationalExplanation: 'Geçici ihracatta takip ve geri dönüş için ek sevkiyat belgesi gerekir.',
     recommendedAction: 'Yükleme talimatı ve geçici ihracat gerekçesini dosyada doğrulayın.',
+    blocking: false,
+  },
+  'EXP-006': {
+    category: 'Kıymet',
+    turkishTitle: 'Bedelsiz/F.O.C destek kontrolü',
+    operationalExplanation: 'Bedelsiz veya F.O.C işaretli ihracat kalemlerinde destek fatura ve değer açıklaması gerekir.',
+    recommendedAction: 'F.O.C/bedelsiz faturayı ekleyin; bedelsiz notu olan kalemde değer varsa gerekçesini ve istatistiki kıymet esasını doğrulayın.',
     blocking: false,
   },
 }

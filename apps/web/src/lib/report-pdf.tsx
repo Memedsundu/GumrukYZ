@@ -473,6 +473,7 @@ function expertAreaLabel(area: string): string {
     ORIGIN_PREFERENTIAL: 'Menşe / tercihli rejim',
     INCOTERM: 'Incoterms',
     DOCUMENT_CONSISTENCY: 'Belge tutarlılığı',
+    DOCUMENT_QUALITY: 'Belge kalitesi',
     LEGAL_CONTEXT: 'Mevzuat kapsamı',
   }
   return map[area] ?? area

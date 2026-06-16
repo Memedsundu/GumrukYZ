@@ -1,0 +1,172 @@
+{
+  "_fixture": "case-ankara-real",
+  "_description": "Real Ankara export case: invoice PDF missing, packing/loading/declaration package totals reconcile as 6 wooden boxes + 3 pallets = 9 KAP, and Bedelsiz/F.O.C support needs review.",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "PRES-001": "REVIEW_NEEDED",
+    "PRES-002": "PASS",
+    "PRES-005": "PASS",
+    "PRES-006": "PASS",
+    "PL-001": "PASS",
+    "PL-002": "PASS",
+    "DECL-001": "PASS",
+    "DECL-003": "PASS",
+    "DECL-004": "PASS",
+    "DECL-005": "PASS",
+    "EXP-003": "PASS",
+    "EXP-006": "REVIEW_NEEDED",
+    "GTIP-001": "PASS",
+    "GTIP-002": "PASS",
+    "CROSS-002": "PASS",
+    "CROSS-008": "PASS",
+    "CROSS-009": "PASS"
+  },
+  "_expectedAbsentResults": [
+    "CROSS-001",
+    "CROSS-003",
+    "CROSS-004",
+    "CROSS-005",
+    "CROSS-006",
+    "CROSS-007",
+    "DECL-002",
+    "EXP-001",
+    "EXP-002",
+    "EXP-004",
+    "GTIP-003",
+    "INV-001",
+    "INV-002",
+    "INV-003",
+    "INV-004",
+    "INV-005",
+    "INV-006",
+    "VAL-001",
+    "VAL-002",
+    "VAL-003"
+  ],
+  "_assertNoFailures": true,
+  "documents": [
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.98,
+      "data": {
+        "_filename": "PACKING LIST- TIR (1).pdf",
+        "package_count": 9,
+        "package_type": "6 wooden boxes + 3 pallets",
+        "package_breakdown": [
+          { "type": "wooden_box", "count": 6 },
+          { "type": "pallet", "count": 3 }
+        ],
+        "gross_weight": 3980,
+        "net_weight": null,
+        "goods_description": "AIR CHANNEL SCOPE",
+        "shipper": "FARHYM OTO. SAN. TİC. LTD. ŞTİ.",
+        "consignee": "MAN BUS SP Z.O.O.-POLAND",
+        "destination": "Poland",
+        "invoice_refs": [
+          { "number": "FI62026000000062", "free_of_charge": false },
+          { "number": "FI62026000000063", "free_of_charge": true }
+        ],
+        "items": [
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "WOODEN BOX", "gross_weight": 650 },
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "WOODEN BOX", "gross_weight": 650 },
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "WOODEN BOX", "gross_weight": 580 },
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "WOODEN BOX", "gross_weight": 550 },
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "WOODEN BOX", "gross_weight": 550 },
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "WOODEN BOX", "gross_weight": 550 },
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "PALLETE", "gross_weight": 150 },
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "PALLETE", "gross_weight": 150 },
+          { "description": "AIR CHANNEL SCOPE", "quantity": null, "package_count": 1, "package_type": "PALLETE", "gross_weight": 150 }
+        ]
+      }
+    },
+    {
+      "docType": "LOADING_INSTRUCTION",
+      "confidence": 0.98,
+      "data": {
+        "_filename": "YÜKLEME TALİMATI - TIR (1).pdf",
+        "shipper": "Esenboğa Yolu 23. Km 06750 - Akyurt/ANKARA/TURKEY",
+        "consignee": "27-200 Starachowice, ul. 1 Maja 12 Poland",
+        "delivery_address": "27-200 Starachowice, ul. 1 Maja 12 Poland",
+        "goods_description": "Hava Kanalı / Air Duct",
+        "gross_weight": 3980,
+        "net_weight": null,
+        "package_count": 9,
+        "package_breakdown": [
+          { "type": "wooden_box", "count": 6 },
+          { "type": "pallet", "count": 3 }
+        ],
+        "delivery_term": "DAP",
+        "incoterm": "DAP"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.98,
+      "data": {
+        "_filename": "KONTROL (1).pdf",
+        "declaration_number": "26-00721",
+        "declaration_date": "2026-03-14",
+        "exporter": "FARHYM OTO. SAN. TİC. LTD. ŞTİ.",
+        "importer": "MAN BUS S.P. Z.O.O.",
+        "exporter_tax_id": "4650222259",
+        "importer_tax_id": null,
+        "customs_office_code": "060",
+        "regime_code": "1000",
+        "gtip_code": "870829909000",
+        "goods_description": "OTOBÜS HAVALANDIRMA KANALI AKSAMLARI",
+        "package_count": 9,
+        "package_breakdown": [
+          { "type": "kap", "count": 9 }
+        ],
+        "gross_weight": 3980,
+        "net_weight": 3600,
+        "total_value": 54556.03,
+        "fob_value": 52056.03,
+        "currency": "EUR",
+        "incoterm": "DAP STARACHOWICE",
+        "invoice_refs": [
+          { "number": "13.03.2026/26243160110886047396583", "free_of_charge": false },
+          { "number": "13.03.2026/26243160110886047396611", "free_of_charge": true }
+        ],
+        "free_of_charge": true,
+        "free_of_charge_line_values": [96.56, 88.3],
+        "items": [
+          {
+            "line_number": 1,
+            "gtip_code": "870829909000",
+            "goods_description": "OTOBÜS HAVALANDIRMA KANALI AKSAMLARI",
+            "quantity": 498,
+            "unit": "AD",
+            "net_weight": 3594.17,
+            "gross_weight": 3973.56,
+            "value": 54467.73,
+            "currency": "EUR"
+          },
+          {
+            "line_number": 2,
+            "gtip_code": "870829909000",
+            "goods_description": "OTOBÜS HAVALANDIRMA KANALI AKSAMLARI",
+            "quantity": 5,
+            "unit": "AD",
+            "net_weight": 5.83,
+            "gross_weight": 6.44,
+            "value": 88.3,
+            "currency": "EUR"
+          }
+        ]
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "26-00721",
+    "declarationDate": "2026-03-14",
+    "regimeCode": "1000",
+    "incoterm": "DAP STARACHOWICE",
+    "totalValue": 54556.03,
+    "currency": "EUR",
+    "totalNetWeight": 3600,
+    "totalGrossWeight": 3980,
+    "packageCount": 9,
+    "gtipCode": "870829909000"
+  }
+}

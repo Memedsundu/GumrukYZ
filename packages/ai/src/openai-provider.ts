@@ -131,7 +131,7 @@ Extract structured data from the following ${docType} document.
 Schema name: ${schemaName}
 
 Return only what is clearly present in the document. Use null for missing fields.
-For packing lists, keep product quantity and package count separate: "Quantity Inside" / "Total Quantity" in pcs/adet is item quantity, while boxes/koli/sandık are package_count. Pallets/palet are handling units and must not be added to wooden boxes.
+For packing lists, keep product quantity and package count separate: "Quantity Inside" / "Total Quantity" in pcs/adet is item quantity, while boxes/koli/sandık are package_count. Pallets/palet are handling units in "boxes on pallets" phrasing and must not be added to wooden boxes. If the source table explicitly lists pallet rows as package rows and has Total/TOPLAM packages, use that explicit total and preserve package_breakdown.
 
 Document text:
 ${rawText.slice(0, 6000)}`,

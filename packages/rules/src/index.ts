@@ -14,6 +14,9 @@ export {
   NATIVE_TEXT_LENGTH_FIELD,
   FINAL_EXTRACTION_CONFIDENCE_FIELD,
   EXTRACTION_METHOD_FIELD,
+  PDF_IMAGE_COUNT_FIELD,
+  PDF_PAGES_WITH_IMAGES_FIELD,
+  LIKELY_RASTER_SCAN_FIELD,
   isLowConfidence,
   isExtractionEmpty,
   hasValue,
@@ -63,9 +66,9 @@ export { COO_001, COO_002, COO_003 } from './rules/certificate-of-origin.js'
 export { VAL_001, VAL_002, VAL_003 } from './rules/value.js'
 
 // ── Export-specific rules ─────────────────────────────────────────────────────
-export { EXP_001, EXP_002, EXP_003, EXP_004, EXP_005 } from './rules/export.js'
+export { EXP_001, EXP_002, EXP_003, EXP_004, EXP_005, EXP_006 } from './rules/export.js'
 
-// ── Compiled registry (48 ACTIVE rules) ───────────────────────────────────────
+// ── Compiled registry (50 ACTIVE rules) ───────────────────────────────────────
 import type { RuleDefinition } from './types.js'
 
 import { QUAL_001, QUAL_002, QUAL_003, OCR_001 } from './rules/quality.js'
@@ -88,7 +91,7 @@ import { DECL_001, DECL_002, DECL_003, DECL_004, DECL_005 } from './rules/declar
 import { BL_001, BL_002, BL_003 } from './rules/bill-of-lading.js'
 import { COO_001, COO_002, COO_003 } from './rules/certificate-of-origin.js'
 import { VAL_001, VAL_002, VAL_003 } from './rules/value.js'
-import { EXP_001, EXP_002, EXP_003, EXP_004, EXP_005 } from './rules/export.js'
+import { EXP_001, EXP_002, EXP_003, EXP_004, EXP_005, EXP_006 } from './rules/export.js'
 
 /**
  * ALL_RULES is the canonical registry used by the rule engine. Quality rules
@@ -150,10 +153,11 @@ export const ALL_RULES: RuleDefinition[] = [
   VAL_001,
   VAL_002,
   VAL_003,
-  // Export-specific (5)
+  // Export-specific (6)
   EXP_001,
   EXP_002,
   EXP_003,
   EXP_004,
   EXP_005,
+  EXP_006,
 ]

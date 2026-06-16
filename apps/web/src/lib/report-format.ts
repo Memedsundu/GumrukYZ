@@ -40,6 +40,9 @@ const FIELD_LABELS: Record<string, string> = {
   _native_text_length: 'ilk metin uzunluğu',
   _final_extraction_confidence: 'son çıkarma güveni',
   _extraction_method: 'çıkarma yöntemi',
+  _pdf_image_count: 'PDF görüntü sayısı',
+  _pdf_pages_with_images: 'görüntü içeren sayfa sayısı',
+  _likely_raster_scan: 'raster tarama sinyali',
   doc_type: 'belge türü',
   invoice_number: 'fatura numarası',
   invoice_date: 'fatura tarihi',
@@ -49,6 +52,11 @@ const FIELD_LABELS: Record<string, string> = {
   total_amount: 'fatura toplamı',
   incoterm: 'Incoterm',
   package_count: 'kap sayısı',
+  package_breakdown: 'kap kırılımı',
+  invoice_refs: 'fatura referansları',
+  free_of_charge: 'bedelsiz/F.O.C işareti',
+  free_of_charge_line_values: 'bedelsiz kalem değerleri',
+  fob_value: 'FOB toplamı',
   gross_weight: 'brüt ağırlık',
   net_weight: 'net ağırlık',
   goods_description: 'eşya tanımı',
@@ -122,6 +130,7 @@ export const PASS_MESSAGES: Record<string, string> = {
   'EXP-003': 'İhracat rejim kodu geçerli.',
   'EXP-004': 'İhracat dosyasında menşe bilgisi mevcut.',
   'EXP-005': 'Geçici ihracat için yükleme talimatı mevcut.',
+  'EXP-006': 'Bedelsiz/F.O.C desteği kontrol edildi.',
 }
 
 // Exported for the rule parity check (scripts/check-rule-parity.ts).
@@ -174,6 +183,7 @@ export const ISSUE_MESSAGES: Record<string, string> = {
   'EXP-003': 'Beyannamedeki rejim kodu ihracat rejimleriyle uyumlu değil.',
   'EXP-004': 'İhracat dosyasında menşe ülkesi eksik, boş bırakılmış veya standart ülke adı olarak doğrulanamadı.',
   'EXP-005': 'Geçici ihracat için yükleme talimatı eksik.',
+  'EXP-006': 'Bedelsiz/F.O.C işaretli ihracat kalemi için destek fatura veya değer açıklaması doğrulanmalı.',
 }
 
 /**

@@ -28,6 +28,9 @@ export const NATIVE_TEXT_CONFIDENCE_FIELD = '_native_text_confidence'
 export const NATIVE_TEXT_LENGTH_FIELD = '_native_text_length'
 export const FINAL_EXTRACTION_CONFIDENCE_FIELD = '_final_extraction_confidence'
 export const EXTRACTION_METHOD_FIELD = '_extraction_method'
+export const PDF_IMAGE_COUNT_FIELD = '_pdf_image_count'
+export const PDF_PAGES_WITH_IMAGES_FIELD = '_pdf_pages_with_images'
+export const LIKELY_RASTER_SCAN_FIELD = '_likely_raster_scan'
 
 export type SourceRef = NonNullable<RuleEvaluationResult['sourceRefs']>[number]
 

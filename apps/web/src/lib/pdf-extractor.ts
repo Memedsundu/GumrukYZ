@@ -13,6 +13,9 @@ export interface TextExtractionResult {
   confidence: number
   pageCount: number
   method: 'TEXT_PDF' | 'EMPTY'
+  imageCount: number
+  pagesWithImages: number
+  likelyRasterScan: boolean
 }
 
 export async function extractTextFromPdf(
@@ -26,6 +29,9 @@ export async function extractTextFromPdf(
       confidence: 0,
       pageCount: 0,
       method: 'EMPTY',
+      imageCount: 0,
+      pagesWithImages: 0,
+      likelyRasterScan: false,
     }
   }
 
@@ -58,6 +64,16 @@ export async function extractTextFromPdf(
     const pageCount = pdf.numPages
 
     let fullText = ''
+    let imageCount = 0
+    let pagesWithImages = 0
+    const imageOps = new Set<number>(
+      [
+        pdfjsLib.OPS.paintImageXObject,
+        pdfjsLib.OPS.paintInlineImageXObject,
+        pdfjsLib.OPS.paintImageMaskXObject,
+        pdfjsLib.OPS.paintXObject,
+      ].filter((op): op is number => typeof op === 'number'),
+    )
 
     for (let pageNum = 1; pageNum <= Math.min(pageCount, 20); pageNum++) {
       const page = await pdf.getPage(pageNum)
@@ -66,15 +82,29 @@ export async function extractTextFromPdf(
         .map((item) => ('str' in item ? item.str : ''))
         .join(' ')
       fullText += pageText + '\n'
+
+      const operatorList = await page.getOperatorList()
+      const pageImageCount = operatorList.fnArray.filter((fn) => imageOps.has(fn)).length
+      imageCount += pageImageCount
+      if (pageImageCount > 0) pagesWithImages += 1
     }
 
     const confidence = computeConfidence(fullText)
+    const likelyRasterScan = isLikelyRasterScan({
+      textLength: fullText.trim().length,
+      pageCount,
+      imageCount,
+      pagesWithImages,
+    })
 
     return {
       text: fullText.trim(),
       confidence,
       pageCount,
       method: 'TEXT_PDF',
+      imageCount,
+      pagesWithImages,
+      likelyRasterScan,
     }
   } catch (err) {
     console.error('PDF extraction error:', err)
@@ -83,6 +113,9 @@ export async function extractTextFromPdf(
       confidence: 0,
       pageCount: 0,
       method: 'EMPTY',
+      imageCount: 0,
+      pagesWithImages: 0,
+      likelyRasterScan: false,
     }
   }
 }
@@ -125,4 +158,17 @@ function computeConfidence(text: string): number {
 
   // Combined score
   return Math.round((lengthScore * 0.6 + readabilityScore * 0.4) * 100) / 100
+}
+
+function isLikelyRasterScan(params: {
+  textLength: number
+  pageCount: number
+  imageCount: number
+  pagesWithImages: number
+}): boolean {
+  if (params.pageCount === 0) return false
+  if (params.imageCount === 0 || params.pagesWithImages === 0) return false
+  const inspectedPages = Math.min(params.pageCount, 20)
+  const sparseTextLimit = Math.max(200, inspectedPages * 120)
+  return params.textLength < sparseTextLimit && params.pagesWithImages >= inspectedPages
 }

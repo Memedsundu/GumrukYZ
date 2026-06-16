@@ -17,6 +17,7 @@ import {
   parseExpertGtipCandidates,
   shouldIntegrateExpertReview,
 } from './expert-review-display'
+import { filterExpertFindingsAgainstRules } from './finding-dedupe'
 
 export type ReportPayload = NonNullable<Awaited<ReturnType<typeof buildReportPayload>>>
 
@@ -84,14 +85,23 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
   // shown as the current expert review.
   const currentExpertReviews = expertReviews.filter((review) => !review.supersededAt)
   const expertReview = currentExpertReviews.find(shouldIntegrateExpertReview) ?? currentExpertReviews[0] ?? null
-  const expertCounts = countIntegratedExpertFindings(expertReview)
-  const mergedSummaryText = mergeReportSummaryText(currentReport.summaryText, expertReview)
+  const visibleExpertFindings = shouldIntegrateExpertReview(expertReview)
+    ? filterExpertFindingsAgainstRules(expertReview.findings, ruleResults)
+    : []
+  const visibleExpertReview = expertReview && visibleExpertFindings.length > 0
+    ? {
+        ...expertReview,
+        summary: summarizeVisibleExpertFindings(expertReview.summary, expertReview.findings, visibleExpertFindings),
+        findings: visibleExpertFindings,
+      }
+    : null
+  const expertCounts = countIntegratedExpertFindings(visibleExpertReview)
+  const mergedSummaryText = mergeReportSummaryText(currentReport.summaryText, visibleExpertReview)
   const mergedWarnings = currentReport.totalWarnings + expertCounts.warnings
   const mergedReviewNeeded = currentReport.totalReviewNeeded + expertCounts.reviewNeeded
 
   const deterministicActionSummary = ruleResults
     .filter((result) => result.result !== 'PASS' && result.result !== 'SKIP')
-    .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
     .map((result) => ({
       ruleCode: result.ruleCode,
       result: result.result,
@@ -100,8 +110,8 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       action: recommendedActionForRuleResult(result.ruleCode, result.result),
       source: 'RULE' as const,
     }))
-  const expertActionSummary = shouldIntegrateExpertReview(expertReview)
-    ? expertReview.findings.map((finding, index) => ({
+  const expertActionSummary = visibleExpertReview
+    ? visibleExpertFindings.map((finding, index) => ({
         ruleCode: `UZMAN-INCELEME-${index + 1}`,
         result: finding.severity,
         title: `Uzman İncelemesi: ${finding.title}`,
@@ -111,7 +121,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       }))
     : []
   const actionSummary = [...deterministicActionSummary, ...expertActionSummary]
-    .sort((a, b) => resultPriority(a.result) - resultPriority(b.result))
+    .sort((a, b) => actionSummaryPriority(a) - actionSummaryPriority(b))
     .slice(0, 8)
 
   const findingExplanations = parseFindingExplanations(currentReport.findingExplanationsJson)
@@ -154,7 +164,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
         totalWarnings: currentReport.totalWarnings,
         totalReviewNeeded: currentReport.totalReviewNeeded,
       },
-      expertIncluded: shouldIntegrateExpertReview(expertReview),
+      expertIncluded: Boolean(visibleExpertReview),
     },
     documents: submission.documents.map((document) => ({
       id: document.id,
@@ -173,16 +183,16 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       passes: ruleResults.filter((result) => result.result === 'PASS').length,
     },
     actionSummary,
-    expertReview: expertReview
+    expertReview: visibleExpertReview
       ? {
-          id: expertReview.id,
-          status: expertReview.status,
-          legalContextStatus: expertReview.legalContextStatus,
-          model: expertReview.model,
-          overallRisk: expertReview.overallRisk,
-          summary: expertReview.summary,
-          completedAt: expertReview.completedAt?.toISOString() ?? null,
-          findings: expertReview.findings.map((finding) => ({
+          id: visibleExpertReview.id,
+          status: visibleExpertReview.status,
+          legalContextStatus: visibleExpertReview.legalContextStatus,
+          model: visibleExpertReview.model,
+          overallRisk: visibleExpertReview.overallRisk,
+          summary: visibleExpertReview.summary,
+          completedAt: visibleExpertReview.completedAt?.toISOString() ?? null,
+          findings: visibleExpertFindings.map((finding) => ({
             id: finding.id,
             area: finding.area,
             severity: finding.severity,
@@ -279,6 +289,41 @@ function filterByReportJob<T extends { processingJobId: string | null }>(
 ): T[] {
   if (reportJobId) return rows.filter((row) => row.processingJobId === reportJobId)
   return rows.filter((row) => row.processingJobId === null)
+}
+
+function summarizeVisibleExpertFindings<T extends { title: string; area: string }>(
+  originalSummary: string | null,
+  allFindings: T[],
+  visibleFindings: T[],
+): string | null {
+  if (visibleFindings.length === allFindings.length) return originalSummary
+  if (visibleFindings.length === 0) return null
+  if (visibleFindings.length === 1 && visibleFindings[0]?.area === 'GTIP_PLAUSIBILITY') {
+    return 'Uzman İncelemesi yalnızca GTİP sınıflandırması için teknik teyit gerektiğini belirtiyor; deterministik bulgularla aynı konuda ek uyarı yok.'
+  }
+  const titles = visibleFindings.map((finding) => finding.title).slice(0, 3).join(', ')
+  return `Uzman İncelemesi deterministik kontroller dışında kalan ek konuları işaretledi: ${titles}.`
+}
+
+function actionSummaryPriority(item: { result: string; ruleCode: string; title: string; source: string }): number {
+  return resultPriority(item.result) * 100 + actionIssuePriority(item)
+}
+
+function actionIssuePriority(item: { ruleCode: string; title: string; source: string }): number {
+  if (item.ruleCode === 'OCR-001') return 0
+  if (item.ruleCode.startsWith('QUAL-')) return 1
+  if (item.ruleCode.startsWith('PRES-')) return 2
+  if (item.ruleCode === 'EXP-006') return 3
+  if (
+    item.ruleCode.startsWith('PL-') ||
+    item.ruleCode === 'CROSS-002' ||
+    item.ruleCode === 'CROSS-006' ||
+    item.ruleCode === 'CROSS-008'
+  ) return 10
+  if (item.ruleCode.startsWith('INV-') || item.ruleCode.startsWith('VAL-') || item.ruleCode === 'CROSS-001') return 20
+  if (item.ruleCode.startsWith('GTIP-')) return 30
+  if (item.source === 'EXPERT_REVIEW') return 40
+  return 50
 }
 
 function resultPriority(result: string): number {

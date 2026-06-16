@@ -1,5 +1,15 @@
 import { z } from 'zod'
 
+const PackageBreakdownSchema = z.object({
+  type: z.string().nullable(),
+  count: z.number().nullable(),
+})
+
+const InvoiceReferenceSchema = z.object({
+  number: z.string().nullable(),
+  free_of_charge: z.boolean().nullable(),
+})
+
 // ─── Invoice extraction schema ───────────────────────────────────────────────
 
 export const InvoiceExtractionSchema = z.object({
@@ -38,6 +48,8 @@ export type InvoiceExtraction = z.infer<typeof InvoiceExtractionSchema>
 export const PackingListExtractionSchema = z.object({
   package_count: z.number().nullable(),
   package_type: z.string().nullable(),
+  package_breakdown: z.array(PackageBreakdownSchema).nullable(),
+  invoice_refs: z.array(InvoiceReferenceSchema).nullable(),
   gross_weight: z.number().nullable(),
   net_weight: z.number().nullable(),
   dimensions: z.string().nullable(),
@@ -71,6 +83,7 @@ export const LoadingInstructionExtractionSchema = z.object({
   gross_weight: z.number().nullable(),
   net_weight: z.number().nullable(),
   package_count: z.number().nullable(),
+  package_breakdown: z.array(PackageBreakdownSchema).nullable(),
   delivery_term: z.string().nullable(),
   incoterm: z.string().nullable(),
   loading_port: z.string().nullable(),
@@ -125,11 +138,15 @@ export const DeclarationOutputExtractionSchema = z.object({
   gtip_code: z.string().nullable(),
   goods_description: z.string().nullable(),
   package_count: z.number().nullable(),
+  package_breakdown: z.array(PackageBreakdownSchema).nullable(),
   gross_weight: z.number().nullable(),
   net_weight: z.number().nullable(),
   total_value: z.number().nullable(),
   currency: z.string().nullable(),
   incoterm: z.string().nullable(),
+  invoice_refs: z.array(InvoiceReferenceSchema).nullable(),
+  free_of_charge: z.boolean().nullable(),
+  free_of_charge_line_values: z.array(z.number()).nullable(),
   permit_refs: z.array(z.string()).nullable(),
   /** Kalem (line item) rows for multi-item declarations; null when not visible. */
   items: z.array(DeclarationItemExtractionSchema).nullable(),

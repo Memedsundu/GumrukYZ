@@ -470,6 +470,7 @@ export const CROSS_008: RuleDefinition = {
 
     const pass = plCount === declCount
     const decimalScaleMismatch = !pass && looksLikeDecimalScaleMismatch(plCount, declCount)
+    const packageBreakdownTotal = sumPackageBreakdown(pl.data)
 
     if (pass) {
       return {
@@ -478,6 +479,20 @@ export const CROSS_008: RuleDefinition = {
         result: 'PASS',
         message: `Paket sayısı eşleşiyor: çeki listesi ve beyannamede ${plCount} paket.`,
         sourceRefs: [],
+      }
+    }
+
+    if (packageBreakdownTotal != null && packageBreakdownTotal === declCount) {
+      return {
+        ruleCode: this.code,
+        severity: RuleSeverity.WARNING,
+        result: 'REVIEW_NEEDED',
+        message: `Kap sayısı beyannameyle ambalaj kırılımı üzerinden uzlaşıyor (${packageBreakdownTotal}), ancak çeki listesi ana package_count alanı ${plCount} olarak çıkarılmış. Palet/koli ayrımı kaynak belgeden manuel doğrulanmalı.`,
+        sourceRefs: [
+          { docType: DocumentType.PACKING_LIST, field: 'package_count', value: plCount },
+          { docType: DocumentType.PACKING_LIST, field: 'package_breakdown', value: packageBreakdownTotal },
+          { docType: DocumentType.DECLARATION_OUTPUT, field: 'package_count', value: declCount },
+        ],
       }
     }
 
@@ -494,6 +509,19 @@ export const CROSS_008: RuleDefinition = {
       ],
     }
   },
+}
+
+function sumPackageBreakdown(data: Record<string, unknown>): number | null {
+  const rawBreakdown = data['package_breakdown']
+  if (!Array.isArray(rawBreakdown)) return null
+  const values = rawBreakdown
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+      return toFiniteNumber((entry as Record<string, unknown>)['count'])
+    })
+    .filter((value): value is number => value != null && value > 0)
+  if (values.length === 0) return null
+  return values.reduce((sum, value) => sum + value, 0)
 }
 
 export const CROSS_005: RuleDefinition = {

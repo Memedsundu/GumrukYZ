@@ -95,6 +95,13 @@ export const RULE_SEED_METADATA: Record<string, RuleSeedMetadata> = {
     fixturePassRef: CLEAN_IMPORT,
     fixtureFailRef: null,
   },
+  'PRES-006': {
+    description: 'İhracat dosyasında yükleme talimatı varsa sevkiyat bilgileri kontrol kapsamına alınır; yokluğu yalnızca koşullu kurallarda sorun yapılır.',
+    fieldChecks: ['doc_type'],
+    sourceTitle: SOURCE_TITLES.YONETMELIK,
+    fixturePassRef: 'fixtures/case-ankara-real/extraction.json',
+    fixtureFailRef: null,
+  },
 
   // ── Invoice mandatory fields ────────────────────────────────────────────
   'INV-001': {
@@ -385,5 +392,12 @@ export const RULE_SEED_METADATA: Record<string, RuleSeedMetadata> = {
     sourceTitle: SOURCE_TITLES.YONETMELIK,
     fixturePassRef: 'fixtures/sample-export-package-vs-item/extraction.json',
     fixtureFailRef: null,
+  },
+  'EXP-006': {
+    description: 'Bedelsiz/F.O.C ihracat sinyali varsa destek fatura ve kalem değer açıklaması doğrulanmalıdır.',
+    fieldChecks: ['invoice_refs', 'free_of_charge', 'free_of_charge_line_values'],
+    sourceTitle: SOURCE_TITLES.YONETMELIK,
+    fixturePassRef: null,
+    fixtureFailRef: 'fixtures/case-ankara-real/extraction.json',
   },
 }

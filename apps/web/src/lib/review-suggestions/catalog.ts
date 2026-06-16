@@ -12,6 +12,7 @@ const EXACT_RULE_ISSUE: Record<string, IssueType> = {
   'VAL-002': 'value_mismatch',
   'VAL-003': 'value_mismatch',
   'CROSS-001': 'value_mismatch',
+  'EXP-006': 'value_mismatch',
   // Currency
   'INV-004': 'currency_issue',
   'CROSS-007': 'currency_issue',
@@ -71,6 +72,8 @@ export function expertAreaToIssueType(area: string): IssueType {
       return 'origin_issue'
     case 'DOCUMENT_CONSISTENCY':
       return 'document_reference_mismatch'
+    case 'DOCUMENT_QUALITY':
+      return 'ocr_uncertainty'
     default:
       return 'technical_verification_needed'
   }

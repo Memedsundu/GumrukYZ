@@ -12,7 +12,7 @@ const DEFAULT_MODEL = 'gpt-5.4-mini'
 const DEFAULT_TIMEOUT_MS = 60_000
 const DEFAULT_MAX_FINDINGS = 10
 /** Bump when the validation prompt or schema changes. */
-const RULE_VALIDATION_PROMPT_VERSION = '2026-06-17.0'
+const RULE_VALIDATION_PROMPT_VERSION = '2026-06-17.2'
 
 const ValidationStatusSchema = z.enum([
   'LIKELY_CORRECT',

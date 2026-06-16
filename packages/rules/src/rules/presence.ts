@@ -2,6 +2,12 @@ import { DocumentType, RuleSeverity, TradeFlow } from '@gumrukyz/domain'
 import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
 import { passResult, reviewResult } from '../helpers.js'
 
+type InvoiceReferenceEvidence = {
+  docType: string
+  number: string
+  freeOfCharge: boolean
+}
+
 export const PRES_001: RuleDefinition = {
   code: 'PRES-001',
   name: 'Tüm gönderiler için fatura beklenir',
@@ -13,6 +19,19 @@ export const PRES_001: RuleDefinition = {
     if (hasInvoice) {
       return passResult(this.code, this.severity, 'Beklenen fatura belgesi mevcut.')
     }
+    const invoiceRefs = collectInvoiceReferences(ctx)
+    if (invoiceRefs.length > 0) {
+      return reviewResult(
+        this.code,
+        this.severity,
+        `Referans verilen fatura(lar) dosyada yok: ${formatInvoiceReferences(invoiceRefs)}. Analiz mevcut belgelerle sınırlıdır; bu faturalar eklenmeden kıymet, bedelsiz ve taraf tutarlılığı tam doğrulanamaz.`,
+        invoiceRefs.map((ref) => ({
+          docType: ref.docType,
+          field: 'invoice_refs',
+          value: ref.freeOfCharge ? `${ref.number} (F.O.C)` : ref.number,
+        })),
+      )
+    }
     return reviewResult(
       this.code,
       this.severity,
@@ -20,6 +39,43 @@ export const PRES_001: RuleDefinition = {
       [{ field: 'doc_type', value: DocumentType.INVOICE }],
     )
   },
+}
+
+function collectInvoiceReferences(ctx: SubmissionContext): InvoiceReferenceEvidence[] {
+  const refs = new Map<string, InvoiceReferenceEvidence>()
+  for (const doc of ctx.documents) {
+    const rawRefs = doc.data['invoice_refs']
+    if (Array.isArray(rawRefs)) {
+      for (const rawRef of rawRefs) {
+        if (!rawRef || typeof rawRef !== 'object' || Array.isArray(rawRef)) continue
+        const ref = rawRef as Record<string, unknown>
+        const number = String(ref['number'] ?? '').trim()
+        if (!number) continue
+        refs.set(number, {
+          docType: doc.docType,
+          number,
+          freeOfCharge: ref['free_of_charge'] === true,
+        })
+      }
+    }
+
+    for (const field of ['related_invoice', 'invoice_number', 'invoice_no']) {
+      const number = String(doc.data[field] ?? '').trim()
+      if (!number || doc.docType === DocumentType.INVOICE) continue
+      refs.set(number, {
+        docType: doc.docType,
+        number,
+        freeOfCharge: /F\.?\s*O\.?\s*C\.?|BEDELS[İI]Z/i.test(number),
+      })
+    }
+  }
+  return Array.from(refs.values())
+}
+
+function formatInvoiceReferences(refs: InvoiceReferenceEvidence[]): string {
+  return refs
+    .map((ref) => ref.freeOfCharge ? `${ref.number} (F.O.C)` : ref.number)
+    .join(', ')
 }
 
 export const PRES_003: RuleDefinition = {

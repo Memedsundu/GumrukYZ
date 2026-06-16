@@ -60,6 +60,48 @@ Total Gross Weight
 1,185.00 kg
 `
 
+const ankaraPackingListText = `
+ÇEKİ LİSTESİ / PACKING LIST
+
+Fatura no.
+FI62026000000062
+FI62026000000063 (F.O.C)
+
+Muhteviyat          Paket No.   Paket Türü         Miktar (Birim) Brüt Ağırlık
+                               Package Type        Quantity (Unit)   Gross
+AIR CHANNEL
+                        1        WOODEN BOX              1            650
+SCOPE
+AIR CHANNEL
+                        1        WOODEN BOX              1            650
+SCOPE
+AIR CHANNEL
+                        1        WOODEN BOX              1            580
+SCOPE
+AIR CHANNEL
+                        1        WOODEN BOX              1            550
+SCOPE
+AIR CHANNEL
+                        1        WOODEN BOX              1            550
+SCOPE
+AIR CHANNEL
+                        1        WOODEN BOX              1            550
+SCOPE
+AIR CHANNEL
+                        1           PALLETE              1            150
+SCOPE
+AIR CHANNEL
+                        1           PALLETE              1            150
+SCOPE
+AIR CHANNEL
+                        1           PALLETE              1            150
+SCOPE
+
+TOPLAM
+                                                         9            3980
+TOTAL
+`
+
 function testParsesPackageQuantityAndWeightsSeparately() {
   const fields = parsePackingListTextFields(packingListText)
 
@@ -97,9 +139,46 @@ function testEnhancementDoesNotSumPalletsIntoPackageCount() {
   assert.deepEqual(items.map((item) => item['package_count']), [4, 4, 4])
 }
 
+function testParsesExplicitTotalAndPackageRowsFromAnkaraLayout() {
+  const fields = parsePackingListTextFields(ankaraPackingListText)
+
+  assert.equal(fields.packageCount, 9)
+  assert.deepEqual(fields.packageBreakdown, [
+    { type: 'wooden_box', count: 6 },
+    { type: 'pallet', count: 3 },
+  ])
+  assert.equal(fields.itemPackageCounts.reduce((sum, count) => sum + count, 0), 9)
+  assert.equal(fields.grossWeight, 3980)
+  assert.deepEqual(fields.invoiceRefs, [
+    { number: 'FI62026000000062', free_of_charge: false },
+    { number: 'FI62026000000063', free_of_charge: true },
+  ])
+}
+
+function testEnhancementReplacesPartialPackageRowsFromAnkaraLayout() {
+  const enhanced = enhancePackingListFromText(
+    {
+      package_count: 6,
+      items: Array.from({ length: 6 }, () => ({ package_count: 1 })),
+    },
+    ankaraPackingListText,
+  )
+
+  const items = enhanced['items'] as Array<Record<string, unknown>>
+  assert.equal(enhanced['package_count'], 9)
+  assert.deepEqual(enhanced['package_breakdown'], [
+    { type: 'wooden_box', count: 6 },
+    { type: 'pallet', count: 3 },
+  ])
+  assert.equal(items.length, 9)
+  assert.equal(items.reduce((sum, item) => sum + Number(item['package_count']), 0), 9)
+}
+
 const tests = [
   testParsesPackageQuantityAndWeightsSeparately,
   testEnhancementDoesNotSumPalletsIntoPackageCount,
+  testParsesExplicitTotalAndPackageRowsFromAnkaraLayout,
+  testEnhancementReplacesPartialPackageRowsFromAnkaraLayout,
 ]
 
 let failed = 0

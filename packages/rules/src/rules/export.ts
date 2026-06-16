@@ -24,6 +24,17 @@ type OriginEvidence = {
   normalized: string | null
 }
 
+type FreeOfChargeEvidence = {
+  docType: string
+  field: string
+  value: unknown
+}
+
+type InvoiceRef = {
+  number: string
+  freeOfCharge: boolean
+}
+
 const EXPORT_ORIGIN_DOC_TYPES = new Set<string>([
   DocumentType.INVOICE,
   DocumentType.PACKING_LIST,
@@ -294,4 +305,139 @@ export const EXP_005: RuleDefinition = {
       [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'regime_code', value: regime }],
     )
   },
+}
+
+/** EXP-006 — Bedelsiz/F.O.C ihracat sinyali destek faturasıyla açıklanmalı. */
+export const EXP_006: RuleDefinition = {
+  code: 'EXP-006',
+  name: 'Bedelsiz/F.O.C ihracat desteği kontrol edilmeli',
+  severity: RuleSeverity.WARNING,
+  appliesToDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST, DocumentType.DECLARATION_OUTPUT],
+
+  evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
+    if (ctx.tradeFlow !== 'EXPORT') return null
+
+    const evidence = collectFreeOfChargeEvidence(ctx)
+    if (evidence.length === 0) return null
+
+    const invoiceNumbers = new Set(
+      ctx.documents
+        .filter((doc) => doc.docType === DocumentType.INVOICE)
+        .map((doc) => String(doc.data['invoice_number'] ?? '').trim())
+        .filter(Boolean),
+    )
+    const invoiceRefs = collectInvoiceRefs(ctx)
+    const focRefs = invoiceRefs.filter((ref) => ref.freeOfCharge)
+    const missingFocRefs = focRefs.filter((ref) => !invoiceNumbers.has(ref.number))
+    const lineValues = collectFreeOfChargeLineValues(ctx)
+
+    if (ctx.documents.every((doc) => doc.docType !== DocumentType.INVOICE) || missingFocRefs.length > 0 || lineValues.length > 0) {
+      const details = [
+        missingFocRefs.length > 0
+          ? `eksik F.O.C fatura referansı: ${missingFocRefs.map((ref) => ref.number).join(', ')}`
+          : null,
+        lineValues.length > 0
+          ? `bedelsiz notu bulunan kalemde görünen değer(ler): ${lineValues.map(formatNumber).join(', ')}`
+          : null,
+        ctx.documents.every((doc) => doc.docType !== DocumentType.INVOICE)
+          ? 'fatura belgesi dosyada yok'
+          : null,
+      ].filter(Boolean).join('; ')
+
+      return reviewResult(
+        this.code,
+        this.severity,
+        `Bedelsiz/F.O.C ihracat sinyali için destek belge ve değer açıklaması manuel doğrulanmalı${details ? ` (${details})` : ''}.`,
+        [
+          ...evidence.map((entry) => ({
+            docType: entry.docType,
+            field: entry.field,
+            value: entry.value,
+          })),
+          ...missingFocRefs.map((ref) => ({
+            field: 'invoice_refs',
+            value: `${ref.number} (F.O.C)`,
+          })),
+        ],
+      )
+    }
+
+    return passResult(
+      this.code,
+      this.severity,
+      'Bedelsiz/F.O.C sinyali destekleyici fatura bilgileriyle birlikte görünüyor.',
+    )
+  },
+}
+
+function collectFreeOfChargeEvidence(ctx: SubmissionContext): FreeOfChargeEvidence[] {
+  const evidence: FreeOfChargeEvidence[] = []
+  for (const doc of ctx.documents) {
+    if (doc.data['free_of_charge'] === true) {
+      evidence.push({ docType: doc.docType, field: 'free_of_charge', value: true })
+    }
+
+    const invoiceRefs = parseInvoiceRefs(doc.data['invoice_refs'])
+    for (const ref of invoiceRefs) {
+      if (!ref.freeOfCharge) continue
+      evidence.push({
+        docType: doc.docType,
+        field: 'invoice_refs',
+        value: `${ref.number} (F.O.C)`,
+      })
+    }
+
+    const text = JSON.stringify(doc.data)
+    if (/F\.?\s*O\.?\s*C\.?|Bedelsiz|FREE OF CHARGE/i.test(text)) {
+      evidence.push({ docType: doc.docType, field: 'structured_json', value: 'Bedelsiz/F.O.C' })
+    }
+  }
+
+  return evidence
+}
+
+function collectInvoiceRefs(ctx: SubmissionContext): InvoiceRef[] {
+  const refs = new Map<string, InvoiceRef>()
+  for (const doc of ctx.documents) {
+    for (const ref of parseInvoiceRefs(doc.data['invoice_refs'])) {
+      refs.set(ref.number, ref)
+    }
+  }
+  return Array.from(refs.values())
+}
+
+function parseInvoiceRefs(rawRefs: unknown): InvoiceRef[] {
+  if (!Array.isArray(rawRefs)) return []
+  const refs: InvoiceRef[] = []
+  for (const rawRef of rawRefs) {
+    if (!rawRef || typeof rawRef !== 'object' || Array.isArray(rawRef)) continue
+    const ref = rawRef as Record<string, unknown>
+    const number = String(ref['number'] ?? '').trim()
+    if (!number) continue
+    refs.push({
+      number,
+      freeOfCharge: ref['free_of_charge'] === true || /F\.?\s*O\.?\s*C\.?|Bedelsiz/i.test(number),
+    })
+  }
+  return refs
+}
+
+function collectFreeOfChargeLineValues(ctx: SubmissionContext): number[] {
+  const values: number[] = []
+  for (const doc of ctx.documents) {
+    const rawValues = doc.data['free_of_charge_line_values']
+    if (!Array.isArray(rawValues)) continue
+    for (const value of rawValues) {
+      const numeric = Number(value)
+      if (Number.isFinite(numeric) && numeric > 0) values.push(numeric)
+    }
+  }
+  return values
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
 }

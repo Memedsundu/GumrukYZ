@@ -45,9 +45,29 @@ function testEnhancementDoesNotKeepInventedNetOrSummedPackages() {
   assert.notEqual(enhanced['package_count'], 10)
 }
 
+function testParsesSeparateAnkaraPackageLinesAsTotalPackages() {
+  const text = `
+Kap Adedi / Cinsi     : 6 pcs wooden box
+                      : 3 pcs pallet
+
+Brüt Kilo (kg)        : 3980 kg
+`
+
+  const fields = parseLoadingInstructionTextFields(text)
+
+  assert.equal(fields.packageCount, 9)
+  assert.deepEqual(fields.packageBreakdown, [
+    { type: 'wooden_box', count: 6 },
+    { type: 'pallet', count: 3 },
+  ])
+  assert.equal(fields.grossWeight, 3980)
+  assert.equal(fields.netWeight, null)
+}
+
 const tests = [
   testParsesGrossOnlyLoadingInstructionRow,
   testEnhancementDoesNotKeepInventedNetOrSummedPackages,
+  testParsesSeparateAnkaraPackageLinesAsTotalPackages,
 ]
 
 let failed = 0

@@ -35,6 +35,9 @@ function testGuardrailsMentionCleanExportFalsePositives() {
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /A\.TR/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /EXP-004/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /sahtecilik\/fraud/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /QUAL-002/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /OCR-001/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /tekrarlama/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /870829909000/)
 }
 
@@ -103,7 +106,7 @@ function testDropsUnsupportedFindingsButKeepsGtipReview() {
   assert.match(filtered.summary, /yalnızca GTİP/)
 }
 
-function testDropsPassedIncotermNoiseButKeepsValuationAndGtip() {
+function testDropsPassedIncotermNoiseAndDuplicateValuationButKeepsGtip() {
   const filtered = applyExpertReviewSafetyFilters(
     {
       overallRisk: 'HIGH',
@@ -133,11 +136,11 @@ function testDropsPassedIncotermNoiseButKeepsValuationAndGtip() {
     },
   )
 
-  assert.deepEqual(filtered.findings.map((finding) => finding.area), ['GTIP_PLAUSIBILITY', 'VALUATION'])
+  assert.deepEqual(filtered.findings.map((finding) => finding.area), ['GTIP_PLAUSIBILITY'])
   assert.equal(filtered.overallRisk, 'HIGH')
 }
 
-function testDropsGrossOnlyFalseNoiseButKeepsMissingNetAndGtip() {
+function testDropsGrossOnlyFalseNoiseAndDuplicateMissingNetButKeepsGtip() {
   const missingNetFinding: ExpertReviewSafetyFinding = {
     area: 'DOCUMENT_CONSISTENCY',
     title: 'Net ağırlık belgelerde açık değil',
@@ -205,11 +208,7 @@ function testDropsGrossOnlyFalseNoiseButKeepsMissingNetAndGtip() {
     },
   )
 
-  assert.deepEqual(filtered.findings.map((finding) => finding.area), [
-    'GTIP_PLAUSIBILITY',
-    'DOCUMENT_CONSISTENCY',
-  ])
-  assert.equal(filtered.findings[1]?.title, missingNetFinding.title)
+  assert.deepEqual(filtered.findings.map((finding) => finding.area), ['GTIP_PLAUSIBILITY'])
 }
 
 function testDropsPackageVsItemAndLoadingNoiseButKeepsGtip() {
@@ -271,7 +270,7 @@ function testDropsPackageVsItemAndLoadingNoiseButKeepsGtip() {
   assert.equal(filtered.overallRisk, 'LOW')
 }
 
-function testKeepsMissingOriginFindingWhenExportOriginRuleNeedsReview() {
+function testDropsMissingOriginFindingWhenExportOriginRuleAlreadyNeedsReview() {
   const missingOriginFinding: ExpertReviewSafetyFinding = {
     area: 'ORIGIN_PREFERENTIAL',
     title: 'Menşe ülkesi belgelerde boş bırakılmış',
@@ -305,20 +304,51 @@ function testKeepsMissingOriginFindingWhenExportOriginRuleNeedsReview() {
     },
   )
 
-  assert.deepEqual(filtered.findings.map((finding) => finding.area), [
-    'ORIGIN_PREFERENTIAL',
-    'GTIP_PLAUSIBILITY',
-  ])
-  assert.equal(filtered.overallRisk, 'MEDIUM')
+  assert.deepEqual(filtered.findings.map((finding) => finding.area), ['GTIP_PLAUSIBILITY'])
+  assert.equal(filtered.overallRisk, 'LOW')
+}
+
+function testDropsFreeOfChargeDuplicateButKeepsGtip() {
+  const filtered = applyExpertReviewSafetyFilters(
+    {
+      overallRisk: 'MEDIUM',
+      summary: 'Bedelsiz ve GTİP yorumları var.',
+      findings: [
+        {
+          area: 'VALUATION',
+          title: 'Bedelsiz fatura desteği eksik',
+          explanation: 'F.O.C fatura dosyada yok ve Bedelsiz notlu kalemde 88,30 EUR değer görünüyor.',
+          recommendation: 'F.O.C faturayı ve kalem değer açıklamasını isteyin.',
+          evidence_refs: [
+            { docType: 'PACKING_LIST', field: 'invoice_refs', value: 'FI62026000000063 (F.O.C)' },
+            { docType: 'DECLARATION_OUTPUT', field: 'free_of_charge_line_values', value: '88.30' },
+          ],
+        },
+        gtipFinding,
+      ],
+    },
+    {
+      documents: [
+        { docType: 'PACKING_LIST', data: { invoice_refs: [{ number: 'FI62026000000063', free_of_charge: true }] } },
+        { docType: 'DECLARATION_OUTPUT', data: { free_of_charge: true, free_of_charge_line_values: [88.3] } },
+      ],
+      ruleResults: [
+        { ruleCode: 'EXP-006', result: 'REVIEW_NEEDED' },
+      ],
+    },
+  )
+
+  assert.deepEqual(filtered.findings.map((finding) => finding.area), ['GTIP_PLAUSIBILITY'])
 }
 
 const tests = [
   testGuardrailsMentionCleanExportFalsePositives,
   testDropsUnsupportedFindingsButKeepsGtipReview,
-  testDropsPassedIncotermNoiseButKeepsValuationAndGtip,
-  testDropsGrossOnlyFalseNoiseButKeepsMissingNetAndGtip,
+  testDropsPassedIncotermNoiseAndDuplicateValuationButKeepsGtip,
+  testDropsGrossOnlyFalseNoiseAndDuplicateMissingNetButKeepsGtip,
   testDropsPackageVsItemAndLoadingNoiseButKeepsGtip,
-  testKeepsMissingOriginFindingWhenExportOriginRuleNeedsReview,
+  testDropsMissingOriginFindingWhenExportOriginRuleAlreadyNeedsReview,
+  testDropsFreeOfChargeDuplicateButKeepsGtip,
 ]
 
 let failed = 0

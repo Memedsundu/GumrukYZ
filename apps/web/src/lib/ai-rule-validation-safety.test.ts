@@ -15,6 +15,8 @@ function testGuardrailsMentionPackageAndIncotermSemantics() {
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /_native_text_length/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /EXP-004 REVIEW_NEEDED/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /sahtecilik/)
+  assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /QUAL-002/)
+  assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /OCR-001/)
 }
 
 function testDropsPackageCountFalseNegativeWhenPackageRulePassed() {
@@ -135,6 +137,27 @@ function testKeepsValuationLikelyCorrectSupport() {
   assert.equal(filtered[0]?.rule_result_id, 'cross-001-fail')
 }
 
+function testDropsDocumentQualityDuplicateAdvisory() {
+  const validations: AiRuleValidationSafetyItem[] = [
+    {
+      rule_result_id: 'ocr-001-review',
+      status: 'NEEDS_HUMAN_REVIEW',
+      confidence: 0.76,
+      explanation: 'OCR-001 doğru; tarama düşük kalite olduğu için low quality scan manuel kontrol edilmeli.',
+      recommendation: 'Daha net fatura kopyası yüklenmeli.',
+      evidence_refs: [
+        { docType: 'INVOICE', field: '_likely_raster_scan', value: 'true' },
+      ],
+    },
+  ]
+
+  const filtered = applyAiRuleValidationSafetyFilters(validations, [
+    { id: 'ocr-001-review', ruleCode: 'OCR-001', result: 'REVIEW_NEEDED' },
+  ])
+
+  assert.equal(filtered.length, 0)
+}
+
 const tests = [
   testGuardrailsMentionPackageAndIncotermSemantics,
   testDropsPackageCountFalseNegativeWhenPackageRulePassed,
@@ -142,6 +165,7 @@ const tests = [
   testDropsItemQuantityVsPackageCountAdvisoryWhenRulesPassed,
   testDropsNativeTextOnlyLoadingInstructionUnverifiedFinding,
   testKeepsValuationLikelyCorrectSupport,
+  testDropsDocumentQualityDuplicateAdvisory,
 ]
 
 let failed = 0

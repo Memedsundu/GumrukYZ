@@ -26,6 +26,7 @@ import {
   parseExpertGtipCandidates,
   shouldIntegrateExpertReview,
 } from '@/lib/expert-review-display'
+import { filterExpertFindingsAgainstRules } from '@/lib/finding-dedupe'
 import { getExpertReviewQuota } from '@/lib/expert-review-quota'
 import { willChargeAnalysis } from '@/lib/entitlements'
 import ReportWorkspace, {
@@ -145,7 +146,13 @@ export default async function ReportPage({ params }: Props) {
   // are never shown as the current expert review.
   const currentExpertReviews = reportExpertReviews.filter((review) => !review.supersededAt)
   const expertReview = currentExpertReviews.find(shouldIntegrateExpertReview) ?? currentExpertReviews[0] ?? null
-  const expertCounts = countIntegratedExpertFindings(expertReview)
+  const visibleExpertFindings = shouldIntegrateExpertReview(expertReview)
+    ? filterExpertFindingsAgainstRules(expertReview.findings, reportRuleResults)
+    : []
+  const visibleExpertReview = expertReview && visibleExpertFindings.length > 0
+    ? { ...expertReview, findings: visibleExpertFindings }
+    : null
+  const expertCounts = countIntegratedExpertFindings(visibleExpertReview)
   const expertQuota = await getExpertReviewQuota(user.tenantId)
   const willChargeReanalysis = await willChargeAnalysis({ tenantId: user.tenantId, submissionId: id })
   const canOverride = canManageTenant(user)
@@ -252,8 +259,8 @@ export default async function ReportPage({ params }: Props) {
     }
   })
 
-  const expertFindings: ReportFindingItem[] = shouldIntegrateExpertReview(expertReview)
-    ? expertReview.findings.map((finding, index) => {
+  const expertFindings: ReportFindingItem[] = visibleExpertReview
+    ? visibleExpertFindings.map((finding, index) => {
         const evidenceRefs = parseExpertEvidenceRefs(finding.evidenceRefsJson)
         const gtipCandidates = parseExpertGtipCandidates(finding.gtipCandidatesJson ?? finding.evidenceRefsJson)
         return {
@@ -304,7 +311,7 @@ export default async function ReportPage({ params }: Props) {
             evidenceRefsJson: finding.evidenceRefsJson,
             documents: documentVersionRefs,
           }),
-          processingJobId: expertReview.processingJobId ?? null,
+          processingJobId: visibleExpertReview.processingJobId ?? null,
           overrideReason: null,
           canOverride: false,
           defaultOpen: true,
@@ -462,6 +469,7 @@ function expertFindingCategory(area: string): string {
     ORIGIN_PREFERENTIAL: 'Menşe',
     INCOTERM: 'Kıymet',
     DOCUMENT_CONSISTENCY: 'Belge seti',
+    DOCUMENT_QUALITY: 'Belge kalitesi',
     LEGAL_CONTEXT: 'Uzman İncelemesi',
   }
   return map[area] ?? 'Uzman İncelemesi'
@@ -507,6 +515,7 @@ function expertAreaLabel(area: string): string {
     ORIGIN_PREFERENTIAL: 'Menşe / tercihli rejim',
     INCOTERM: 'Incoterms',
     DOCUMENT_CONSISTENCY: 'Belge tutarlılığı',
+    DOCUMENT_QUALITY: 'Belge kalitesi',
     LEGAL_CONTEXT: 'Mevzuat kapsamı',
   }
   return map[area] ?? area
