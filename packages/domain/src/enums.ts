@@ -169,14 +169,59 @@ export const ProviderName = {
 export type ProviderName = (typeof ProviderName)[keyof typeof ProviderName]
 
 // Tenant plan
+// Purchasable public tiers: plus (Başlangıç), pro (Firma), max (Kurumsal).
+// internal/pilot are non-commercial provisioning states.
 export const TenantPlan = {
   INTERNAL: 'internal',
   PILOT: 'pilot',
-  STARTER: 'starter',
+  PLUS: 'plus',
   PRO: 'pro',
+  MAX: 'max',
 } as const
 
 export type TenantPlan = (typeof TenantPlan)[keyof typeof TenantPlan]
+
+// Subscription lifecycle status (source of truth lives on TenantSubscription).
+export const TenantSubscriptionStatus = {
+  TRIALING: 'trialing',
+  ACTIVE: 'active',
+  TRIAL_EXPIRED: 'trial_expired',
+  GRACE: 'grace',
+  CANCELED: 'canceled',
+  SUSPENDED: 'suspended',
+} as const
+
+export type TenantSubscriptionStatus =
+  (typeof TenantSubscriptionStatus)[keyof typeof TenantSubscriptionStatus]
+
+// Billing interval for a subscription. NONE covers trial/custom/manual states.
+export const BillingInterval = {
+  MONTHLY: 'monthly',
+  ANNUAL: 'annual',
+  NONE: 'none',
+} as const
+
+export type BillingInterval = (typeof BillingInterval)[keyof typeof BillingInterval]
+
+// Metered entitlement dimensions.
+export const UsageMetric = {
+  ANALYSIS: 'analysis',
+  EXPERT_REVIEW: 'expert_review',
+  DOCUMENTS: 'documents',
+  USERS: 'users',
+} as const
+
+export type UsageMetric = (typeof UsageMetric)[keyof typeof UsageMetric]
+
+// Why a sales lead was captured.
+export const SalesLeadKind = {
+  TRIAL_BLOCKED_DUPLICATE: 'trial_blocked_duplicate',
+  ENTERPRISE: 'enterprise',
+  CONTACT: 'contact',
+  UPGRADE: 'upgrade',
+} as const
+
+export type SalesLeadKind = (typeof SalesLeadKind)[keyof typeof SalesLeadKind]
 
 // Valid Incoterms 2020
 export const INCOTERMS_2020 = [

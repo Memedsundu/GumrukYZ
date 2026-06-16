@@ -30,4 +30,9 @@ export type {
   ExpertReviewFinding,
   ExpertReviewFindingCitation,
   FindingChecklistState,
+  TenantSubscription,
+  TenantUsageCounter,
+  TenantUsageEvent,
+  SalesLead,
+  TrialClaim,
 } from '@prisma/client'

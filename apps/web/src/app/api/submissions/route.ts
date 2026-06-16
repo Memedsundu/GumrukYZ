@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@gumrukyz/db'
 import { z } from 'zod'
 import { requireApiUser } from '@/lib/auth'
+import { getEntitlementBlock } from '@/lib/entitlements'
+import { entitlementError } from '@/lib/api-errors'
 
 const CreateSubmissionSchema = z.object({
   title: z.string().min(1).max(200),
@@ -15,6 +17,9 @@ export async function POST(req: NextRequest) {
     const authResult = await requireApiUser()
     if (authResult.response) return authResult.response
     const { user } = authResult
+
+    const block = await getEntitlementBlock(user.tenantId)
+    if (block) return entitlementError(block)
 
     const body = await req.json() as unknown
     const parsed = CreateSubmissionSchema.safeParse(body)

@@ -27,6 +27,7 @@ import {
   shouldIntegrateExpertReview,
 } from '@/lib/expert-review-display'
 import { getExpertReviewQuota } from '@/lib/expert-review-quota'
+import { willChargeAnalysis } from '@/lib/entitlements'
 import ReportWorkspace, {
   type ReportAiValidationItem,
   type ReportCitationItem,
@@ -146,6 +147,7 @@ export default async function ReportPage({ params }: Props) {
   const expertReview = currentExpertReviews.find(shouldIntegrateExpertReview) ?? currentExpertReviews[0] ?? null
   const expertCounts = countIntegratedExpertFindings(expertReview)
   const expertQuota = await getExpertReviewQuota(user.tenantId)
+  const willChargeReanalysis = await willChargeAnalysis({ tenantId: user.tenantId, submissionId: id })
   const canOverride = canManageTenant(user)
 
   const documents: ReportDocumentItem[] = submission.documents.map((document) => ({
@@ -324,6 +326,7 @@ export default async function ReportPage({ params }: Props) {
       documents={documents}
       findings={findings}
       reportState={reportState}
+      willChargeReanalysis={willChargeReanalysis}
     />
   )
 }

@@ -6,6 +6,8 @@ import { inferDocumentContentType, isSupportedUploadFile } from '@/lib/document-
 import { requireApiUser } from '@/lib/auth'
 import { isProcessingActive, startSubmissionProcessing } from '@/lib/processing-runner'
 import { docTypeLabel } from '@/lib/report-format'
+import { getTenantEntitlements, toEntitlementBlock } from '@/lib/entitlements'
+import { entitlementError } from '@/lib/api-errors'
 
 const ALLOWED_DOC_TYPES = [
   'UNCLASSIFIED',
@@ -30,6 +32,26 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!submission) return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 404 })
     if (isProcessingActive(submission.status) || submission.classificationStatus === 'RUNNING') {
       return NextResponse.json({ error: 'İşlem devam ederken belge yüklenemez' }, { status: 409 })
+    }
+
+    // Read-only when trial/subscription is exhausted; also gates the auto-reprocess
+    // that an upload would trigger.
+    const entitlements = await getTenantEntitlements(user.tenantId)
+    const block = toEntitlementBlock(entitlements)
+    if (block) return entitlementError(block)
+
+    const docCount = await prisma.document.count({
+      where: { submissionId, tenantId: user.tenantId },
+    })
+    if (docCount >= entitlements.documentsPerSubmission) {
+      return NextResponse.json(
+        {
+          error: `Bu pakette her dosyada en fazla ${entitlements.documentsPerSubmission} belge yükleyebilirsiniz.`,
+          code: 'DOCUMENT_LIMIT_REACHED',
+          entitlement: entitlements,
+        },
+        { status: 403 },
+      )
     }
 
     const formData = await req.formData()

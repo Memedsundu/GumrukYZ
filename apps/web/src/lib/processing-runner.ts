@@ -1,5 +1,7 @@
 import { prisma, Prisma } from '@gumrukyz/db'
+import { UsageMetric } from '@gumrukyz/domain'
 import { processSubmission } from './processing'
+import { EntitlementExhaustedError, reserveAnalysisCredit, refundMetric } from './entitlements'
 
 const BLOCKED_PROCESSING_STATUSES = [
   'CLASSIFYING',
@@ -26,6 +28,7 @@ export type StartProcessingResult =
       ok: false
       status: number
       error: string
+      code?: string
     }
 
 export async function startSubmissionProcessing(params: {
@@ -99,6 +102,31 @@ export async function startSubmissionProcessing(params: {
     return { ok: false, status: 409, error: 'İşlem zaten devam ediyor' }
   }
 
+  // Reserve the analysis credit before any work runs. On exhaustion, revert the
+  // job claim cleanly (keeps any prior completed report accessible).
+  try {
+    await reserveAnalysisCredit({ tenantId, submissionId, processingJobId: job.id })
+  } catch (reserveErr) {
+    if (reserveErr instanceof EntitlementExhaustedError) {
+      await prisma
+        .$transaction([
+          prisma.processingJob.delete({ where: { id: job.id } }),
+          prisma.submission.update({
+            where: { id: submissionId },
+            data: { status: submission.status },
+          }),
+        ])
+        .catch(() => {})
+      return {
+        ok: false,
+        status: 429,
+        error: 'Aylık analiz hakkınız doldu. Devam etmek için paketinizi yükseltin.',
+        code: 'ENTITLEMENT_EXHAUSTED',
+      }
+    }
+    throw reserveErr
+  }
+
   if (isTriggerEnabled()) {
     let handle: { id: string }
     try {
@@ -117,6 +145,11 @@ export async function startSubmissionProcessing(params: {
         ? triggerErr.message
         : 'İşleme işi başlatılamadı'
       await failClaimedJob(submissionId, job.id, errorMessage)
+      await refundMetric({
+        metric: UsageMetric.ANALYSIS,
+        processingJobId: job.id,
+        reason: 'trigger_failed',
+      }).catch(() => {})
       throw triggerErr
     }
 

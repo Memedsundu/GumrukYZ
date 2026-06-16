@@ -3,7 +3,7 @@ export type ExpertQuota = {
   used: number
   remaining: number
   usedOn: string
-  period: 'DAILY'
+  period: 'MONTHLY'
 }
 
 export type ReportCounts = {

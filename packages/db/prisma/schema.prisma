@@ -50,8 +50,123 @@ model Tenant {
   expertReviewFindings ExpertReviewFinding[]
   classificationSuggestions DocumentClassificationSuggestion[]
   findingChecklistStates FindingChecklistState[]
+  subscription       TenantSubscription?
+  usageCounters      TenantUsageCounter[]
+  usageEvents        TenantUsageEvent[]
+  salesLeads         SalesLead[]
 
   @@map("tenants")
+}
+
+// ============================================================
+// COMMERCIAL — subscriptions, usage metering, trials, leads
+// ============================================================
+
+// Source of truth for a tenant's commercial state. Tenant.plan is kept as a
+// denormalized fast-read mirror, written only via subscriptionService.
+model TenantSubscription {
+  id                 String    @id @default(uuid())
+  tenantId           String    @unique @map("tenant_id")
+  planCode           String    @map("plan_code") // TenantPlan
+  status             String    @default("trialing") // TenantSubscriptionStatus
+  billingInterval    String    @default("none") @map("billing_interval") // BillingInterval
+  trialStartedAt     DateTime? @map("trial_started_at")
+  trialEndsAt        DateTime? @map("trial_ends_at")
+  trialAnalysisCap   Int?      @map("trial_analysis_cap")
+  currentPeriodStart DateTime? @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  priceSnapshotJson  Json?     @map("price_snapshot_json")
+  limitsOverrideJson Json?     @map("limits_override_json")
+  customNotes        String?   @map("custom_notes")
+  graceUntil         DateTime? @map("grace_until")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([trialEndsAt])
+  @@map("tenant_subscriptions")
+}
+
+// Lazy per-period usage counters keyed by (tenant, metric, periodStart). In
+// Phase 1 these drive display/warnings and trial exhaustion; reservedCount is
+// reserved for Phase 2 atomic reservations (stays 0 until then).
+model TenantUsageCounter {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  metric        String // UsageMetric
+  periodStart   DateTime @map("period_start") @db.Date
+  periodEnd     DateTime @map("period_end") @db.Date
+  usedCount     Int      @default(0) @map("used_count")
+  reservedCount Int      @default(0) @map("reserved_count")
+  limitSnapshot Int?     @map("limit_snapshot")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, metric, periodStart])
+  @@index([tenantId, metric])
+  @@map("tenant_usage_counters")
+}
+
+// Phase 2 reservation/consume/refund ledger tied to jobs & expert reviews.
+model TenantUsageEvent {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  metric          String // UsageMetric
+  action          String // 'reserve' | 'consume' | 'refund'
+  periodStart     DateTime @map("period_start") @db.Date
+  processingJobId String?  @map("processing_job_id")
+  expertReviewId  String?  @map("expert_review_id")
+  submissionId    String?  @map("submission_id")
+  reason          String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, metric, periodStart])
+  @@index([processingJobId])
+  @@index([expertReviewId])
+  @@map("tenant_usage_events")
+}
+
+// Captured sales/upgrade/contact requests (incl. blocked duplicate trials).
+model SalesLead {
+  id            String   @id @default(uuid())
+  kind          String // SalesLeadKind
+  email         String
+  emailDomain   String   @map("email_domain")
+  normalizedOrg String?  @map("normalized_org")
+  requestedPlan String?  @map("requested_plan")
+  clerkUserId   String?  @map("clerk_user_id")
+  tenantId      String?  @map("tenant_id")
+  message       String?
+  metadataJson  Json?    @map("metadata_json")
+  status        String   @default("new")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([emailDomain])
+  @@index([status])
+  @@map("sales_leads")
+}
+
+// Anti-abuse ledger: one trial per business domain, or per owner-email + org
+// for personal domains. Unique claimKey enforces the constraint atomically.
+model TrialClaim {
+  id            String   @id @default(uuid())
+  claimKey      String   @unique @map("claim_key")
+  emailDomain   String   @map("email_domain")
+  ownerEmail    String?  @map("owner_email")
+  normalizedOrg String?  @map("normalized_org")
+  tenantId      String?  @map("tenant_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([emailDomain])
+  @@map("trial_claims")
 }
 
 model User {

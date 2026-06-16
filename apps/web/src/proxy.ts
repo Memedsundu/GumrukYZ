@@ -3,7 +3,9 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const isPublicRoute = createRouteMatcher([
+  '/',
   '/beta',
+  '/ornek-rapor',
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/api/webhooks(.*)',
@@ -26,6 +28,7 @@ const LIMITS: Record<string, number> = {
   '/api/submissions/.*/process': 10, // POST process trigger
   '/api/submissions/.*/expert-review': 6,
   '/api/clients': 60,
+  '/api/sales-leads': 10,         // POST upgrade/contact request
 }
 
 function getRateLimit(pathname: string): number | null {
@@ -64,11 +67,12 @@ function maybeCleanup() {
 export default clerkMiddleware(async (auth, request: NextRequest) => {
   const { pathname } = request.nextUrl
 
-  // Root URL: explicit redirects (avoids 404 when Clerk protect runs before app/page)
+  // Root URL: signed-out visitors see the public welcome/pricing page; signed-in
+  // users are routed into the app.
   if (pathname === '/') {
     const { userId, orgId } = await auth()
-    const dest = !userId ? '/sign-in' : !orgId ? '/onboarding' : '/dashboard'
-    return NextResponse.redirect(new URL(dest, request.url))
+    if (!userId) return
+    return NextResponse.redirect(new URL(orgId ? '/dashboard' : '/onboarding', request.url))
   }
 
   // Rate limiting for POST mutation endpoints

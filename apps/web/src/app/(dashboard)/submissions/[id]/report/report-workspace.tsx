@@ -54,6 +54,8 @@ export type ReportWorkspaceProps = {
   documents: ReportDocumentItem[]
   findings: ReportFindingItem[]
   reportState: ReportState
+  /** Whether replacing a document and re-running analysis will consume a credit. */
+  willChargeReanalysis: boolean
 }
 
 type ChecklistResponse = ReportChecklistState & {
@@ -73,6 +75,7 @@ export default function ReportWorkspace({
   documents,
   findings,
   reportState,
+  willChargeReanalysis,
 }: ReportWorkspaceProps) {
   const [items, setItems] = useState(findings)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
@@ -279,6 +282,13 @@ export default function ReportWorkspace({
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>Bilgilendirme amaçlıdır; bağlayıcı hukuki karar yerine geçmez.</span>
               </p>
+              {!reportState.readonly && (
+                <p className="mt-1 text-xs text-ink-subtle">
+                  {willChargeReanalysis
+                    ? 'Belge değiştirip yeniden analiz başlatmak 1 analiz hakkı kullanır.'
+                    : 'Bu dosyada yeniden analiz ücretsizdir.'}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">

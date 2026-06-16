@@ -1,4 +1,9 @@
-import { DataClassification, TenantPlan } from '@gumrukyz/domain'
+import {
+  BillingInterval,
+  DataClassification,
+  TenantPlan,
+  TenantSubscriptionStatus,
+} from '@gumrukyz/domain'
 import { ALL_RULES } from '@gumrukyz/rules'
 import { prisma } from './client.js'
 import { REGULATION_SOURCE_MANIFEST } from './regulation-source-manifest.js'
@@ -34,6 +39,20 @@ async function main() {
     })
   }
   console.log('Tenant:', internalTenant.name)
+
+  // Internal tenant always has an active subscription (no trial / no limits).
+  // The Phase 1 migration backfills existing tenants; this keeps a freshly
+  // seeded database consistent for the internal tenant created above.
+  await prisma.tenantSubscription.upsert({
+    where: { tenantId: internalTenant.id },
+    update: {},
+    create: {
+      tenantId: internalTenant.id,
+      planCode: TenantPlan.INTERNAL,
+      status: TenantSubscriptionStatus.ACTIVE,
+      billingInterval: BillingInterval.NONE,
+    },
+  })
 
   const adminClerkUserId = process.env['INTERNAL_ADMIN_CLERK_USER_ID']?.trim()
   if (adminClerkUserId) {

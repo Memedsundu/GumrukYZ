@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react'
 import { getExpertReviewQuota } from '@/lib/expert-review-quota'
+import { getEntitlementsState } from '@/lib/entitlements'
 import { Button } from '@/components/ui/button'
 import { StatCard } from '@/components/ui/stat-card'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -61,6 +62,11 @@ export default async function DashboardPage() {
   const expertQuota = await getExpertReviewQuota(user.tenantId)
   const quotaPct = expertQuota.limit > 0 ? Math.round((expertQuota.used / expertQuota.limit) * 100) : 0
 
+  const entitlement = await getEntitlementsState(user.tenantId)
+  const analysisMetric = entitlement.metrics.analysis
+  const analysisPct =
+    analysisMetric.limit > 0 ? Math.round((analysisMetric.used / analysisMetric.limit) * 100) : 0
+
   return (
     <PageShell>
       {/* Hero band */}
@@ -105,7 +111,7 @@ export default async function DashboardPage() {
           icon={Sparkles}
           label="Uzman yapay zeka hakkı"
           value={expertQuota.remaining}
-          sub={`Bugün ${expertQuota.used}/${expertQuota.limit} kullanıldı`}
+          sub={`Bu ay ${expertQuota.used}/${expertQuota.limit} kullanıldı`}
           tone="ai"
         />
       </div>
@@ -194,6 +200,39 @@ export default async function DashboardPage() {
         </Card>
 
         <aside className="space-y-6">
+          {/* Plan & usage */}
+          <Card>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-ink">{entitlement.publicName} paketi</div>
+                {entitlement.isTrial ? <Badge tone="info">Deneme</Badge> : null}
+              </div>
+              {entitlement.isTrial && entitlement.trial ? (
+                <p className="mt-1 text-xs text-ink-muted">{entitlement.trial.daysLeft} gün kaldı</p>
+              ) : null}
+              <p className="mt-3 text-3xl font-bold tracking-tight text-ink">
+                {analysisMetric.used}
+                <span className="ml-1 text-base font-medium text-ink-subtle">
+                  / {analysisMetric.limit} analiz
+                </span>
+              </p>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-muted">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-[width] duration-300',
+                    analysisPct >= 90 ? 'bg-danger-500' : analysisPct >= 70 ? 'bg-warning-500' : 'bg-brand-500',
+                  )}
+                  style={{ width: `${Math.min(100, analysisPct)}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-ink-subtle">
+                {entitlement.isTrial
+                  ? 'Aynı dosyanın yeniden analizleri deneme hakkından düşmez.'
+                  : `Sıfırlama: ${entitlement.resetDate ?? '—'}`}
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Expert quota */}
           <Card>
             <CardContent>
@@ -214,7 +253,7 @@ export default async function DashboardPage() {
                   style={{ width: `${quotaPct}%` }}
                 />
               </div>
-              <p className="mt-2 text-xs text-ink-subtle">Bugün {expertQuota.used} hak kullanıldı.</p>
+              <p className="mt-2 text-xs text-ink-subtle">Bu ay {expertQuota.used} hak kullanıldı.</p>
             </CardContent>
           </Card>
 

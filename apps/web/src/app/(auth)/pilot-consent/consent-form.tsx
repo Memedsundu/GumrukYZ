@@ -31,7 +31,8 @@ export default function PilotConsentForm() {
         throw new Error(data.error ?? 'Onay kaydedilemedi')
       }
 
-      router.push('/dashboard')
+      // Drop new tenants straight into their first analysis.
+      router.push('/submissions/new')
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Bir hata oluştu')

@@ -10,7 +10,7 @@ type Quota = {
   used: number
   remaining: number
   usedOn: string
-  period: 'DAILY'
+  period: 'MONTHLY'
 }
 
 export default function ExpertReviewButton({
@@ -30,10 +30,10 @@ export default function ExpertReviewButton({
   const disabled = loading || currentQuota.remaining <= 0
   const cta = hasCompletedExpertReview
     ? currentQuota.remaining <= 0
-      ? 'Bugünkü uzman yapay zeka hakkı kalmadı'
+      ? 'Uzman yapay zeka inceleme hakkınız kalmadı'
       : 'Uzman yapay zeka incelemesini yenile'
     : currentQuota.remaining <= 0
-      ? 'Bugünkü uzman yapay zeka hakkı kalmadı'
+      ? 'Uzman yapay zeka inceleme hakkınız kalmadı'
       : 'Uzman yapay zeka incelemesi başlat'
 
   async function startExpertReview() {

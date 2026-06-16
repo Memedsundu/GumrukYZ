@@ -49,6 +49,8 @@ import {
   shouldRunOpenAIDocumentReader,
 } from './openai-document-reader'
 import { runAiRuleValidationForSubmission } from './ai-rule-validation'
+import { consumeMetric, refundMetric } from './entitlements'
+import { UsageMetric } from '@gumrukyz/domain'
 
 const LOW_CONFIDENCE_THRESHOLD = RULES_LOW_CONFIDENCE_THRESHOLD
 type DocumentReaderMode = 'hybrid' | 'managed' | 'native'
@@ -909,6 +911,18 @@ export async function processSubmission(
     await supersedeExpertReviewsForNewReport(submissionId, tenantId, jobId)
     await updateJobStatus(jobId, submissionId, 'COMPLETED', 'COMPLETED')
 
+    // Consume the reserved analysis credit. Idempotent per job; never fails the
+    // pipeline. No-op when nothing was reserved (free reanalysis / unmetered).
+    try {
+      await consumeMetric({ metric: UsageMetric.ANALYSIS, processingJobId: jobId })
+    } catch (meterErr) {
+      logger.warn('processSubmission.consume_failed', {
+        submissionId,
+        jobId,
+        error: meterErr instanceof Error ? meterErr.message : String(meterErr),
+      })
+    }
+
     logger.info('processSubmission.complete', {
       submissionId,
       errors,
@@ -927,6 +941,13 @@ export async function processSubmission(
       'FAILED',
       err instanceof Error ? err.message : 'Unknown error',
     ).catch(() => {})
+
+    // System/platform failure before a report was generated → release the credit.
+    await refundMetric({
+      metric: UsageMetric.ANALYSIS,
+      processingJobId: jobId,
+      reason: 'processing_failed',
+    }).catch(() => {})
   }
 }
 

@@ -3,16 +3,20 @@
 import { useState } from 'react'
 import { Sidebar } from './sidebar'
 import { Topbar } from './topbar'
+import { TrialBanner } from './trial-banner'
+import type { EntitlementsState } from '@/lib/entitlements'
 
 const COOKIE = 'sidebar_collapsed'
 
 export function AppShell({
   showAdmin,
   initialCollapsed,
+  entitlement,
   children,
 }: {
   showAdmin: boolean
   initialCollapsed: boolean
+  entitlement: EntitlementsState | null
   children: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -41,6 +45,7 @@ export function AppShell({
           collapsed={collapsed}
           onToggleCollapse={toggleCollapse}
         />
+        <TrialBanner entitlement={entitlement} />
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>

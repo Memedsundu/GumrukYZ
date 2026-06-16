@@ -4,13 +4,21 @@ import type { DocumentType } from '@gumrukyz/domain'
 import type { ExtractionData } from '@gumrukyz/rules'
 import { requireApiUser } from '@/lib/auth'
 import { runExpertReviewForSubmission } from '@/lib/expert-review'
+import { UsageMetric } from '@gumrukyz/domain'
 import {
   ExpertReviewAlreadyRunningError,
-  ExpertReviewQuotaExhaustedError,
   getExpertReviewQuota,
-  refundExpertReviewSlot,
   reserveExpertReviewSlot,
 } from '@/lib/expert-review-quota'
+import {
+  consumeMetric,
+  EntitlementExhaustedError,
+  getEntitlementBlock,
+  getEntitlementsState,
+  refundMetric,
+  reserveMetric,
+} from '@/lib/entitlements'
+import { entitlementError } from '@/lib/api-errors'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -25,9 +33,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { user } = authResult
 
   let reservedReviewId: string | null = null
-  let reservedQuotaDay: string | null = null
+  let creditReserved = false
 
   try {
+    const block = await getEntitlementBlock(user.tenantId)
+    if (block) return entitlementError(block)
+
     const body = await req.json().catch(() => ({})) as { force?: unknown }
     const forceNew = body.force === true
     const input = await loadExpertReviewInput(submissionId, user.tenantId)
@@ -58,7 +69,39 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     reservedReviewId = reservation.reviewId
-    reservedQuotaDay = reservation.quotaDay
+
+    // Reserve the monthly expert-review credit; release the running row on exhaustion.
+    try {
+      await reserveMetric({
+        tenantId: user.tenantId,
+        metric: UsageMetric.EXPERT_REVIEW,
+        expertReviewId: reservation.reviewId,
+      })
+      creditReserved = true
+    } catch (creditErr) {
+      if (creditErr instanceof EntitlementExhaustedError) {
+        await prisma.expertReview
+          .update({
+            where: { id: reservation.reviewId },
+            data: {
+              status: 'ERROR',
+              summary: 'Uzman yapay zeka inceleme hakkınız kalmadı.',
+              completedAt: new Date(),
+            },
+          })
+          .catch(() => null)
+        return NextResponse.json(
+          {
+            error: 'Uzman yapay zeka inceleme hakkınız kalmadı',
+            code: 'ENTITLEMENT_EXHAUSTED',
+            quota: await getExpertReviewQuota(user.tenantId),
+            entitlement: await getEntitlementsState(user.tenantId),
+          },
+          { status: 429 },
+        )
+      }
+      throw creditErr
+    }
 
     const expertReview = await runExpertReviewForSubmission({
       submissionId,
@@ -71,8 +114,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     })
 
     const consumed = expertReview?.status === 'COMPLETED'
-    if (!consumed) {
-      await refundExpertReviewSlot(user.tenantId, reservation.quotaDay)
+    if (consumed) {
+      await consumeMetric({
+        metric: UsageMetric.EXPERT_REVIEW,
+        expertReviewId: reservation.reviewId,
+      })
+    } else {
+      await refundMetric({
+        metric: UsageMetric.EXPERT_REVIEW,
+        expertReviewId: reservation.reviewId,
+        reason: 'review_not_completed',
+      })
     }
 
     return NextResponse.json({
@@ -81,12 +133,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       consumed,
     })
   } catch (error) {
-    if (error instanceof ExpertReviewQuotaExhaustedError) {
-      return NextResponse.json(
-        { error: 'Uzman yapay zeka inceleme hakkınız kalmadı', quota: await getExpertReviewQuota(user.tenantId) },
-        { status: 429 },
-      )
-    }
     if (error instanceof ExpertReviewAlreadyRunningError) {
       return NextResponse.json(
         { error: 'Bu dosya için uzman yapay zeka incelemesi zaten devam ediyor' },
@@ -96,7 +142,13 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     if (reservedReviewId) {
       await Promise.all([
-        refundExpertReviewSlot(user.tenantId, reservedQuotaDay ?? undefined),
+        creditReserved
+          ? refundMetric({
+              metric: UsageMetric.EXPERT_REVIEW,
+              expertReviewId: reservedReviewId,
+              reason: 'review_error',
+            })
+          : Promise.resolve(),
         prisma.expertReview.update({
           where: { id: reservedReviewId },
           data: {

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@gumrukyz/db'
 import { requireProvisionedApiUser } from '@/lib/auth'
-import { PILOT_DISCLAIMER_VERSION } from '@/lib/pilot'
+import { isInternalOrg, PILOT_DISCLAIMER_VERSION } from '@/lib/pilot'
+import { createTrialForTenant } from '@/lib/subscription'
 
 const ConsentSchema = z.object({
   disclaimerVersion: z.string().min(1),
@@ -43,5 +44,25 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  return NextResponse.json({ ok: true, pilotConsentAt: updated.pilotConsentAt })
+  // Start the 14-day Firma trial for new commercial tenants on terms acceptance.
+  // Internal org is exempt; existing tenants with a subscription are a no-op.
+  let trial: { status: 'created' | 'existing' | 'blocked'; reason?: string } | undefined
+  if (!isInternalOrg(user.tenant.clerkOrgId)) {
+    try {
+      const result = await createTrialForTenant({
+        tenantId: user.tenantId,
+        ownerEmail: user.email,
+        orgName: user.tenant.name,
+        clerkUserId: user.clerkUserId,
+      })
+      trial =
+        result.kind === 'blocked'
+          ? { status: 'blocked', reason: result.reason }
+          : { status: result.kind }
+    } catch (err) {
+      console.error('createTrialForTenant failed:', err)
+    }
+  }
+
+  return NextResponse.json({ ok: true, pilotConsentAt: updated.pilotConsentAt, trial })
 }
