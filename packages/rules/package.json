@@ -10,6 +10,7 @@
   },
   "scripts": {
     "test:fixtures": "tsx src/fixture-runner.ts",
+    "test:numeric": "tsx src/numeric-parsing.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "pnpm --workspace-root exec eslint \"$PWD/src\""
   },

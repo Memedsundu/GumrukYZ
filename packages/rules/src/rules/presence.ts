@@ -1,22 +1,22 @@
 import { DocumentType, RuleSeverity, TradeFlow } from '@gumrukyz/domain'
 import type { RuleDefinition, RuleEvaluationResult, SubmissionContext } from '../types.js'
-import { failResult, passResult } from '../helpers.js'
+import { passResult, reviewResult } from '../helpers.js'
 
 export const PRES_001: RuleDefinition = {
   code: 'PRES-001',
-  name: 'Tüm gönderiler için fatura zorunludur',
-  severity: RuleSeverity.ERROR,
+  name: 'Tüm gönderiler için fatura beklenir',
+  severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.INVOICE],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const hasInvoice = ctx.documents.some((d) => d.docType === DocumentType.INVOICE)
     if (hasInvoice) {
-      return passResult(this.code, this.severity, 'Fatura bulundu.')
+      return passResult(this.code, this.severity, 'Beklenen fatura belgesi mevcut.')
     }
-    return failResult(
+    return reviewResult(
       this.code,
       this.severity,
-      'Gönderide fatura bulunamadı. Tüm ithalat ve ihracat işlemleri için fatura zorunludur.',
+      'Beklenen fatura belgesi dosyada yok. Analiz mevcut belgelerle sınırlıdır; fatura eklenmeden beyanname tutarlılığı tam doğrulanamaz.',
       [{ field: 'doc_type', value: DocumentType.INVOICE }],
     )
   },
@@ -24,7 +24,7 @@ export const PRES_001: RuleDefinition = {
 
 export const PRES_003: RuleDefinition = {
   code: 'PRES-003',
-  name: 'İthalatta taşıma belgesi gerekli',
+  name: 'İthalatta taşıma belgesi beklenir',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.TRANSPORT_DOC],
 
@@ -38,12 +38,12 @@ export const PRES_003: RuleDefinition = {
         d.docType === DocumentType.AIRWAY_BILL,
     )
     if (hasTransportDoc) {
-      return passResult(this.code, this.severity, 'Taşıma belgesi bulundu.')
+      return passResult(this.code, this.severity, 'Beklenen taşıma belgesi mevcut.')
     }
-    return failResult(
+    return reviewResult(
       this.code,
       this.severity,
-      'Taşıma belgesi (CMR, B/L, AWB vb.) bulunamadı. İthalat işlemlerinde taşıma belgesi genellikle zorunludur.',
+      'Beklenen taşıma belgesi (CMR, konşimento, AWB vb.) dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
       [{ field: 'doc_type', value: DocumentType.TRANSPORT_DOC }],
     )
   },
@@ -51,7 +51,7 @@ export const PRES_003: RuleDefinition = {
 
 export const PRES_004: RuleDefinition = {
   code: 'PRES-004',
-  name: 'Tercihli tarife talebinde menşe belgesi gerekli',
+  name: 'Tercihli tarife talebinde menşe belgesi beklenir',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.ORIGIN_DOC],
 
@@ -74,14 +74,14 @@ export const PRES_004: RuleDefinition = {
       return passResult(
         this.code,
         this.severity,
-        'Tercihli tarife talebi için menşe belgesi bulundu.',
+        'Tercihli tarife sinyali için beklenen menşe belgesi mevcut.',
       )
     }
 
-    return failResult(
+    return reviewResult(
       this.code,
       this.severity,
-      'Tercihli tarife talebi var ancak menşe belgesi bulunamadı. Lütfen ilgili sertifikayı ekleyin.',
+      'Tercihli tarife sinyali var ancak beklenen menşe belgesi dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
       [{ field: 'doc_type', value: DocumentType.ORIGIN_DOC }],
     )
   },
@@ -96,33 +96,58 @@ export const PRES_005: RuleDefinition = {
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     const decls = ctx.documents.filter((d) => d.docType === DocumentType.DECLARATION_OUTPUT)
     if (decls.length <= 1) {
-      return passResult(this.code, this.severity, 'Tek beyanname belgesi bulundu.')
+      return passResult(this.code, this.severity, 'Beklenen tek beyanname çıktısı mevcut.')
     }
-    return failResult(
+    return reviewResult(
       this.code,
       this.severity,
-      `${decls.length} adet beyanname belgesi bulundu. Bunun bilinçli olduğunu doğrulayın.`,
+      `${decls.length} adet beyanname çıktısı var. Bunun bilinçli olup olmadığını doğrulayın.`,
     )
   },
 }
 
 export const PRES_002: RuleDefinition = {
   code: 'PRES-002',
-  name: 'İthalat için çeki listesi gerekli',
+  name: 'Çeki listesi beklenir',
   severity: RuleSeverity.WARNING,
   appliesToDocTypes: [DocumentType.PACKING_LIST],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    if (ctx.tradeFlow !== TradeFlow.IMPORT) return null
+    if (ctx.tradeFlow !== TradeFlow.IMPORT && ctx.tradeFlow !== TradeFlow.EXPORT) return null
     const hasPackingList = ctx.documents.some((d) => d.docType === DocumentType.PACKING_LIST)
     if (hasPackingList) {
-      return passResult(this.code, this.severity, 'Çeki listesi bulundu.')
+      return passResult(this.code, this.severity, 'Beklenen çeki listesi mevcut.')
     }
-    return failResult(
+    return reviewResult(
       this.code,
       this.severity,
-      'Çeki listesi bulunamadı. İthalat işlemlerinde çeki listesi gereklidir.',
+      ctx.tradeFlow === TradeFlow.IMPORT
+        ? 'Beklenen çeki listesi dosyada yok. Analiz mevcut belgelerle sınırlıdır.'
+        : 'Beklenen çeki listesi dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
       [{ field: 'doc_type', value: DocumentType.PACKING_LIST }],
+    )
+  },
+}
+
+export const PRES_006: RuleDefinition = {
+  code: 'PRES-006',
+  name: 'İhracatta yükleme talimatı beklenir',
+  severity: RuleSeverity.WARNING,
+  appliesToDocTypes: [DocumentType.LOADING_INSTRUCTION],
+
+  evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
+    if (ctx.tradeFlow !== TradeFlow.EXPORT) return null
+    const hasLoadingInstruction = ctx.documents.some(
+      (d) => d.docType === DocumentType.LOADING_INSTRUCTION,
+    )
+    if (hasLoadingInstruction) {
+      return passResult(this.code, this.severity, 'Beklenen yükleme talimatı mevcut.')
+    }
+    return reviewResult(
+      this.code,
+      this.severity,
+      'Beklenen yükleme talimatı dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
+      [{ field: 'doc_type', value: DocumentType.LOADING_INSTRUCTION }],
     )
   },
 }

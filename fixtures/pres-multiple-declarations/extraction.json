@@ -1,6 +1,6 @@
 {
   "_fixture": "pres-multiple-declarations",
-  "_description": "Submission with two declaration output documents — PRES-005 must warn",
+  "_description": "Submission with two declaration output documents — PRES-005 must require review",
   "_tradeFlow": "IMPORT",
   "documents": [
     {
@@ -45,6 +45,6 @@
   ],
   "declarationSnapshot": null,
   "_expectedResults": {
-    "PRES-005": "WARN"
+    "PRES-005": "REVIEW_NEEDED"
   }
 }

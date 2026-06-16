@@ -74,11 +74,12 @@ const FIELD_LABELS: Record<string, string> = {
 
 // Exported for the rule parity check (scripts/check-rule-parity.ts).
 export const PASS_MESSAGES: Record<string, string> = {
-  'PRES-001': 'Fatura belgesi mevcut.',
-  'PRES-002': 'Çeki listesi mevcut.',
-  'PRES-003': 'Taşıma belgesi mevcut.',
-  'PRES-004': 'Tercihli tarife iddiası için menşe belgesi mevcut.',
-  'PRES-005': 'Dosyada tek beyanname çıktısı var.',
+  'PRES-001': 'Beklenen fatura belgesi mevcut.',
+  'PRES-002': 'Beklenen çeki listesi mevcut.',
+  'PRES-003': 'Beklenen taşıma belgesi mevcut.',
+  'PRES-004': 'Tercihli tarife sinyali için beklenen menşe belgesi mevcut.',
+  'PRES-005': 'Beklenen tek beyanname çıktısı mevcut.',
+  'PRES-006': 'Beklenen yükleme talimatı mevcut.',
   'INV-001': 'Fatura numarası mevcut.',
   'INV-002': 'Fatura tarihi geçerli.',
   'INV-003': 'Satıcı ve alıcı bilgileri mevcut.',
@@ -125,11 +126,12 @@ export const PASS_MESSAGES: Record<string, string> = {
 
 // Exported for the rule parity check (scripts/check-rule-parity.ts).
 export const ISSUE_MESSAGES: Record<string, string> = {
-  'PRES-001': 'Dosyada fatura bulunamadı. İthalat/ihracat kontrolü için fatura zorunlu kabul edilir.',
-  'PRES-002': 'İthalat dosyasında çeki listesi bulunamadı. Çeki listesi eklenmeli veya manuel kontrol yapılmalı.',
-  'PRES-003': 'İthalat dosyasında taşıma belgesi bulunamadı. CMR, konşimento, AWB veya benzeri taşıma belgesi kontrol edilmeli.',
-  'PRES-004': 'Tercihli tarife iddiası olabilir; ilgili menşe belgesi dosyada bulunamadı.',
+  'PRES-001': 'Beklenen fatura belgesi dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
+  'PRES-002': 'Beklenen çeki listesi dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
+  'PRES-003': 'Beklenen taşıma belgesi dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
+  'PRES-004': 'Tercihli tarife sinyali var ancak beklenen menşe belgesi dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
   'PRES-005': 'Dosyada birden fazla beyanname çıktısı var. Bunun bilinçli olup olmadığı kontrol edilmeli.',
+  'PRES-006': 'Beklenen yükleme talimatı dosyada yok. Analiz mevcut belgelerle sınırlıdır.',
   'INV-001': 'Fatura numarası eksik.',
   'INV-002': 'Fatura tarihi eksik, okunamadı veya gelecekte görünüyor.',
   'INV-003': 'Faturada satıcı veya alıcı bilgisi eksik.',

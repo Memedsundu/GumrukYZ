@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { classifyDocumentCoverage } from '@gumrukyz/domain'
 import { FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff } from 'lucide-react'
 import {
   isSupportedUploadFile,
@@ -12,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { DocTypeChip } from '@/components/ui/doc-type-chip'
 import { AnimatedCheck } from '@/components/ui/animated-check'
 import { UploadDocsIllustration } from '@/components/illustrations'
+import { DocumentCoverageWarning } from '../report/document-coverage-panel'
 
 const DOC_TYPES = [
   { value: 'INVOICE', label: 'Fatura' },
@@ -135,6 +137,13 @@ export default function DocumentUploadClient({
     documents.some((doc) => !doc.isIgnored && doc.docType === 'UNCLASSIFIED')
   )
   const canProcess = documents.length > 0 && !needsValidation
+  const documentCoverage = useMemo(
+    () => classifyDocumentCoverage({
+      tradeFlow: tradeFlowChoice ?? tradeFlow,
+      uploadedDocTypes: documents.filter((document) => !document.isIgnored).map((document) => document.docType),
+    }),
+    [documents, tradeFlow, tradeFlowChoice],
+  )
   const nextAction = getNextAction({
     documentCount: documents.length,
     classificationStatus,
@@ -644,6 +653,7 @@ export default function DocumentUploadClient({
               <p className="mt-1 text-sm text-ink-muted">
                 {canProcess ? `${documents.length} belge doğrulandı.` : 'Önce sınıflandırmayı doğrulayın.'}
               </p>
+              <DocumentCoverageWarning missingExpectedLabels={documentCoverage.missingExpectedLabels} />
             </div>
             <Button
               onClick={handleProcess}

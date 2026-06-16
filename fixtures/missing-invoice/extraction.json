@@ -1,6 +1,6 @@
 {
   "_fixture": "missing-invoice",
-  "_description": "Import package with no invoice — PRES-001 should FAIL",
+  "_description": "Import package with no invoice — PRES-001 should review",
   "_tradeFlow": "IMPORT",
   "documents": [
     {
@@ -44,7 +44,7 @@
   ],
   "declarationSnapshot": null,
   "_expectedResults": {
-    "PRES-001": "FAIL",
+    "PRES-001": "REVIEW_NEEDED",
     "PRES-002": "PASS"
   }
 }

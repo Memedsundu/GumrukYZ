@@ -23,6 +23,7 @@ import {
   toFiniteNumber,
 } from '@gumrukyz/rules'
 import type { SubmissionContext, ExtractionData } from '@gumrukyz/rules'
+import { classifyDocumentCoverage } from '@gumrukyz/domain'
 import { OpenAIProvider, RISK_SUMMARY_PROMPT_VERSION } from '@gumrukyz/ai'
 import {
   InvoiceExtractionSchema,
@@ -35,6 +36,7 @@ import {
 import { logger } from '@gumrukyz/shared'
 import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
 import type { z } from 'zod'
+import { randomUUID } from 'node:crypto'
 import { extractTextFromPdf } from './pdf-extractor'
 import { runOcrFallback } from './ocr-client'
 import { formatRuleResultMessage } from './report-format'
@@ -680,6 +682,7 @@ export async function processSubmission(
     )
 
     const resultRows = ruleResults.map((r) => ({
+      id: randomUUID(),
       submissionId,
       tenantId,
       processingJobId: jobId,
@@ -712,30 +715,41 @@ export async function processSubmission(
     }> = []
 
     if (resultRows.length > 0) {
-      await prisma.$transaction(async (tx) => {
-        for (const row of resultRows) {
-          const created = await tx.ruleResult.create({ data: row })
-          const citationIds = ruleCitationIdsMap.get(row.ruleCode) ?? []
-          if (citationIds.length > 0) {
-            await tx.ruleResultCitation.createMany({
-              data: citationIds.map((citationId) => ({
-                ruleResultId: created.id,
-                ruleLegalCitationId: citationId,
-              })),
+      const citationRows = resultRows.flatMap((row) =>
+        (ruleCitationIdsMap.get(row.ruleCode) ?? []).map((citationId) => ({
+          ruleResultId: row.id,
+          ruleLegalCitationId: citationId,
+        })),
+      )
+
+      await prisma.ruleResult.createMany({ data: resultRows })
+
+      if (citationRows.length > 0) {
+        try {
+          for (const chunk of chunkArray(citationRows, 100)) {
+            await prisma.ruleResultCitation.createMany({
+              data: chunk,
               skipDuplicates: true,
             })
           }
-          persistedRuleResults.push({
-            id: created.id,
-            ruleCode: row.ruleCode,
-            severity: row.severity,
-            result: row.result,
-            message: row.message,
-            sourceRefsJson: row.sourceRefsJson,
-            legalCitations: ruleCitationDetailsMap.get(row.ruleCode) ?? [],
+        } catch (citationErr) {
+          logger.warn('Rule result citation persistence failed, continuing processing', {
+            submissionId,
+            jobId,
+            error: citationErr instanceof Error ? citationErr.message : String(citationErr),
           })
         }
-      })
+      }
+
+      persistedRuleResults.push(...resultRows.map((row) => ({
+        id: row.id,
+        ruleCode: row.ruleCode,
+        severity: row.severity,
+        result: row.result,
+        message: row.message,
+        sourceRefsJson: row.sourceRefsJson,
+        legalCitations: ruleCitationDetailsMap.get(row.ruleCode) ?? [],
+      })))
     }
 
     // ─── AI_RULE_VALIDATING ───────────────────────────────────────────────────
@@ -795,6 +809,18 @@ export async function processSubmission(
       ...aiRuleValidationFindingsForSummary,
     ]
 
+    const documentCoverage = classifyDocumentCoverage({
+      tradeFlow: submission.tradeFlow,
+      uploadedDocTypes: extractionResults.map((document) => document.docType),
+      documents: extractionResults.map((document) => ({
+        docType: document.docType,
+        data: document.data,
+      })),
+      declarationSnapshot: declarationSnap
+        ? { regimeCode: declarationSnap.regimeCode }
+        : null,
+    })
+
     if (ai.isEnabled() && summaryFindings.length > 0) {
       try {
         // RAG: retrieve relevant regulation chunks to enrich the AI summary
@@ -853,7 +879,17 @@ export async function processSubmission(
         summaryProviderRunId = summaryRun.id
 
         try {
-          const { result, meta } = await ai.generateRiskSummary(summaryFindings, submission.tradeFlow, regulationContext)
+          const { result, meta } = await ai.generateRiskSummary(
+            summaryFindings,
+            submission.tradeFlow,
+            regulationContext,
+            {
+              presentLabels: documentCoverage.presentLabels,
+              missingExpectedLabels: documentCoverage.missingExpectedLabels,
+              missingConditionalLabels: documentCoverage.missingConditionalLabels,
+              limitationNotice: documentCoverage.limitationNotice,
+            },
+          )
           summaryText = result.summary
 
           // Whitelist explanations against the findings we actually sent —
@@ -888,6 +924,16 @@ export async function processSubmission(
           error: err instanceof Error ? err.message : String(err),
         })
       }
+    }
+
+    if (!summaryText && !documentCoverage.isComplete) {
+      const missingLabels = [
+        ...documentCoverage.missingExpectedLabels,
+        ...documentCoverage.missingConditionalLabels,
+      ]
+      summaryText = missingLabels.length > 0
+        ? `${documentCoverage.limitationNotice} Eksik beklenen belgeler: ${missingLabels.join(', ')}.`
+        : documentCoverage.limitationNotice
     }
 
     await prisma.riskReport.create({
@@ -961,6 +1007,14 @@ function getExtractionSchema(docType: DocumentType): z.ZodType<unknown> | null {
     case 'ORIGIN_DOC': return OriginDocExtractionSchema
     default: return null
   }
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
 }
 
 /**

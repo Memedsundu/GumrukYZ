@@ -198,13 +198,16 @@ export const CROSS_002: RuleDefinition = {
     if (plWeight == null || declWeight == null) return null
 
     const pass = withinTolerance(plWeight, declWeight)
+    const decimalScaleMismatch = !pass && looksLikeDecimalScaleMismatch(plWeight, declWeight)
 
     return {
       ruleCode: this.code,
-      severity: this.severity,
-      result: pass ? 'PASS' : 'FAIL',
+      severity: pass || decimalScaleMismatch ? RuleSeverity.WARNING : this.severity,
+      result: pass ? 'PASS' : decimalScaleMismatch ? 'REVIEW_NEEDED' : 'FAIL',
       message: pass
         ? `Çeki listesi brüt ağırlığı (${plWeight} kg) beyanname brüt ağırlığıyla (${declWeight} kg) eşleşiyor.`
+        : decimalScaleMismatch
+          ? `Brüt ağırlık farkı ondalık/binlik ayırıcı okuma hatası olabilir: çeki listesi (${plWeight} kg) ↔ beyanname (${declWeight} kg). Kaynak belgelerde ağırlık alanları manuel doğrulanmalı.`
         : `Çeki listesi brüt ağırlığı (${plWeight} kg) beyanname brüt ağırlığından (${declWeight} kg) ±%1'den fazla farklı.`,
       sourceRefs: pass
         ? []
@@ -447,7 +450,10 @@ export const CROSS_008: RuleDefinition = {
 
     if (plCount == null || declCount == null) return null
 
-    if (plCount === declCount) {
+    const pass = plCount === declCount
+    const decimalScaleMismatch = !pass && looksLikeDecimalScaleMismatch(plCount, declCount)
+
+    if (pass) {
       return {
         ruleCode: this.code,
         severity: this.severity,
@@ -459,9 +465,11 @@ export const CROSS_008: RuleDefinition = {
 
     return {
       ruleCode: this.code,
-      severity: this.severity,
-      result: 'FAIL',
-      message: `Paket sayısı uyuşmazlığı: çeki listesinde ${plCount}, beyannamede ${declCount} paket.`,
+      severity: decimalScaleMismatch ? RuleSeverity.WARNING : this.severity,
+      result: decimalScaleMismatch ? 'REVIEW_NEEDED' : 'FAIL',
+      message: decimalScaleMismatch
+        ? `Kap sayısı farkı ondalık/binlik ayırıcı okuma hatası olabilir: çeki listesi (${plCount}) ↔ beyanname (${declCount}). Kaynak belgelerde kap alanları manuel doğrulanmalı.`
+        : `Paket sayısı uyuşmazlığı: çeki listesinde ${plCount}, beyannamede ${declCount} paket.`,
       sourceRefs: [
         { docType: DocumentType.PACKING_LIST, field: 'package_count', value: plCount },
         { docType: DocumentType.DECLARATION_OUTPUT, field: 'package_count', value: declCount },

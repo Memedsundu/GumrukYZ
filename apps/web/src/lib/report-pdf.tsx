@@ -252,6 +252,26 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
           <Stat label="Geçti" value={payload.counts.passes} tone="success" />
         </View>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Belge kapsamı</Text>
+          <View style={styles.summaryBox}>
+            <Text>{payload.documentCoverage.limitationNotice}</Text>
+            <Text style={styles.sourceRef}>
+              Mevcut belgeler: {payload.documentCoverage.presentLabels.join(', ') || '—'}
+            </Text>
+            {payload.documentCoverage.missingExpectedLabels.length > 0 && (
+              <Text style={styles.sourceRef}>
+                Eksik beklenen belgeler: {payload.documentCoverage.missingExpectedLabels.join(', ')}
+              </Text>
+            )}
+            {payload.documentCoverage.missingConditionalLabels.length > 0 && (
+              <Text style={styles.sourceRef}>
+                Koşullu eksik belgeler: {payload.documentCoverage.missingConditionalLabels.join(', ')}
+              </Text>
+            )}
+          </View>
+        </View>
+
         {payload.report.summaryText && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Dosya Özeti</Text>

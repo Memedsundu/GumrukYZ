@@ -1,4 +1,5 @@
 import { prisma } from '@gumrukyz/db'
+import { buildSubmissionDocumentCoverage } from './document-coverage'
 import {
   formatRuleResultMessage,
   formatSourceRef,
@@ -25,7 +26,13 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
     include: {
       riskReports: { orderBy: { generatedAt: 'desc' }, take: 10 },
       documents: {
-        include: { latestVersion: true },
+        include: {
+          latestVersion: {
+            include: {
+              extractions: { orderBy: { createdAt: 'desc' }, take: 1 },
+            },
+          },
+        },
         orderBy: { createdAt: 'asc' },
       },
       ruleResults: {
@@ -109,6 +116,21 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
 
   const findingExplanations = parseFindingExplanations(currentReport.findingExplanationsJson)
 
+  const declarationSnapshot = await prisma.declarationSnapshot.findFirst({
+    where: {
+      submissionId,
+      tenantId,
+      ...(effectiveReportJobId ? { processingJobId: effectiveReportJobId } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const documentCoverage = buildSubmissionDocumentCoverage({
+    tradeFlow: submission.tradeFlow,
+    documents: submission.documents,
+    declarationSnapshot,
+  })
+
   return {
     generatedAt: new Date().toISOString(),
     submission: {
@@ -143,6 +165,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       fileSizeBytes: document.latestVersion?.fileSizeBytes ?? null,
       uploadedAt: document.latestVersion?.uploadedAt.toISOString() ?? document.createdAt.toISOString(),
     })),
+    documentCoverage,
     counts: {
       errors: ruleResults.filter((result) => result.result === 'FAIL').length,
       warnings: ruleResults.filter((result) => result.result === 'WARN').length + expertCounts.warnings,

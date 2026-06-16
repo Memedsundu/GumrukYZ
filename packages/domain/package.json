@@ -10,9 +10,11 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "pnpm --workspace-root exec eslint \"$PWD/src\""
+    "lint": "pnpm --workspace-root exec eslint \"$PWD/src\"",
+    "test:coverage": "tsx src/document-coverage.test.ts"
   },
   "devDependencies": {
+    "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   }
 }

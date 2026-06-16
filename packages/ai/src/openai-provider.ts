@@ -1,7 +1,7 @@
 import { generateObject, generateText } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
-import type { LlmProvider, DocumentClassificationResult, ExplanationResult, ProviderRunMetadata, RiskSummaryFindingInput } from './provider.js'
+import type { LlmProvider, DocumentClassificationResult, ExplanationResult, ProviderRunMetadata, RiskSummaryCoverageContext, RiskSummaryFindingInput } from './provider.js'
 import type { DocumentType } from '@gumrukyz/domain'
 import { DocumentType as DocTypeEnum, TradeFlow } from '@gumrukyz/domain'
 import { ProviderError, estimateModelCostUsd } from '@gumrukyz/shared'
@@ -42,7 +42,7 @@ const DocumentClassificationSchema = z.object({
  * Bump when the risk summary prompt or schema changes; stored on the
  * risk_summary ProviderRun row so findings can be tied to a prompt revision.
  */
-export const RISK_SUMMARY_PROMPT_VERSION = '2026-06-10.1'
+export const RISK_SUMMARY_PROMPT_VERSION = '2026-06-15.1'
 
 const RiskSummarySchema = z.object({
   summary: z.string(),
@@ -163,6 +163,7 @@ ${rawText.slice(0, 6000)}`,
     findings: RiskSummaryFindingInput[],
     tradeFlow: string,
     regulationContext?: Array<{ title: string; excerpt: string }>,
+    documentCoverage?: RiskSummaryCoverageContext,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }> {
     const client = this.getClient()
     const start = Date.now()
@@ -175,6 +176,14 @@ ${rawText.slice(0, 6000)}`,
       ? `\nİlgili mevzuat bağlamı:\n${regulationContext.map((r) => `• ${r.title}: "${r.excerpt}"`).join('\n')}`
       : ''
 
+    const coverageSection = documentCoverage
+      ? `\nBelge kapsamı:
+- Mevcut belgeler: ${documentCoverage.presentLabels.join(', ') || '—'}
+- Eksik beklenen belgeler: ${documentCoverage.missingExpectedLabels.join(', ') || '—'}
+- Koşullu eksik belgeler: ${documentCoverage.missingConditionalLabels.join(', ') || '—'}
+- Sınırlama: ${documentCoverage.limitationNotice}`
+      : ''
+
     const { object, usage } = await generateObject({
       model: client(this.model),
       schema: RiskSummarySchema,
@@ -182,7 +191,7 @@ ${rawText.slice(0, 6000)}`,
 
 Ticaret akışı: ${tradeFlow}
 Bulgular:
-${findingsList}${regulationSection}
+${findingsList}${regulationSection}${coverageSection}
 
 Kurallar:
 - Tüm alanları Türkçe yaz
@@ -190,6 +199,7 @@ Kurallar:
 - Hukuki hüküm verme ve gümrük işleminin kesin geçeceğini söyleme
 - Bulguların pratikte ne anlama geldiğini açıkla
 - Mevzuat bağlamı verilmişse ilgili maddelere Türkçe atıf yap; kaynak uydurmama
+- Eksik beklenen belgeler varsa özette açıkça belirt ve sonuçların mevcut belgelerle sınırlı olduğunu vurgula; eksik belge olmadığında fazla temkinli olma
 - Genel özeti 2-3 cümleyle sınırla
 - findingExplanations içinde her bulgunun findingId değerini AYNEN kopyala; yeni findingId uydurma`,
     })

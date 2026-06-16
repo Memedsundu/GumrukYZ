@@ -35,8 +35,8 @@
     "currency": "EUR"
   },
   "_expectedResults": {
-    "PRES-003": "WARN",
-    "PRES-004": "WARN",
+    "PRES-003": "REVIEW_NEEDED",
+    "PRES-004": "REVIEW_NEEDED",
     "DECL-001": "PASS",
     "DECL-003": "FAIL",
     "DECL-004": "FAIL",

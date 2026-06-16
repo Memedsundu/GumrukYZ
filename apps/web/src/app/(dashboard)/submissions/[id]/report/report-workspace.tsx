@@ -28,7 +28,9 @@ import OverrideButton from './override-button'
 import ExpertReviewButton from './expert-review-button'
 import { SuggestionChips } from './suggestion-chips'
 import { AssistantChat, type ChatMessage } from './assistant-chat'
+import { DocumentCoveragePanel } from './document-coverage-panel'
 import { buildCategoryCounts, buildReportSources, sortFindings } from './report-filters'
+import type { DocumentCoverageResult } from '@gumrukyz/domain'
 import type {
   ExpertQuota,
   ReportChecklistState,
@@ -58,6 +60,7 @@ export type ReportWorkspaceProps = {
   reportState: ReportState
   /** Whether replacing a document and re-running analysis will consume a credit. */
   willChargeReanalysis: boolean
+  documentCoverage: DocumentCoverageResult
 }
 
 type ChecklistResponse = ReportChecklistState & {
@@ -77,6 +80,7 @@ export default function ReportWorkspace({
   findings,
   reportState,
   willChargeReanalysis,
+  documentCoverage,
 }: ReportWorkspaceProps) {
   const [items, setItems] = useState(findings)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
@@ -348,6 +352,8 @@ export default function ReportWorkspace({
         <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <main className="min-w-0 space-y-6">
             <ReportStateBanner reportState={reportState} submissionId={submissionId} message={replaceMessage} />
+
+            <DocumentCoveragePanel coverage={documentCoverage} />
 
             <ChecklistOverview
               counts={counts}

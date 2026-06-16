@@ -26,7 +26,7 @@ export {
 export { QUAL_001, QUAL_002, QUAL_003, OCR_001 } from './rules/quality.js'
 
 // ── Presence rules ────────────────────────────────────────────────────────────
-export { PRES_001, PRES_002, PRES_003, PRES_004, PRES_005 } from './rules/presence.js'
+export { PRES_001, PRES_002, PRES_003, PRES_004, PRES_005, PRES_006 } from './rules/presence.js'
 
 // ── Invoice rules ─────────────────────────────────────────────────────────────
 export { INV_001, INV_002, INV_003, INV_004, INV_005, INV_006 } from './rules/invoice.js'
@@ -69,7 +69,7 @@ export { EXP_001, EXP_002, EXP_003, EXP_004, EXP_005 } from './rules/export.js'
 import type { RuleDefinition } from './types.js'
 
 import { QUAL_001, QUAL_002, QUAL_003, OCR_001 } from './rules/quality.js'
-import { PRES_001, PRES_002, PRES_003, PRES_004, PRES_005 } from './rules/presence.js'
+import { PRES_001, PRES_002, PRES_003, PRES_004, PRES_005, PRES_006 } from './rules/presence.js'
 import { INV_001, INV_002, INV_003, INV_004, INV_005, INV_006 } from './rules/invoice.js'
 import { PL_001, PL_002 } from './rules/packing-list.js'
 import { GTIP_001, GTIP_002, GTIP_003 } from './rules/gtip.js'
@@ -101,12 +101,13 @@ export const ALL_RULES: RuleDefinition[] = [
   QUAL_002,
   QUAL_003,
   OCR_001,
-  // Presence (5)
+  // Presence (6)
   PRES_001,
   PRES_002,
   PRES_003,
   PRES_004,
   PRES_005,
+  PRES_006,
   // Invoice mandatory fields (6)
   INV_001,
   INV_002,

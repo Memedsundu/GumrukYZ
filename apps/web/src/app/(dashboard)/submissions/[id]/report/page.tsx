@@ -1,4 +1,5 @@
 import { canManageTenant, getAuthenticatedUser } from '@/lib/auth'
+import { buildSubmissionDocumentCoverage } from '@/lib/document-coverage'
 import { prisma, type Prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -148,6 +149,21 @@ export default async function ReportPage({ params }: Props) {
   const expertQuota = await getExpertReviewQuota(user.tenantId)
   const willChargeReanalysis = await willChargeAnalysis({ tenantId: user.tenantId, submissionId: id })
   const canOverride = canManageTenant(user)
+
+  const declarationSnapshot = await prisma.declarationSnapshot.findFirst({
+    where: {
+      submissionId: id,
+      tenantId: user.tenantId,
+      ...(effectiveReportJobId ? { processingJobId: effectiveReportJobId } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const documentCoverage = buildSubmissionDocumentCoverage({
+    tradeFlow: submission.tradeFlow,
+    documents: submission.documents,
+    declarationSnapshot,
+  })
 
   const documents: ReportDocumentItem[] = submission.documents.map((document) => ({
     id: document.id,
@@ -325,6 +341,7 @@ export default async function ReportPage({ params }: Props) {
       findings={findings}
       reportState={reportState}
       willChargeReanalysis={willChargeReanalysis}
+      documentCoverage={documentCoverage}
     />
   )
 }

@@ -47,6 +47,13 @@ export interface ExplanationResult {
   }>
 }
 
+export interface RiskSummaryCoverageContext {
+  presentLabels: string[]
+  missingExpectedLabels: string[]
+  missingConditionalLabels: string[]
+  limitationNotice: string
+}
+
 export interface ProviderRunMetadata {
   provider: string
   model: string
@@ -73,6 +80,7 @@ export interface LlmProvider {
     findings: RiskSummaryFindingInput[],
     tradeFlow: string,
     regulationContext?: Array<{ title: string; excerpt: string }>,
+    documentCoverage?: RiskSummaryCoverageContext,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }>
 
   embedText?(text: string): Promise<number[]>

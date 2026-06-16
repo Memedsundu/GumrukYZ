@@ -1,0 +1,31 @@
+{
+  "_fixture": "cross-002-scale-mismatch",
+  "_description": "Packing list gross weight 1.24 kg vs declaration 1240 kg should review, not hard fail",
+  "_tradeFlow": "IMPORT",
+  "_expectedResults": {
+    "CROSS-002": "REVIEW_NEEDED"
+  },
+  "documents": [
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.95,
+      "data": {
+        "gross_weight": 1.24,
+        "package_count": 12,
+        "goods_description": "Industrial parts"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.95,
+      "data": {
+        "gross_weight": 1240,
+        "package_count": 12
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "totalGrossWeight": 1240,
+    "packageCount": 12
+  }
+}
