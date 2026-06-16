@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle,
@@ -83,10 +83,34 @@ export default function ReportWorkspace({
   documentCoverage,
 }: ReportWorkspaceProps) {
   const [items, setItems] = useState(findings)
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
+  const prevFindingKeysRef = useRef<Set<string>>(new Set(findings.map(findingKey)))
+  const findingsSignature = useMemo(
+    () => findings.map((finding) => `${finding.kind}:${finding.id}:${finding.result}`).join('|'),
+    [findings],
+  )
+
+  useEffect(() => {
+    const prevKeys = prevFindingKeysRef.current
+    const newDefaultOpenKeys = findings
+      .filter((finding) => !prevKeys.has(findingKey(finding)) && finding.defaultOpen)
+      .map(findingKey)
+
+    setItems(findings)
+    prevFindingKeysRef.current = new Set(findings.map(findingKey))
+
+    if (newDefaultOpenKeys.length > 0) {
+      setExpandedKeys((current) => {
+        const next = new Set(current)
+        for (const key of newDefaultOpenKeys) next.add(key)
+        return next
+      })
+    }
+  }, [findingsSignature, findings])
+
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [passesOpen, setPassesOpen] = useState(false)
   const [modalFindingId, setModalFindingId] = useState<string | null>(null)
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(() => new Set())
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [notePendingKeys, setNotePendingKeys] = useState<Set<string>>(() => new Set())

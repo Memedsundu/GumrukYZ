@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { prisma, Prisma } from '@gumrukyz/db'
 import type { DocumentType } from '@gumrukyz/domain'
 import type { ExtractionData } from '@gumrukyz/rules'
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     })
 
     if (reservation.kind === 'existing') {
+      revalidatePath(`/submissions/${submissionId}/report`)
       return NextResponse.json({
         expertReview: await getExpertReviewSummary(reservation.reviewId, user.tenantId),
         quota: await getExpertReviewQuota(user.tenantId),
@@ -126,6 +128,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         reason: 'review_not_completed',
       })
     }
+
+    revalidatePath(`/submissions/${submissionId}/report`)
 
     return NextResponse.json({
       expertReview,
