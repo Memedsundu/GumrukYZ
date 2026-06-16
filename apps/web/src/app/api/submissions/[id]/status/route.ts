@@ -18,6 +18,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     select: {
       id: true,
       status: true,
+      classificationStatus: true,
       processingJobs: {
         orderBy: { updatedAt: 'desc' },
         take: 1,
@@ -42,6 +43,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({
     submissionId: submission.id,
     status: submission.status,
+    classificationStatus: submission.classificationStatus,
     progressPercent: progress.percent,
     progressLabel: progress.label,
     progressDescription: progress.description,

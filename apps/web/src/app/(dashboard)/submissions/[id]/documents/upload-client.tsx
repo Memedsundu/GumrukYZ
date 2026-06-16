@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { classifyDocumentCoverage } from '@gumrukyz/domain'
 import { FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff } from 'lucide-react'
@@ -9,6 +9,8 @@ import {
   SUPPORTED_UPLOAD_ACCEPT,
   SUPPORTED_UPLOAD_LABEL,
 } from '@/lib/document-file-types'
+import { ACTIVE_PROCESSING_STATUSES } from '@/lib/submission-status'
+import { pollSubmissionUntilSettled } from '@/lib/submission-status-poll'
 import { Button } from '@/components/ui/button'
 import { DocTypeChip } from '@/components/ui/doc-type-chip'
 import { AnimatedCheck } from '@/components/ui/animated-check'
@@ -41,6 +43,7 @@ interface ExistingDocument {
 
 interface Props {
   submissionId: string
+  submissionStatus: string
   tradeFlow: string
   classificationStatus: string
   existingDocuments: ExistingDocument[]
@@ -102,11 +105,13 @@ type ProcessingProgressState = {
 
 export default function DocumentUploadClient({
   submissionId,
+  submissionStatus: initialSubmissionStatus,
   tradeFlow,
   classificationStatus: initialClassificationStatus,
   existingDocuments,
 }: Props) {
   const router = useRouter()
+  const resumeStartedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -153,6 +158,72 @@ export default function DocumentUploadClient({
     validating,
     processing,
   })
+
+  useEffect(() => {
+    if (resumeStartedRef.current) return
+
+    const isClassifyActive = initialSubmissionStatus === 'CLASSIFYING' || initialClassificationStatus === 'RUNNING'
+    const isAnalysisActive = ACTIVE_PROCESSING_STATUSES.includes(
+      initialSubmissionStatus as typeof ACTIVE_PROCESSING_STATUSES[number],
+    ) && initialSubmissionStatus !== 'CLASSIFYING'
+
+    if (!isClassifyActive && !isAnalysisActive) return
+
+    resumeStartedRef.current = true
+    let cancelled = false
+
+    async function resume() {
+      if (isClassifyActive) setClassifying(true)
+      if (isAnalysisActive) {
+        setProcessing(true)
+        setProcessingProgress({
+          percent: 8,
+          label: 'Analiz devam ediyor',
+          description: 'Kaldığınız yerden işlem sürüyor.',
+        })
+      }
+
+      try {
+        const result = await pollSubmissionUntilSettled(submissionId, {
+          onUpdate: (data) => {
+            if (cancelled) return
+            setProcessingProgress({
+              percent: data.progressPercent,
+              label: data.progressLabel,
+              description: data.progressDescription,
+            })
+            if (data.classificationStatus === 'AWAITING_VALIDATION') {
+              setClassificationStatus('AWAITING_VALIDATION')
+            }
+          },
+        })
+
+        if (cancelled) return
+
+        if (result.status === 'COMPLETED') {
+          router.push(`/submissions/${submissionId}`)
+          return
+        }
+
+        router.refresh()
+      } catch (err) {
+        if (!cancelled && isAnalysisActive) {
+          setProcessError(err instanceof Error ? err.message : 'İşleme başarısız')
+        }
+      } finally {
+        if (!cancelled) {
+          setClassifying(false)
+          setProcessing(false)
+        }
+      }
+    }
+
+    void resume()
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialSubmissionStatus, initialClassificationStatus, submissionId, router])
 
   async function uploadFile(file: File) {
     setUploading(true)
@@ -312,39 +383,15 @@ export default function DocumentUploadClient({
   }
 
   async function pollSubmissionStatus(): Promise<void> {
-    const maxAttempts = 120
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const res = await fetch(`/api/submissions/${submissionId}/status`)
-      if (!res.ok) {
-        throw new Error('İşlem durumu alınamadı')
-      }
-      const data = await res.json() as {
-        status: string
-        progressPercent?: number
-        progressLabel?: string
-        progressDescription?: string
-        job?: { errorMessage?: string | null }
-      }
-      setProcessingProgress({
-        percent: data.progressPercent ?? 0,
-        label: data.progressLabel ?? 'İşlem sürüyor',
-        description: data.progressDescription ?? 'Tahmini ilerleme alınıyor.',
-      })
-      if (data.status === 'COMPLETED') {
+    await pollSubmissionUntilSettled(submissionId, {
+      onUpdate: (data) => {
         setProcessingProgress({
-          percent: 100,
-          label: 'Tamamlandı',
-          description: 'Analiz tamamlandı; dosya sayfası açılıyor.',
+          percent: data.progressPercent,
+          label: data.progressLabel,
+          description: data.progressDescription,
         })
-        router.push(`/submissions/${submissionId}`)
-        return
-      }
-      if (data.status === 'FAILED') {
-        throw new Error(data.job?.errorMessage ?? 'İşleme başarısız')
-      }
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-    }
-    throw new Error('İşlem zaman aşımına uğradı. Lütfen dosya detayından durumu kontrol edin.')
+      },
+    })
   }
 
   async function handleProcess() {
@@ -364,6 +411,7 @@ export default function DocumentUploadClient({
       }
       if (res.status === 202 || data.async) {
         await pollSubmissionStatus()
+        router.push(`/submissions/${submissionId}`)
         return
       }
       setProcessingProgress({

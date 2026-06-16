@@ -4,6 +4,8 @@ import { prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
 import DocumentUploadClient from './upload-client'
 
+export const dynamic = 'force-dynamic'
+
 interface Props {
   params: Promise<{ id: string }>
 }
@@ -47,6 +49,7 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
 
       <DocumentUploadClient
         submissionId={submission.id}
+        submissionStatus={submission.status}
         tradeFlow={submission.tradeFlow}
         classificationStatus={submission.classificationStatus}
         existingDocuments={submission.documents.map((d) => ({

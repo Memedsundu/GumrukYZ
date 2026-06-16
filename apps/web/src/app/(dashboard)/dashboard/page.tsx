@@ -24,6 +24,7 @@ import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table'
 import { PageShell } from '@/components/ui/page-shell'
 import { EmptyDossierIllustration } from '@/components/illustrations'
 import { submissionStatusConfig, tradeFlowConfig } from '@/lib/status'
+import { submissionResumeHref } from '@/lib/submission-status'
 
 export default async function DashboardPage() {
   const user = await getAuthenticatedUser()
@@ -160,7 +161,7 @@ export default async function DashboardPage() {
                     <TR key={sub.id}>
                       <TD>
                         <Link
-                          href={`/submissions/${sub.id}`}
+                          href={submissionResumeHref(sub.id, sub.status, Boolean(report))}
                           className="font-medium text-brand-600 hover:text-brand-700"
                         >
                           {sub.title}

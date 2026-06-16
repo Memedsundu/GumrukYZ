@@ -4,10 +4,13 @@ import { prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
-import { FileText, Upload, BarChart2, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { FileText, Upload, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { getProcessingProgress } from '@/lib/processing-progress'
 import { Button } from '@/components/ui/button'
 import { DocTypeChip } from '@/components/ui/doc-type-chip'
+import { SubmissionNextStep } from './submission-next-step'
+
+export const dynamic = 'force-dynamic'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -53,20 +56,20 @@ export default async function SubmissionDetailPage({ params }: Props) {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            <SubmissionNextStep
+              submissionId={submission.id}
+              initialStatus={submission.status}
+              initialClassificationStatus={submission.classificationStatus}
+              hasReport={Boolean(latestReport)}
+              variant="header-button"
+              poll={false}
+            />
             <Button asChild variant="outline">
               <Link href={`/submissions/${submission.id}/documents`}>
                 <Upload />
                 Belge Ekle
               </Link>
             </Button>
-            {latestReport && (
-              <Button asChild>
-                <Link href={`/submissions/${submission.id}/report`}>
-                  <BarChart2 />
-                  Risk Raporu
-                </Link>
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -78,6 +81,13 @@ export default async function SubmissionDetailPage({ params }: Props) {
           <div className="rounded-lg border border-line bg-surface p-6">
             <h2 className="mb-4 text-base font-semibold text-ink">İşlem Durumu</h2>
             <ProcessingTimeline status={submission.status} job={latestJob ?? null} />
+            <SubmissionNextStep
+              submissionId={submission.id}
+              initialStatus={submission.status}
+              initialClassificationStatus={submission.classificationStatus}
+              hasReport={Boolean(latestReport)}
+              variant="banner"
+            />
           </div>
 
           {/* Documents */}
@@ -122,6 +132,17 @@ export default async function SubmissionDetailPage({ params }: Props) {
                   </li>
                 ))}
               </ul>
+            )}
+            {(submission.status === 'AWAITING_VALIDATION' || submission.classificationStatus === 'AWAITING_VALIDATION') && (
+              <div className="border-t border-line px-6 py-4">
+                <SubmissionNextStep
+                  submissionId={submission.id}
+                  initialStatus={submission.status}
+                  initialClassificationStatus={submission.classificationStatus}
+                  variant="link"
+                  poll={false}
+                />
+              </div>
             )}
           </div>
         </div>
