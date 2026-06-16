@@ -14,6 +14,7 @@
     "test:coverage": "tsx src/document-coverage.test.ts"
   },
   "devDependencies": {
+    "@types/node": "^20.19.39",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   }
