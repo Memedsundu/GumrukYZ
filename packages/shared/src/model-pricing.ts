@@ -12,7 +12,6 @@ const MODEL_RATES: Array<{ match: RegExp; rates: ModelRates }> = [
   { match: /gpt-5\.5/, rates: { inputUsdPerMTok: 5, outputUsdPerMTok: 30 } },
   { match: /gpt-5\.4-mini/, rates: { inputUsdPerMTok: 0.75, outputUsdPerMTok: 4.5 } },
   { match: /gpt-5-mini/, rates: { inputUsdPerMTok: 0.25, outputUsdPerMTok: 2 } },
-  { match: /gpt-4\.1-mini/, rates: { inputUsdPerMTok: 0.4, outputUsdPerMTok: 1.6 } },
   { match: /gpt-4o/, rates: { inputUsdPerMTok: 2.5, outputUsdPerMTok: 10 } },
   { match: /text-embedding-3-small/, rates: { inputUsdPerMTok: 0.02, outputUsdPerMTok: 0 } },
   { match: /text-embedding-3-large/, rates: { inputUsdPerMTok: 0.13, outputUsdPerMTok: 0 } },

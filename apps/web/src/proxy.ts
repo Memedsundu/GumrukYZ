@@ -27,6 +27,7 @@ const LIMITS: Record<string, number> = {
   '/api/submissions': 30,         // POST new submission
   '/api/submissions/.*/process': 10, // POST process trigger
   '/api/submissions/.*/expert-review': 6,
+  '/api/submissions/.*/assistant': 30, // POST chat question
   '/api/clients': 60,
   '/api/sales-leads': 10,         // POST upgrade/contact request
 }

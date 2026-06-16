@@ -14,6 +14,7 @@ import {
   FileUp,
   Info,
   Loader2,
+  MessageCircleQuestion,
   Save,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,7 @@ import { PassControlsSection } from './findings-list'
 import OverrideButton from './override-button'
 import ExpertReviewButton from './expert-review-button'
 import { SuggestionChips } from './suggestion-chips'
+import { AssistantChat, type ChatMessage } from './assistant-chat'
 import { buildCategoryCounts, buildReportSources, sortFindings } from './report-filters'
 import type {
   ExpertQuota,
@@ -90,6 +92,37 @@ export default function ReportWorkspace({
   const [replacingDocumentIds, setReplacingDocumentIds] = useState<Set<string>>(() => new Set())
   const [replaceErrors, setReplaceErrors] = useState<Record<string, string>>({})
   const [replaceMessage, setReplaceMessage] = useState<string | null>(null)
+
+  const [assistantOpen, setAssistantOpen] = useState(false)
+  const [assistantMessages, setAssistantMessages] = useState<ChatMessage[]>([])
+  const [assistantSending, setAssistantSending] = useState(false)
+  const [assistantError, setAssistantError] = useState<string | null>(null)
+
+  async function askAssistant(prompt: string) {
+    const content = prompt.trim()
+    if (!content || assistantSending) return
+    const history: ChatMessage[] = [...assistantMessages, { role: 'user', content }]
+    setAssistantOpen(true)
+    setAssistantError(null)
+    setAssistantMessages(history)
+    setAssistantSending(true)
+    try {
+      const res = await fetch(`/api/submissions/${submissionId}/assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { answer?: string; error?: string }
+      if (!res.ok || !data.answer) {
+        throw new Error(data.error ?? 'Asistan yanıtı alınamadı.')
+      }
+      setAssistantMessages((prev) => [...prev, { role: 'assistant', content: data.answer as string }])
+    } catch (err) {
+      setAssistantError(err instanceof Error ? err.message : 'Asistan yanıtı alınamadı.')
+    } finally {
+      setAssistantSending(false)
+    }
+  }
 
   const modalFinding = items.find((finding) => finding.id === modalFindingId) ?? null
   const categoryCounts = useMemo(() => buildCategoryCounts(items), [items])
@@ -351,7 +384,10 @@ export default function ReportWorkspace({
                 expertQuota={expertQuota}
                 hasCompletedExpertReview={hasCompletedExpertReview}
               />
-              <SuggestionChips submissionId={submissionId} />
+              <SuggestionChips
+                submissionId={submissionId}
+                onSelectPrompt={(suggestion) => askAssistant(suggestion.prompt_to_assistant)}
+              />
               <ReportSummaryCard summaryText={summaryText} />
               <details className="group rounded-2xl border border-line bg-surface shadow-card">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
@@ -390,7 +426,10 @@ export default function ReportWorkspace({
                 expertQuota={expertQuota}
                 hasCompletedExpertReview={hasCompletedExpertReview}
               />
-              <SuggestionChips submissionId={submissionId} />
+              <SuggestionChips
+                submissionId={submissionId}
+                onSelectPrompt={(suggestion) => askAssistant(suggestion.prompt_to_assistant)}
+              />
               <ReportSummaryCard summaryText={summaryText} />
               <EvidencePanel
                 documents={documents}
@@ -411,6 +450,26 @@ export default function ReportWorkspace({
       </div>
 
       <FindingDetailDialog finding={modalFinding} onClose={() => setModalFindingId(null)} />
+
+      {!assistantOpen && (
+        <button
+          type="button"
+          onClick={() => setAssistantOpen(true)}
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-pop transition-colors hover:bg-brand-700"
+        >
+          <MessageCircleQuestion className="size-5" />
+          GümrükYZ&apos;ye sor
+        </button>
+      )}
+
+      <AssistantChat
+        open={assistantOpen}
+        onClose={() => setAssistantOpen(false)}
+        messages={assistantMessages}
+        sending={assistantSending}
+        error={assistantError}
+        onSend={askAssistant}
+      />
     </div>
   )
 }

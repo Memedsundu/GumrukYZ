@@ -76,6 +76,7 @@ export function SuggestionChips({ submissionId, onSelectPrompt }: SuggestionChip
       <div className="mt-3 flex flex-wrap gap-2">
         {data.suggestions.map((suggestion) => {
           const copied = copiedId === suggestion.id
+          const interactive = Boolean(onSelectPrompt)
           return (
             <button
               key={suggestion.id}
@@ -89,7 +90,13 @@ export function SuggestionChips({ submissionId, onSelectPrompt }: SuggestionChip
                   : 'border-line-strong bg-surface text-ink-soft hover:bg-surface-muted',
               )}
             >
-              {copied ? <Check className="size-3" /> : <Copy className="size-3 text-ink-subtle" />}
+              {copied ? (
+                <Check className="size-3" />
+              ) : interactive ? (
+                <MessageCircleQuestion className="size-3 text-brand-600" />
+              ) : (
+                <Copy className="size-3 text-ink-subtle" />
+              )}
               {copied ? 'Kopyalandı' : suggestion.label}
             </button>
           )
