@@ -364,10 +364,28 @@ export const CROSS_006: RuleDefinition = {
     const pl = ctx.documents.find((d) => d.docType === DocumentType.PACKING_LIST)
 
     if (!invoice || !pl) return null
-    if (!invoice.data['net_weight'] || !pl.data['net_weight']) return null
 
     const invWeight = toFiniteNumber(invoice.data['net_weight'])
     const plWeight = toFiniteNumber(pl.data['net_weight'])
+    const invGrossWeight = toFiniteNumber(invoice.data['gross_weight'])
+    const plGrossWeight = toFiniteNumber(pl.data['gross_weight'])
+
+    if (
+      (invWeight == null || invWeight === 0) &&
+      (plWeight == null || plWeight === 0) &&
+      ((invGrossWeight != null && invGrossWeight > 0) || (plGrossWeight != null && plGrossWeight > 0))
+    ) {
+      return reviewResult(
+        this.code,
+        RuleSeverity.WARNING,
+        'Net ağırlık bilgisi belgelerde bulunamadı; brüt ağırlık net ağırlık olarak kullanılmamalı.',
+        [
+          { docType: DocumentType.INVOICE, field: 'net_weight', value: invoice.data['net_weight'] ?? null },
+          { docType: DocumentType.PACKING_LIST, field: 'net_weight', value: pl.data['net_weight'] ?? null },
+          { docType: DocumentType.PACKING_LIST, field: 'gross_weight', value: plGrossWeight ?? null },
+        ],
+      )
+    }
 
     if (invWeight == null || plWeight == null || invWeight === 0 || plWeight === 0) return null
 

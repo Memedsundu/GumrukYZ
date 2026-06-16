@@ -1,0 +1,122 @@
+{
+  "_fixture": "gross-only-packing-list",
+  "_description": "Gross-only packing list should produce missing-net-weight review without inventing net weight or failing otherwise clean export documents.",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "CROSS-003": "PASS",
+    "CROSS-004": "PASS",
+    "CROSS-005": "PASS",
+    "CROSS-006": "REVIEW_NEEDED",
+    "CROSS-009": "PASS",
+    "DECL-002": "PASS",
+    "EXP-004": "PASS",
+    "INV-001": "PASS",
+    "INV-002": "PASS",
+    "INV-003": "PASS",
+    "INV-004": "PASS",
+    "INV-005": "PASS",
+    "INV-006": "PASS",
+    "PL-001": "PASS",
+    "PL-002": "PASS",
+    "VAL-001": "PASS",
+    "VAL-002": "PASS",
+    "VAL-003": "PASS"
+  },
+  "_expectedAbsentResults": [
+    "CROSS-001",
+    "CROSS-002",
+    "CROSS-007",
+    "CROSS-008",
+    "DECL-001",
+    "DECL-003",
+    "DECL-004",
+    "DECL-005",
+    "EXP-003",
+    "GTIP-001",
+    "GTIP-002",
+    "GTIP-003"
+  ],
+  "_assertNoFailures": true,
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.98,
+      "data": {
+        "invoice_number": "FI2026-00061",
+        "invoice_date": "2026-05-20",
+        "seller_name": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "seller_address": "Kurgusal OSB, Selimpaşa / İstanbul, Türkiye",
+        "buyer_name": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "buyer_address": "ul. Testowa 14, 00-999 Warszawa, Poland",
+        "currency": "EUR",
+        "total_amount": 14400,
+        "incoterm": "DAP",
+        "delivery_place": "Warszawa, Poland",
+        "country_of_origin": "Türkiye / Turkey",
+        "gtip_code": "870829909000",
+        "net_weight": null,
+        "items": [
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "hs_code": "870829909000",
+            "quantity": 180,
+            "unit": "pcs/adet",
+            "unit_price": 80,
+            "total_price": 14400
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.98,
+      "data": {
+        "package_count": 8,
+        "package_type": "wooden boxes on 2 pallets",
+        "gross_weight": 1240,
+        "net_weight": null,
+        "goods_description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+        "shipper": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "consignee": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "items": [
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "quantity": 90,
+            "package_count": 4,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": null,
+            "gross_weight": 620
+          },
+          {
+            "description": "Otobüs havalandırma kanalı aksamı / Bus ventilation duct components",
+            "quantity": 90,
+            "package_count": 4,
+            "package_type": "wooden box",
+            "unit": "pcs/adet",
+            "net_weight": null,
+            "gross_weight": 620
+          }
+        ]
+      }
+    },
+    {
+      "docType": "LOADING_INSTRUCTION",
+      "confidence": 0.98,
+      "data": {
+        "shipper": "Ardelya Bus HVAC Parts A.Ş. (Fictional)",
+        "consignee": "Baltoria Bus Systems Sp. z o.o. (Fictional)",
+        "delivery_address": "Baltoria Test Deposu, Warszawa / Poland",
+        "goods_description": "Otobüs havalandırma kanalı aksamı",
+        "gross_weight": 1240,
+        "net_weight": null,
+        "package_count": 8,
+        "delivery_term": "DAP Warszawa, Poland",
+        "incoterm": "DAP",
+        "loading_port": "Selimpaşa / İstanbul",
+        "discharge_port": "Warszawa / Poland"
+      }
+    }
+  ],
+  "declarationSnapshot": null
+}

@@ -205,7 +205,7 @@ export default async function ReportPage({ params }: Props) {
       explanation: metadata.operationalExplanation,
       message,
       action,
-      blocking: metadata.blocking,
+      blocking: metadata.blocking && result.result === 'FAIL',
       confidence: null,
       sourceRefs: parseSourceRefs(result.sourceRefsJson).map(formatSourceRef),
       citations: result.citations.map((citation): ReportCitationItem => {

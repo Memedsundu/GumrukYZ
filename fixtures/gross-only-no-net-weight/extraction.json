@@ -3,7 +3,7 @@
   "_description": "Gross-only packing list should not produce invoice-vs-packing net-weight failure after extraction sanitization",
   "_tradeFlow": "EXPORT",
   "_expectedResults": {
-    "CROSS-006": null,
+    "CROSS-006": "REVIEW_NEEDED",
     "CROSS-002": "PASS"
   },
   "_assertNoFailures": true,

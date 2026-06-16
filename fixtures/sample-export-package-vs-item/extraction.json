@@ -4,7 +4,7 @@
   "_tradeFlow": "EXPORT",
   "_expectedResults": {
     "CROSS-004": "REVIEW_NEEDED",
-    "CROSS-006": null
+    "CROSS-006": "REVIEW_NEEDED"
   },
   "documents": [
     {

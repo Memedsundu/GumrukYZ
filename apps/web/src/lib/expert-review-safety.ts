@@ -1,9 +1,10 @@
 export const EXPERT_REVIEW_SAFETY_GUARDRAILS = `
 - Deterministik kural PASS ise aynı alan için açık ve farklı belge kanıtı olmadan çelişki üretme.
-- CROSS-008 paket/kap sayısı PASS ise 10 wooden boxes / 3 pallets gibi farklı ambalaj seviyelerini toplayıp 13 kap uyumsuzluğu yazma.
+- CROSS-008 veya PL-001 paket/kap sayısı PASS ise 10 wooden boxes / 3 pallets veya 8 wooden boxes / 2 pallets gibi farklı ambalaj seviyelerini toplayıp 13/10 kap uyumsuzluğu yazma.
 - CMR, konşimento, AWB veya taşıma belgesi eksikliği yalnızca ilgili deterministik belge-varlığı kuralı eksik belge göstermişse ya da dosya metni açıkça bu belgenin beklendiğini söylüyorsa bulgu olabilir.
 - CROSS-003 Incoterm uyumu PASS ise "DAP" ile "DAP Warszawa, Poland" gibi kod ve kod+teslim yeri ifadelerini uyumsuzluk sayma.
 - A.TR, EUR.1, tercihli menşe veya preferential origin uyarısı yalnızca tercihli rejim, tariff_preference=true, A.TR/EUR.1 metni veya açık tercihli tarife talebi varsa üretilebilir.
+- Dosya setinde beyanname yoksa ve deterministik belge-varlığı/kıymet/rejim kuralı bunu non-pass olarak işaretlemediyse, yalnızca beyanname eksik diye REGIME_CHOICE veya VALUATION bulgusu üretme.
 - 870829909000 / 8708 / 870829 otobüs gövde aksamı veya aksesuarı bağlamında makul aday olabilir; nihai teyit için teknik çizim, malzeme, işlev, montaj yeri ve parçanın gövde bileşeni mi HVAC/mekanik parça mı olduğunu gösteren kanıt iste.
 - Aynı GTİP teknik belirsizliğini GTİP_PLAUSIBILITY ve PERMIT_PRODUCT_CONTROL olarak iki ayrı uyarıya bölme; mümkünse tek GTİP teknik teyit bulgusunda birleştir.
 `.trim()
@@ -45,16 +46,18 @@ export function applyExpertReviewSafetyFilters<T extends ExpertReviewSafetyFindi
     if (shouldDropPassedIncotermCompatibilityFinding(finding, context.ruleResults)) return false
     if (shouldDropMissingTransportFinding(finding, context.ruleResults)) return false
     if (shouldDropPreferentialOriginFinding(finding, context)) return false
+    if (shouldDropMissingDeclarationScopeFinding(finding, context)) return false
     if (shouldDropDuplicatePermitFinding(finding, hasGtipPlausibility)) return false
     return true
   })
+  const dedupedFindings = dedupeGtipPlausibilityFindings(findings)
 
-  const changed = findings.length !== review.findings.length
-  const summary = changed ? buildSafetyFilteredSummary(findings) : review.summary
+  const changed = dedupedFindings.length !== review.findings.length
+  const summary = changed ? buildSafetyFilteredSummary(dedupedFindings) : review.summary
   return {
-    overallRisk: normalizeOverallRisk(review.overallRisk, findings, context.ruleResults),
+    overallRisk: normalizeOverallRisk(review.overallRisk, dedupedFindings, context.ruleResults),
     summary,
-    findings,
+    findings: dedupedFindings,
   }
 }
 
@@ -63,7 +66,7 @@ function shouldDropPackageCountFinding(
   ruleResults: ExpertReviewSafetyRuleResult[],
 ): boolean {
   if (finding.area !== 'DOCUMENT_CONSISTENCY') return false
-  if (!hasPassedRule(ruleResults, 'CROSS-008')) return false
+  if (!hasPassedRule(ruleResults, 'CROSS-008') && !hasPassedRule(ruleResults, 'PL-001')) return false
   if (!mentions(finding, /(kap|paket|package|ambalaj|pallet|palet|box|sand[ıi]k)/i)) return false
   return finding.evidence_refs.length > 0 && finding.evidence_refs.every((ref) => {
     const field = normalize(ref.field)
@@ -108,12 +111,51 @@ function shouldDropPreferentialOriginFinding(
   return !hasPreferentialSignal(context.documents)
 }
 
+function shouldDropMissingDeclarationScopeFinding(
+  finding: ExpertReviewSafetyFinding,
+  context: {
+    documents: ExpertReviewSafetyDocument[]
+    ruleResults: ExpertReviewSafetyRuleResult[]
+  },
+): boolean {
+  if (finding.area !== 'REGIME_CHOICE' && finding.area !== 'VALUATION') return false
+  if (context.documents.some((document) => document.docType === 'DECLARATION_OUTPUT')) return false
+  if (!mentions(finding, /(beyanname|declaration|g[üu]mr[üu]k k[ıi]ymeti|customs value|rejim|regime)/i)) {
+    return false
+  }
+  if (!mentions(finding, /(eksik|yok|bulunmuyor|sunulmam[ıi][şs]|missing|not provided|no declaration|absent)/i)) {
+    return false
+  }
+  return !hasAnyNonPassRule(context.ruleResults, [
+    'PRES-005',
+    'DECL-001',
+    'DECL-002',
+    'DECL-003',
+    'DECL-004',
+    'DECL-005',
+    'CROSS-001',
+    'CROSS-007',
+    'CROSS-008',
+    'EXP-003',
+  ])
+}
+
 function shouldDropDuplicatePermitFinding(
   finding: ExpertReviewSafetyFinding,
   hasGtipPlausibility: boolean,
 ): boolean {
   if (!hasGtipPlausibility || finding.area !== 'PERMIT_PRODUCT_CONTROL') return false
   return mentions(finding, /(hvac|ventilation|havaland[ıi]rma|hava kanal[ıi]|8708|870829|teknik|technical)/i)
+}
+
+function dedupeGtipPlausibilityFindings<T extends ExpertReviewSafetyFinding>(findings: T[]): T[] {
+  let sawGtipPlausibility = false
+  return findings.filter((finding) => {
+    if (finding.area !== 'GTIP_PLAUSIBILITY') return true
+    if (sawGtipPlausibility) return false
+    sawGtipPlausibility = true
+    return true
+  })
 }
 
 function normalizeOverallRisk(
@@ -149,13 +191,20 @@ function hasNonPassRule(ruleResults: ExpertReviewSafetyRuleResult[], ruleCode: s
   )
 }
 
+function hasAnyNonPassRule(ruleResults: ExpertReviewSafetyRuleResult[], ruleCodes: string[]): boolean {
+  return ruleCodes.some((ruleCode) => hasNonPassRule(ruleResults, ruleCode))
+}
+
 function hasPreferentialSignal(documents: ExpertReviewSafetyDocument[]): boolean {
   const text = normalize(JSON.stringify(documents.map((document) => document.data)))
   return /tariff_preference"?\s*:\s*true|a\.?\s*t\.?\s*r|eur\.?\s*1|preferential|tercihli|mense ispat|dolasim belgesi/.test(text)
 }
 
 function mentions(finding: ExpertReviewSafetyFinding, pattern: RegExp): boolean {
-  return pattern.test(`${finding.title} ${finding.explanation} ${finding.recommendation}`)
+  const evidence = finding.evidence_refs
+    .map((ref) => `${ref.docType ?? ''} ${ref.field ?? ''} ${ref.value ?? ''}`)
+    .join(' ')
+  return pattern.test(`${finding.title} ${finding.explanation} ${finding.recommendation} ${evidence}`)
 }
 
 function normalize(value: unknown): string {

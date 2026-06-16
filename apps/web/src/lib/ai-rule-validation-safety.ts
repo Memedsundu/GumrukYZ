@@ -1,8 +1,10 @@
 export const AI_RULE_VALIDATION_SAFETY_GUARDRAILS = `
 - Farklı ambalaj seviyelerini toplama: "5 wooden boxes / 2 pallets" değeri 7 kap anlamına gelmez.
+- Aynı kural "8 wooden boxes / 2 pallets" için de geçerlidir: kap sayısı 8'dir, 10 değildir.
 - CROSS-008 veya PL-001 PASS ise paket/kap sayısı için POTENTIAL_FALSE_NEGATIVE üretme; aynı alan ve aynı birimde açık çelişki gerekir.
 - Deterministik kural PASS ise yalnızca açık, aynı alan ve aynı birim kanıtı varsa POTENTIAL_FALSE_NEGATIVE üret.
 - Incoterm kodu ile teslim yeri birlikte yazılabilir: "DAP" ile "DAP Warszawa, Poland" uyumludur.
+- PRES-006 PASS ve yapılandırılmış yükleme talimatı alanları mevcutsa, yalnızca _native_text_length=0 veya ilk metin okuma sinyaline dayanarak "yükleme talimatı içeriği doğrulanamadı" bulgusu üretme.
 `.trim()
 
 export type AiRuleValidationSafetyItem = {
@@ -33,6 +35,7 @@ export function applyAiRuleValidationSafetyFilters<T extends AiRuleValidationSaf
   return validations.filter((validation) => {
     if (shouldDropPackageCountAdvisory(validation, ruleResults, byId)) return false
     if (shouldDropPassedIncotermAdvisory(validation, ruleResults, byId)) return false
+    if (shouldDropUnverifiedLoadingInstructionAdvisory(validation, ruleResults, byId)) return false
     return true
   })
 }
@@ -72,6 +75,30 @@ function shouldDropPassedIncotermAdvisory(
   if (rule?.result !== 'PASS' && rule?.ruleCode !== 'CROSS-003') return false
   if (!mentions(validation, /(incoterm|teslim|dap|delivery)/i)) return false
   return mentions(validation, /(dap|warszawa|poland|teslim yeri|delivery place)/i)
+}
+
+function shouldDropUnverifiedLoadingInstructionAdvisory(
+  validation: AiRuleValidationSafetyItem,
+  ruleResults: AiRuleValidationSafetyRuleResult[],
+  byId: Map<string, AiRuleValidationSafetyRuleResult>,
+): boolean {
+  if (validation.status === 'LIKELY_CORRECT') return false
+  if (!hasPassedRule(ruleResults, 'PRES-006')) return false
+
+  const rule = byId.get(validation.rule_result_id)
+  if (rule?.result !== 'PASS' && rule?.ruleCode !== 'PRES-006') return false
+  if (!mentions(validation, /(yükleme talimat[ıi]|loading instruction|unverified|do[ğg]rulanamad[ıi]|native text)/i)) {
+    return false
+  }
+
+  return validation.evidence_refs.length > 0 &&
+    validation.evidence_refs.every((ref) => {
+      const field = normalize(ref.field)
+      return field === '_native_text_length' ||
+        field === '_native_text_confidence' ||
+        field === '_final_extraction_confidence' ||
+        field === '_extraction_method'
+    })
 }
 
 function hasPassedRule(ruleResults: AiRuleValidationSafetyRuleResult[], ruleCode: string): boolean {

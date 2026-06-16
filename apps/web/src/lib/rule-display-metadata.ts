@@ -293,7 +293,7 @@ export const RULE_METADATA: Record<string, RuleDisplayMetadata> = {
     category: 'Ağırlık',
     turkishTitle: 'Net ağırlık uyumu',
     operationalExplanation: 'Fatura ve çeki listesi net ağırlıkları uyumlu olmalıdır.',
-    recommendedAction: 'Net ağırlık, birim ve ambalaj hariç/dahil ayrımını kontrol edin.',
+    recommendedAction: 'Net ağırlığı tedarikçiden/çeki listesinden doğrulayın; brüt ağırlığı net yerine kullanmayın.',
     blocking: true,
   },
   'CROSS-007': {

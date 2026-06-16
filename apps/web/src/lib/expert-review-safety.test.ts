@@ -26,6 +26,8 @@ const valuationFinding: ExpertReviewSafetyFinding = {
 
 function testGuardrailsMentionCleanExportFalsePositives() {
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /CROSS-008/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /PL-001/)
+  assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /8 wooden boxes \/ 2 pallets/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /CMR/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /DAP Warszawa, Poland/)
   assert.match(EXPERT_REVIEW_SAFETY_GUARDRAILS, /A\.TR/)
@@ -131,10 +133,86 @@ function testDropsPassedIncotermNoiseButKeepsValuationAndGtip() {
   assert.equal(filtered.overallRisk, 'HIGH')
 }
 
+function testDropsGrossOnlyFalseNoiseButKeepsMissingNetAndGtip() {
+  const missingNetFinding: ExpertReviewSafetyFinding = {
+    area: 'DOCUMENT_CONSISTENCY',
+    title: 'Net ağırlık belgelerde açık değil',
+    explanation: 'Belgelerde brüt ağırlık 1.240 kg olarak var; net ağırlık etiketi veya değeri görünmüyor.',
+    recommendation: 'Net ağırlık çeki listesinden veya tedarikçiden doğrulanmalı; brüt ağırlık net yerine kullanılmamalı.',
+    evidence_refs: [
+      { docType: 'PACKING_LIST', field: 'gross_weight', value: '1240' },
+      { docType: 'PACKING_LIST', field: 'net_weight', value: null },
+    ],
+  }
+
+  const filtered = applyExpertReviewSafetyFilters(
+    {
+      overallRisk: 'MEDIUM',
+      summary: 'Paket, beyanname ve net ağırlık yorumları var.',
+      findings: [
+        gtipFinding,
+        {
+          area: 'DOCUMENT_CONSISTENCY',
+          title: 'Kap adedi belgelerde aynı değil',
+          explanation: 'Çeki listesinde 8 kap, yükleme talimatında 8 wooden boxes / 2 pallets toplam 10 kap görünüyor.',
+          recommendation: 'Paket ve palet toplamı kontrol edilmeli.',
+          evidence_refs: [
+            { docType: 'PACKING_LIST', field: 'package_count', value: '8' },
+            { docType: 'LOADING_INSTRUCTION', field: 'package_count', value: '10' },
+          ],
+        },
+        {
+          area: 'REGIME_CHOICE',
+          title: 'Beyanname eksik olduğu için rejim teyidi yok',
+          explanation: 'Dosyada declaration bulunmuyor; rejim seçimi doğrulanamadı.',
+          recommendation: 'Beyanname eklenmeli.',
+          evidence_refs: [],
+        },
+        {
+          area: 'VALUATION',
+          title: 'Gümrük kıymeti beyanname yokluğu nedeniyle görülemiyor',
+          explanation: 'Declaration not provided, customs value missing.',
+          recommendation: 'Beyanname kıymeti yüklenmelidir.',
+          evidence_refs: [],
+        },
+        missingNetFinding,
+      ],
+    },
+    {
+      documents: [
+        {
+          docType: 'INVOICE',
+          data: { total_amount: 14400, country_of_origin: 'Türkiye / Turkey' },
+        },
+        {
+          docType: 'PACKING_LIST',
+          data: { package_count: 8, gross_weight: 1240, net_weight: null },
+        },
+        {
+          docType: 'LOADING_INSTRUCTION',
+          data: { package_count: 8, gross_weight: 1240, net_weight: null },
+        },
+      ],
+      ruleResults: [
+        { ruleCode: 'PL-001', result: 'PASS' },
+        { ruleCode: 'CROSS-006', result: 'REVIEW_NEEDED' },
+        { ruleCode: 'PRES-005', result: 'PASS' },
+      ],
+    },
+  )
+
+  assert.deepEqual(filtered.findings.map((finding) => finding.area), [
+    'GTIP_PLAUSIBILITY',
+    'DOCUMENT_CONSISTENCY',
+  ])
+  assert.equal(filtered.findings[1]?.title, missingNetFinding.title)
+}
+
 const tests = [
   testGuardrailsMentionCleanExportFalsePositives,
   testDropsUnsupportedFindingsButKeepsGtipReview,
   testDropsPassedIncotermNoiseButKeepsValuationAndGtip,
+  testDropsGrossOnlyFalseNoiseButKeepsMissingNetAndGtip,
 ]
 
 let failed = 0

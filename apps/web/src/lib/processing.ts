@@ -41,6 +41,7 @@ import { extractTextFromPdf } from './pdf-extractor'
 import { runOcrFallback } from './ocr-client'
 import { formatRuleResultMessage } from './report-format'
 import { enhanceDeclarationOutputFromText } from './declaration-text-fallback'
+import { enhanceLoadingInstructionFromText } from './loading-instruction-text-fallback'
 import {
   type AzureDocumentIntelligenceResult,
   isAzureDocumentIntelligenceEnabled,
@@ -1133,6 +1134,10 @@ function enhanceStructuredDataFromText(
         })
       }
     }
+  }
+
+  if (docType === 'LOADING_INSTRUCTION') {
+    Object.assign(next, enhanceLoadingInstructionFromText(next, rawText))
   }
 
   if (docType === 'DECLARATION_OUTPUT') {

@@ -7,8 +7,10 @@ import {
 
 function testGuardrailsMentionPackageAndIncotermSemantics() {
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /5 wooden boxes \/ 2 pallets/)
+  assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /8 wooden boxes \/ 2 pallets/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /CROSS-008/)
   assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /DAP Warszawa, Poland/)
+  assert.match(AI_RULE_VALIDATION_SAFETY_GUARDRAILS, /_native_text_length/)
 }
 
 function testDropsPackageCountFalseNegativeWhenPackageRulePassed() {
@@ -32,6 +34,51 @@ function testDropsPackageCountFalseNegativeWhenPackageRulePassed() {
     { id: 'cross-002-pass', ruleCode: 'CROSS-002', result: 'PASS' },
     { id: 'cross-008-pass', ruleCode: 'CROSS-008', result: 'PASS' },
     { id: 'pl-001-pass', ruleCode: 'PL-001', result: 'PASS' },
+  ])
+
+  assert.equal(filtered.length, 0)
+}
+
+function testDropsMixedPackageLevelsWhenPackingRulePassed() {
+  const validations: AiRuleValidationSafetyItem[] = [
+    {
+      rule_result_id: 'pl-001-pass',
+      status: 'POTENTIAL_FALSE_NEGATIVE',
+      confidence: 0.7,
+      explanation: 'PL-001 geçti ancak yükleme talimatında 8 wooden boxes / 2 pallets toplam 10 paket gibi görünüyor.',
+      recommendation: 'Paket sayısı 10 olarak tekrar kontrol edilmeli.',
+      evidence_refs: [
+        { docType: 'LOADING_INSTRUCTION', field: 'package_count', value: '10' },
+        { docType: 'PACKING_LIST', field: 'package_count', value: '8' },
+      ],
+    },
+  ]
+
+  const filtered = applyAiRuleValidationSafetyFilters(validations, [
+    { id: 'pl-001-pass', ruleCode: 'PL-001', result: 'PASS' },
+  ])
+
+  assert.equal(filtered.length, 0)
+}
+
+function testDropsNativeTextOnlyLoadingInstructionUnverifiedFinding() {
+  const validations: AiRuleValidationSafetyItem[] = [
+    {
+      rule_result_id: 'pres-006-pass',
+      status: 'POTENTIAL_FALSE_NEGATIVE',
+      confidence: 0.67,
+      explanation:
+        'Yükleme talimatı mevcut görünüyor ancak _native_text_length=0 olduğu için loading instruction content unverified.',
+      recommendation: 'Yükleme talimatı içeriği yeniden doğrulanmalı.',
+      evidence_refs: [
+        { docType: 'LOADING_INSTRUCTION', field: '_native_text_length', value: '0' },
+        { docType: 'LOADING_INSTRUCTION', field: '_native_text_confidence', value: '0' },
+      ],
+    },
+  ]
+
+  const filtered = applyAiRuleValidationSafetyFilters(validations, [
+    { id: 'pres-006-pass', ruleCode: 'PRES-006', result: 'PASS' },
   ])
 
   assert.equal(filtered.length, 0)
@@ -63,6 +110,8 @@ function testKeepsValuationLikelyCorrectSupport() {
 const tests = [
   testGuardrailsMentionPackageAndIncotermSemantics,
   testDropsPackageCountFalseNegativeWhenPackageRulePassed,
+  testDropsMixedPackageLevelsWhenPackingRulePassed,
+  testDropsNativeTextOnlyLoadingInstructionUnverifiedFinding,
   testKeepsValuationLikelyCorrectSupport,
 ]
 
