@@ -8,6 +8,11 @@ const PackageBreakdownSchema = z.object({
 const InvoiceReferenceSchema = z.object({
   number: z.string().nullable(),
   free_of_charge: z.boolean().nullable(),
+  source: z.string().nullable().optional(),
+  source_text: z.string().nullable().optional(),
+  tps_ref: z.string().nullable().optional(),
+  line_number: z.number().nullable().optional(),
+  role: z.enum(['MAIN', 'FOC', 'UNKNOWN']).nullable().optional(),
 })
 
 // ─── Invoice extraction schema ───────────────────────────────────────────────
@@ -26,6 +31,8 @@ export const InvoiceExtractionSchema = z.object({
   delivery_place: z.string().nullable(),
   country_of_origin: z.string().nullable(),
   gtip_code: z.string().nullable(),
+  free_of_charge: z.boolean().nullable(),
+  invoice_refs: z.array(InvoiceReferenceSchema).nullable(),
   net_weight: z.number().nullable(),
   items: z
     .array(
@@ -84,6 +91,7 @@ export const LoadingInstructionExtractionSchema = z.object({
   net_weight: z.number().nullable(),
   package_count: z.number().nullable(),
   package_breakdown: z.array(PackageBreakdownSchema).nullable(),
+  country_of_origin: z.string().nullable(),
   delivery_term: z.string().nullable(),
   incoterm: z.string().nullable(),
   loading_port: z.string().nullable(),
@@ -120,8 +128,16 @@ export const DeclarationItemExtractionSchema = z.object({
   unit: z.string().nullable(),
   net_weight: z.number().nullable(),
   gross_weight: z.number().nullable(),
+  package_count: z.number().nullable(),
   value: z.number().nullable(),
+  customs_value: z.number().nullable(),
+  statistical_value: z.number().nullable(),
+  fob_value: z.number().nullable(),
   currency: z.string().nullable(),
+  origin_country: z.string().nullable(),
+  country_of_origin: z.string().nullable(),
+  invoice_refs: z.array(InvoiceReferenceSchema).nullable(),
+  free_of_charge: z.boolean().nullable(),
 })
 
 export type DeclarationItemExtraction = z.infer<typeof DeclarationItemExtractionSchema>
@@ -137,11 +153,16 @@ export const DeclarationOutputExtractionSchema = z.object({
   regime_code: z.string().nullable(),
   gtip_code: z.string().nullable(),
   goods_description: z.string().nullable(),
+  origin_country: z.string().nullable(),
+  country_of_origin: z.string().nullable(),
   package_count: z.number().nullable(),
   package_breakdown: z.array(PackageBreakdownSchema).nullable(),
   gross_weight: z.number().nullable(),
   net_weight: z.number().nullable(),
   total_value: z.number().nullable(),
+  fob_value: z.number().nullable(),
+  statistical_value: z.number().nullable(),
+  customs_value: z.number().nullable(),
   currency: z.string().nullable(),
   incoterm: z.string().nullable(),
   invoice_refs: z.array(InvoiceReferenceSchema).nullable(),

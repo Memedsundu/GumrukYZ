@@ -12,6 +12,8 @@ import {
 } from './report-format'
 import {
   countIntegratedExpertFindings,
+  expertReviewDisplayStatus,
+  expertReviewStatusMessage,
   mergeReportSummaryText,
   parseExpertEvidenceRefs,
   parseExpertGtipCandidates,
@@ -95,6 +97,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
         findings: visibleExpertFindings,
       }
     : null
+  const expertStatus = expertReviewDisplayStatus(expertReview, visibleExpertFindings)
   const expertCounts = countIntegratedExpertFindings(visibleExpertReview)
   const mergedSummaryText = mergeReportSummaryText(currentReport.summaryText, visibleExpertReview)
   const mergedWarnings = currentReport.totalWarnings + expertCounts.warnings
@@ -165,6 +168,8 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
         totalReviewNeeded: currentReport.totalReviewNeeded,
       },
       expertIncluded: Boolean(visibleExpertReview),
+      expertReviewStatus: expertStatus,
+      expertReviewStatusMessage: expertReviewStatusMessage(expertStatus),
     },
     documents: submission.documents.map((document) => ({
       id: document.id,

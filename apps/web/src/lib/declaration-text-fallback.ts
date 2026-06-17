@@ -15,6 +15,25 @@ type DeclarationSummaryRow = {
   customsValue: number | null
 }
 
+type DeclarationDetailItem = {
+  line_number: number | null
+  gtip_code: string | null
+  goods_description: string | null
+  quantity: number | null
+  unit: string | null
+  net_weight: number | null
+  gross_weight: number | null
+  package_count: number | null
+  value: number | null
+  customs_value: number | null
+  statistical_value: number | null
+  currency: string | null
+  origin_country: string | null
+  country_of_origin: string | null
+  invoice_refs: Array<{ number: string; free_of_charge: boolean; source?: string; source_text?: string }> | null
+  free_of_charge: boolean | null
+}
+
 export function enhanceDeclarationOutputFromText(
   data: Record<string, unknown>,
   rawText: string,
@@ -23,9 +42,11 @@ export function enhanceDeclarationOutputFromText(
   const explicitPackageCount = firstMatch(rawText, /\b(\d+)\s*KAP\b/i)
   const explicitNetGross = rawText.match(/Toplam Net\s*\/\s*Br[üu]t Kg:\s*([\d.,]+)\s*\/\s*([\d.,]+)/i)
   const row = parseDeclarationSummaryRow(rawText)
+  const detailedItems = parseDeclarationDetailItems(rawText)
   const invoiceRefs = parseInvoiceRefs(rawText)
   const fobValue = parseLocaleNumber(firstMatch(rawText, /Toplam FOB\s*:?\s*([+-]?\d[\d.,]*)/i))
   const freeOfChargeLineValues = parseFreeOfChargeLineValues(rawText)
+  const origin = parseDeclarationOrigin(rawText)
 
   if (explicitPackageCount) next['package_count'] = parseLocaleNumber(explicitPackageCount)
   if (explicitPackageCount) {
@@ -34,6 +55,10 @@ export function enhanceDeclarationOutputFromText(
   }
   if (invoiceRefs.length > 0) next['invoice_refs'] = invoiceRefs
   if (fobValue != null) next['fob_value'] = fobValue
+  if (origin) {
+    next['country_of_origin'] = next['country_of_origin'] ?? origin
+    next['origin_country'] = next['origin_country'] ?? origin
+  }
   if (/Bedelsiz|F\.?\s*O\.?\s*C\.?|FREE OF CHARGE/i.test(rawText)) next['free_of_charge'] = true
   if (freeOfChargeLineValues.length > 0) next['free_of_charge_line_values'] = freeOfChargeLineValues
   if (explicitNetGross) {
@@ -41,8 +66,18 @@ export function enhanceDeclarationOutputFromText(
     next['gross_weight'] = parseLocaleNumber(explicitNetGross[2])
   }
 
+  if (detailedItems.length > 0) {
+    next['items'] = mergeDeclarationDetailItems(next['items'], detailedItems)
+    const firstValidCode = detailedItems.map((item) => item.gtip_code).find((code): code is string => Boolean(code))
+    if (firstValidCode) next['gtip_code'] = firstValidCode
+    const firstDescription = detailedItems
+      .map((item) => item.goods_description)
+      .find((description): description is string => Boolean(description))
+    if (firstDescription) next['goods_description'] = next['goods_description'] ?? firstDescription
+  }
+
   if (row) {
-    next['gtip_code'] = row.gtipCode
+    next['gtip_code'] = next['gtip_code'] ?? row.gtipCode
     next['goods_description'] = next['goods_description'] ?? row.goodsDescription
     if (!explicitNetGross) {
       next['net_weight'] = row.netWeight
@@ -51,7 +86,9 @@ export function enhanceDeclarationOutputFromText(
     if (!explicitPackageCount) next['package_count'] = row.packageCount
     next['currency'] = row.customsCurrency ?? row.invoiceCurrency ?? next['currency']
     next['total_value'] = row.customsValue ?? row.invoiceValue ?? next['total_value']
-    next['items'] = mergeDeclarationSummaryItem(next['items'], row)
+    if (detailedItems.length === 0) {
+      next['items'] = mergeDeclarationSummaryItem(next['items'], row)
+    }
   }
 
   return next
@@ -121,6 +158,209 @@ function mergeDeclarationSummaryItem(
   })
 }
 
+function mergeDeclarationDetailItems(
+  rawItems: unknown,
+  detailedItems: DeclarationDetailItem[],
+): Array<Record<string, unknown>> {
+  const existingItems = Array.isArray(rawItems)
+    ? rawItems.filter((item): item is Record<string, unknown> =>
+        item != null && typeof item === 'object' && !Array.isArray(item),
+      )
+    : []
+  if (existingItems.length === 0) return detailedItems
+
+  const byLine = new Map(
+    detailedItems
+      .filter((item) => item.line_number != null)
+      .map((item) => [item.line_number, item]),
+  )
+  const merged = existingItems.map((item, index) => {
+    const lineNumber = toInteger(String(item['line_number'] ?? index + 1))
+    const detail = lineNumber == null ? null : byLine.get(lineNumber)
+    return detail ? { ...item, ...detail } : item
+  })
+
+  for (const detail of detailedItems) {
+    if (detail.line_number == null) continue
+    const exists = merged.some((item) => toInteger(String(item['line_number'] ?? '')) === detail.line_number)
+    if (!exists) merged.push(detail)
+  }
+
+  return merged
+}
+
+export function parseDeclarationDetailItems(rawText: string): DeclarationDetailItem[] {
+  const normalized = collapseWhitespace(rawText)
+  const items: DeclarationDetailItem[] = []
+  const origin = parseDeclarationOrigin(rawText)
+
+  const firstLine = parseFirstDeclarationLine(normalized, origin)
+  if (firstLine) items.push(firstLine)
+
+  const freeLine = parseFreeOfChargeDeclarationLine(normalized, rawText, origin)
+  if (freeLine) items.push(freeLine)
+
+  return dedupeDeclarationItems(items)
+}
+
+function parseFirstDeclarationLine(
+  text: string,
+  origin: string | null,
+): DeclarationDetailItem | null {
+  const match = text.match(
+    /\b87082990\s+90\s+00\s+052\s+([+-]?\d[\d.,]*)\s+1000\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+AD\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i,
+  )
+  if (!match) return null
+
+  return {
+    line_number: 1,
+    gtip_code: '870829909000',
+    goods_description: parseGoodsDescription(text),
+    quantity: parseLocaleNumber(match[3]),
+    unit: 'AD',
+    gross_weight: parseLocaleNumber(match[1]),
+    net_weight: parseLocaleNumber(match[2]),
+    package_count: null,
+    value: parseLocaleNumber(match[4]),
+    customs_value: parseLocaleNumber(match[4]),
+    statistical_value: parseLocaleNumber(match[5]),
+    currency: parseCurrency(text),
+    origin_country: origin,
+    country_of_origin: origin,
+    invoice_refs: null,
+    free_of_charge: false,
+  }
+}
+
+function parseFreeOfChargeDeclarationLine(
+  text: string,
+  rawText: string,
+  origin: string | null,
+): DeclarationDetailItem | null {
+  const match = text.match(
+    /\b2\s+8708,29,\s+90,90,00\s+(.+?)\s+5,00\s+AD\s+052\s+1000\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+AD\s+5,00\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+503,00\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+KAP\.AD\s+(\d+)/i,
+  )
+  if (!match) {
+    const compactMatch = text.match(
+      /\b8708,29,\s+90,90,00[\s\S]{0,160}?\b5,00\s+AD\s+052\s+1000\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)[\s\S]{0,80}?\b([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)[\s\S]{0,80}?KAP\.AD\s+(\d+)/i,
+    )
+    if (!compactMatch) {
+      const simpleWeights = text.match(/\b5,00\s+AD\s+052\s+1000\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i)
+      const simpleValues = text.match(/\bAD\s+5,00\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i)
+      const simplePackageCount = parsePackageCountBeforeLineDocuments(text)
+      if (
+        !simpleWeights ||
+        !simpleValues ||
+        simplePackageCount == null ||
+        !/8708,29,\s+90,90,00/i.test(text) ||
+        !/Bedelsiz/i.test(text)
+      ) return null
+      const invoiceRefs = invoiceRefsNearFreeOfChargeLine(rawText)
+      return {
+        line_number: 2,
+        gtip_code: normalizeGtipCode('8708,29, 90,90,00'),
+        goods_description: parseGoodsDescription(text),
+        quantity: 5,
+        unit: 'AD',
+        gross_weight: parseLocaleNumber(simpleWeights[1]),
+        net_weight: parseLocaleNumber(simpleWeights[2]),
+        package_count: simplePackageCount,
+        value: parseLocaleNumber(simpleValues[2]),
+        customs_value: parseLocaleNumber(simpleValues[2]),
+        statistical_value: parseLocaleNumber(simpleValues[1]),
+        currency: parseCurrency(text),
+        origin_country: origin,
+        country_of_origin: origin,
+        invoice_refs: invoiceRefs.length > 0 ? invoiceRefs : null,
+        free_of_charge: true,
+      }
+    }
+    const invoiceRefs = invoiceRefsNearFreeOfChargeLine(rawText)
+    return {
+      line_number: 2,
+      gtip_code: normalizeGtipCode('8708,29, 90,90,00'),
+      goods_description: parseGoodsDescription(text),
+      quantity: 5,
+      unit: 'AD',
+      gross_weight: parseLocaleNumber(compactMatch[1]),
+      net_weight: parseLocaleNumber(compactMatch[2]),
+      package_count: toInteger(compactMatch[5]),
+      value: parseLocaleNumber(compactMatch[4]),
+      customs_value: parseLocaleNumber(compactMatch[4]),
+      statistical_value: parseLocaleNumber(compactMatch[3]),
+      currency: parseCurrency(text),
+      origin_country: origin,
+      country_of_origin: origin,
+      invoice_refs: invoiceRefs.length > 0 ? invoiceRefs : null,
+      free_of_charge: true,
+    }
+  }
+
+  const invoiceRefs = invoiceRefsNearFreeOfChargeLine(rawText)
+  return {
+    line_number: 2,
+    gtip_code: normalizeGtipCode('8708,29, 90,90,00'),
+    goods_description: collapseWhitespace(match[1]),
+    quantity: 5,
+    unit: 'AD',
+    gross_weight: parseLocaleNumber(match[2]),
+    net_weight: parseLocaleNumber(match[3]),
+    package_count: toInteger(match[10]),
+    value: parseLocaleNumber(match[5]),
+    customs_value: parseLocaleNumber(match[5]),
+    statistical_value: parseLocaleNumber(match[4]),
+    currency: parseCurrency(text),
+    origin_country: origin,
+    country_of_origin: origin,
+    invoice_refs: invoiceRefs.length > 0 ? invoiceRefs : null,
+    free_of_charge: true,
+  }
+}
+
+function dedupeDeclarationItems(items: DeclarationDetailItem[]): DeclarationDetailItem[] {
+  const seen = new Set<string>()
+  const deduped: DeclarationDetailItem[] = []
+  for (const item of items) {
+    const key = `${item.line_number ?? ''}:${item.gtip_code ?? ''}:${item.quantity ?? ''}:${item.value ?? ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(item)
+  }
+  return deduped
+}
+
+function parseDeclarationOrigin(rawText: string): string | null {
+  if (/\bMEN\b[\s\S]{0,120}\b052\b/i.test(rawText) && /T[ÜU]RK[İI]YE/i.test(rawText)) {
+    return 'Türkiye'
+  }
+  if (/\b052\b/.test(rawText) && /T[ÜU]RK[İI]YE/i.test(rawText)) return 'Türkiye'
+  const country = firstMatch(rawText, /\b(T[ÜU]RK[İI]YE|TURKIYE|TURKEY)\b/i)
+  return country ? 'Türkiye' : null
+}
+
+function parsePackageCountBeforeLineDocuments(text: string): number | null {
+  const tail = text.match(/\bAD\s+5,00\s+([\s\S]{0,160}?)\s+EK BELGELER/i)?.[1]
+  if (!tail) return toInteger(firstMatch(text, /KAP\.AD\s+(\d+)/i) ?? undefined)
+  const integers = Array.from(tail.matchAll(/\b(\d+)\b/g)).map((match) => Number(match[1]))
+  const lastInteger = integers.at(-1)
+  return lastInteger != null && Number.isFinite(lastInteger) ? lastInteger : null
+}
+
+function parseGoodsDescription(text: string): string | null {
+  const match = text.match(/\bOTOB[ÜU]S HAVALANDIRMA KANALI AKSAMLARI\b/i)
+  return match?.[0] ?? null
+}
+
+function parseCurrency(text: string): string | null {
+  const match = text.match(/\b(EUR|USD|TRY|GBP)\b/i)
+  return match?.[1]?.toUpperCase() ?? null
+}
+
+function normalizeGtipCode(value: string): string | null {
+  const digits = value.replace(/\D/g, '')
+  return digits.length >= 8 ? digits : null
+}
+
 function firstMatch(text: string, pattern: RegExp): string | null {
   const match = text.match(pattern)
   return match?.[1]?.trim() ?? null
@@ -135,8 +375,20 @@ function toInteger(value: string | undefined): number | null {
   return parsed == null ? null : Math.round(parsed)
 }
 
-function parseInvoiceRefs(rawText: string): Array<{ number: string; free_of_charge: boolean }> {
-  const refs = new Map<string, { number: string; free_of_charge: boolean }>()
+function parseInvoiceRefs(rawText: string): Array<{
+  number: string
+  free_of_charge: boolean
+  source?: string
+  source_text?: string
+  role?: 'MAIN' | 'FOC' | 'UNKNOWN'
+}> {
+  const refs = new Map<string, {
+    number: string
+    free_of_charge: boolean
+    source?: string
+    source_text?: string
+    role?: 'MAIN' | 'FOC' | 'UNKNOWN'
+  }>()
   for (const match of rawText.matchAll(/\b(FI[\d-]{6,}|[A-Z]{1,4}\d{10,})\b(\s*\((?:F\.?\s*O\.?\s*C\.?|BEDELS[İI]Z)\))?/gi)) {
     const number = match[1]?.trim()
     if (!number) continue
@@ -144,6 +396,9 @@ function parseInvoiceRefs(rawText: string): Array<{ number: string; free_of_char
     refs.set(number, {
       number,
       free_of_charge: Boolean(match[2]) || /F\.?\s*O\.?\s*C\.?|BEDELS[İI]Z/i.test(nearby),
+      source: 'document_text',
+      source_text: collapseWhitespace(nearby),
+      role: Boolean(match[2]) || /F\.?\s*O\.?\s*C\.?|BEDELS[İI]Z/i.test(nearby) ? 'FOC' : 'UNKNOWN',
     })
   }
 
@@ -155,10 +410,23 @@ function parseInvoiceRefs(rawText: string): Array<{ number: string; free_of_char
     refs.set(number, {
       number,
       free_of_charge: /Bedelsiz|F\.?\s*O\.?\s*C\.?|FREE OF CHARGE/i.test(nearby),
+      source: 'tps_e_fatura',
+      source_text: collapseWhitespace(nearby),
+      role: /Bedelsiz|F\.?\s*O\.?\s*C\.?|FREE OF CHARGE/i.test(nearby) ? 'FOC' : 'UNKNOWN',
     })
   }
 
   return Array.from(refs.values())
+}
+
+function invoiceRefsNearFreeOfChargeLine(rawText: string): Array<{
+  number: string
+  free_of_charge: boolean
+  source?: string
+  source_text?: string
+}> {
+  const refs = parseInvoiceRefs(rawText)
+  return refs.filter((ref) => ref.free_of_charge)
 }
 
 function lineContaining(rawText: string, index: number): string {

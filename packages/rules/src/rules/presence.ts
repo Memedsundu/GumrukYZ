@@ -15,17 +15,21 @@ export const PRES_001: RuleDefinition = {
   appliesToDocTypes: [DocumentType.INVOICE],
 
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
-    const hasInvoice = ctx.documents.some((d) => d.docType === DocumentType.INVOICE)
-    if (hasInvoice) {
+    const uploadedInvoiceNumbers = collectUploadedInvoiceNumbers(ctx)
+    const hasInvoice = uploadedInvoiceNumbers.size > 0 || ctx.documents.some((d) => d.docType === DocumentType.INVOICE)
+    const invoiceRefs = collectInvoiceReferences(ctx)
+    const missingRefs = invoiceRefs.filter((ref) => !uploadedInvoiceNumbers.has(normalizeInvoiceNumber(ref.number)))
+
+    if (hasInvoice && missingRefs.length === 0) {
       return passResult(this.code, this.severity, 'Beklenen fatura belgesi mevcut.')
     }
-    const invoiceRefs = collectInvoiceReferences(ctx)
-    if (invoiceRefs.length > 0) {
+
+    if (missingRefs.length > 0) {
       return reviewResult(
         this.code,
         this.severity,
-        `Referans verilen fatura(lar) dosyada yok: ${formatInvoiceReferences(invoiceRefs)}. Analiz mevcut belgelerle sınırlıdır; bu faturalar eklenmeden kıymet, bedelsiz ve taraf tutarlılığı tam doğrulanamaz.`,
-        invoiceRefs.map((ref) => ({
+        `Referans verilen fatura(lar) dosyada yok: ${formatInvoiceReferences(missingRefs)}. Analiz mevcut belgelerle sınırlıdır; bu faturalar eklenmeden kıymet, bedelsiz ve taraf tutarlılığı tam doğrulanamaz.`,
+        missingRefs.map((ref) => ({
           docType: ref.docType,
           field: 'invoice_refs',
           value: ref.freeOfCharge ? `${ref.number} (F.O.C)` : ref.number,
@@ -49,19 +53,21 @@ function collectInvoiceReferences(ctx: SubmissionContext): InvoiceReferenceEvide
       for (const rawRef of rawRefs) {
         if (!rawRef || typeof rawRef !== 'object' || Array.isArray(rawRef)) continue
         const ref = rawRef as Record<string, unknown>
-        const number = String(ref['number'] ?? '').trim()
-        if (!number) continue
+        const number = normalizeInvoiceNumber(ref['number'])
+        if (!looksLikeCommercialInvoiceNumber(number)) continue
         refs.set(number, {
           docType: doc.docType,
           number,
-          freeOfCharge: ref['free_of_charge'] === true,
+          freeOfCharge: ref['free_of_charge'] === true || /F\.?\s*O\.?\s*C\.?|BEDELSIZ|BEDELSİZ/.test(number),
         })
       }
     }
 
+    if (ctx.documents.some((document) => document.docType === DocumentType.INVOICE)) continue
+
     for (const field of ['related_invoice', 'invoice_number', 'invoice_no']) {
-      const number = String(doc.data[field] ?? '').trim()
-      if (!number || doc.docType === DocumentType.INVOICE) continue
+      const number = normalizeInvoiceNumber(doc.data[field])
+      if (!looksLikeCommercialInvoiceNumber(number) || doc.docType === DocumentType.INVOICE) continue
       refs.set(number, {
         docType: doc.docType,
         number,
@@ -70,6 +76,26 @@ function collectInvoiceReferences(ctx: SubmissionContext): InvoiceReferenceEvide
     }
   }
   return Array.from(refs.values())
+}
+
+function collectUploadedInvoiceNumbers(ctx: SubmissionContext): Set<string> {
+  return new Set(
+    ctx.documents
+      .filter((d) => d.docType === DocumentType.INVOICE)
+      .map((d) => normalizeInvoiceNumber(d.data['invoice_number']))
+      .filter((number) => looksLikeCommercialInvoiceNumber(number)),
+  )
+}
+
+function normalizeInvoiceNumber(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+}
+
+function looksLikeCommercialInvoiceNumber(value: unknown): boolean {
+  return /^FI[A-Z0-9-]{6,}$/.test(normalizeInvoiceNumber(value))
 }
 
 function formatInvoiceReferences(refs: InvoiceReferenceEvidence[]): string {

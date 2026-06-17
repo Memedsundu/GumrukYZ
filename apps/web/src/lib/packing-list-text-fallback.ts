@@ -50,6 +50,7 @@ export function enhancePackingListFromText(
         ...item,
         ...(fields.itemPackageCounts[index] != null ? { package_count: fields.itemPackageCounts[index] } : {}),
         ...(fields.itemQuantities[index] != null ? { quantity: fields.itemQuantities[index] } : {}),
+        ...(fields.itemQuantities.length === 0 && fields.itemPackageCounts[index] != null ? { quantity: null } : {}),
       }
     })
   } else if (fields.itemQuantities.length > 0) {

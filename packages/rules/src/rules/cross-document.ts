@@ -94,6 +94,78 @@ function normalizeCurrencyCode(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null
 }
 
+type InvoiceReference = {
+  number: string
+  freeOfCharge: boolean
+  docType?: string
+}
+
+function normalizeInvoiceNumber(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+}
+
+function looksLikeCommercialInvoiceNumber(value: unknown): boolean {
+  return /^FI[A-Z0-9-]{6,}$/.test(normalizeInvoiceNumber(value))
+}
+
+function collectCommercialInvoiceReferences(ctx: SubmissionContext): InvoiceReference[] {
+  const refs = new Map<string, InvoiceReference>()
+  const hasUploadedInvoice = ctx.documents.some((doc) => doc.docType === DocumentType.INVOICE)
+
+  for (const doc of ctx.documents) {
+    const rawRefs = doc.data['invoice_refs']
+    if (Array.isArray(rawRefs)) {
+      for (const rawRef of rawRefs) {
+        if (!rawRef || typeof rawRef !== 'object' || Array.isArray(rawRef)) continue
+        const ref = rawRef as Record<string, unknown>
+        const number = normalizeInvoiceNumber(ref['number'])
+        if (!looksLikeCommercialInvoiceNumber(number)) continue
+        refs.set(number, {
+          number,
+          freeOfCharge: ref['free_of_charge'] === true || /F\.?\s*O\.?\s*C\.?|BEDELSIZ|BEDELSİZ/.test(number),
+          docType: doc.docType,
+        })
+      }
+    }
+
+    if (hasUploadedInvoice) continue
+
+    for (const field of ['related_invoice', 'invoice_number', 'invoice_no']) {
+      if (doc.docType === DocumentType.INVOICE) continue
+      const number = normalizeInvoiceNumber(doc.data[field])
+      if (!looksLikeCommercialInvoiceNumber(number)) continue
+      refs.set(number, {
+        number,
+        freeOfCharge: /F\.?\s*O\.?\s*C\.?|BEDELSIZ|BEDELSİZ/.test(String(doc.data[field] ?? '').toUpperCase()),
+        docType: doc.docType,
+      })
+    }
+  }
+
+  return Array.from(refs.values())
+}
+
+function collectUploadedInvoiceNumbers(ctx: SubmissionContext): Set<string> {
+  return new Set(
+    ctx.documents
+      .filter((doc) => doc.docType === DocumentType.INVOICE)
+      .map((doc) => normalizeInvoiceNumber(doc.data['invoice_number']))
+      .filter((number) => looksLikeCommercialInvoiceNumber(number)),
+  )
+}
+
+function missingCommercialInvoiceReferences(ctx: SubmissionContext): InvoiceReference[] {
+  const uploaded = collectUploadedInvoiceNumbers(ctx)
+  return collectCommercialInvoiceReferences(ctx).filter((ref) => !uploaded.has(ref.number))
+}
+
+function formatInvoiceRefs(refs: InvoiceReference[]): string {
+  return refs.map((ref) => ref.freeOfCharge ? `${ref.number} (F.O.C)` : ref.number).join(', ')
+}
+
 export const CROSS_001: RuleDefinition = {
   code: 'CROSS-001',
   name: 'Fatura toplam tutarı beyanname toplam tutarıyla eşleşmeli',
@@ -105,6 +177,23 @@ export const CROSS_001: RuleDefinition = {
     const snap = ctx.declarationSnapshot
 
     if (invoices.length === 0 || !snap?.totalValue) return null
+
+    const missingRefs = missingCommercialInvoiceReferences(ctx)
+    if (missingRefs.length > 0) {
+      return reviewResult(
+        this.code,
+        RuleSeverity.WARNING,
+        `Beyanname toplam kıymeti yüklenen fatura toplamıyla karşılaştırılmadı; referans verilen fatura(lar) eksik: ${formatInvoiceRefs(missingRefs)}. Kısmi fatura setiyle tüm beyanname kıymeti hakkında kesin uyumsuzluk sonucu üretilmemeli.`,
+        [
+          ...missingRefs.map((ref) => ({
+            docType: ref.docType,
+            field: 'invoice_refs',
+            value: ref.freeOfCharge ? `${ref.number} (F.O.C)` : ref.number,
+          })),
+          { docType: DocumentType.DECLARATION_OUTPUT, field: 'total_value', value: snap.totalValue },
+        ],
+      )
+    }
 
     const declAmt = toFiniteNumber(snap.totalValue)
     if (declAmt == null) return null
@@ -268,14 +357,27 @@ export const CROSS_004: RuleDefinition = {
 
     if (!invoice || !pl) return null
 
+    const missingRefs = missingCommercialInvoiceReferences(ctx)
+    if (missingRefs.length > 0) return null
+
     const invoiceItems = invoice.data['items'] as Array<{ quantity?: number | null; unit?: string | null }> | null | undefined
-    const plItems = pl.data['items'] as Array<{ quantity?: number | null }> | null | undefined
+    const plItems = pl.data['items'] as Array<{ quantity?: number | null; unit?: string | null; package_type?: string | null }> | null | undefined
 
     if (!invoiceItems || invoiceItems.length === 0) return null
     if (!plItems || plItems.length === 0) return null
 
-    const invTotal = invoiceItems.reduce((sum, item) => sum + (toFiniteNumber(item.quantity) || 0), 0)
-    const plTotal = plItems.reduce((sum, item) => sum + (toFiniteNumber(item.quantity) || 0), 0)
+    const invoiceQuantityItems = invoiceItems.filter((item) => !isPackageUnit(item.unit) && toFiniteNumber(item.quantity) != null)
+    const packingQuantityItems = plItems.filter((item) => {
+      const quantity = toFiniteNumber(item.quantity)
+      if (quantity == null) return false
+      if (isPackageUnit(item.unit)) return false
+      return true
+    })
+
+    if (invoiceQuantityItems.length === 0 || packingQuantityItems.length === 0) return null
+
+    const invTotal = invoiceQuantityItems.reduce((sum, item) => sum + (toFiniteNumber(item.quantity) || 0), 0)
+    const plTotal = packingQuantityItems.reduce((sum, item) => sum + (toFiniteNumber(item.quantity) || 0), 0)
 
     if (invTotal === 0 || plTotal === 0) return null
 
@@ -375,14 +477,23 @@ export const CROSS_006: RuleDefinition = {
       (plWeight == null || plWeight === 0) &&
       ((invGrossWeight != null && invGrossWeight > 0) || (plGrossWeight != null && plGrossWeight > 0))
     ) {
+      const declarationNetWeight =
+        toFiniteNumber(ctx.declarationSnapshot?.totalNetWeight) ??
+        toFiniteNumber(ctx.documents.find((d) => d.docType === DocumentType.DECLARATION_OUTPUT)?.data['net_weight'])
+      const message = declarationNetWeight != null && declarationNetWeight > 0
+        ? `Fatura ve çeki listesinde net ağırlık bulunamadı; beyannamede ${declarationNetWeight} kg net ağırlık görünüyor. Ticari destek belgelerinde net ağırlık manuel doğrulanmalı, brüt ağırlık net ağırlık olarak kullanılmamalı.`
+        : 'Net ağırlık bilgisi fatura/çeki listesi belgelerinde bulunamadı; brüt ağırlık net ağırlık olarak kullanılmamalı.'
       return reviewResult(
         this.code,
         RuleSeverity.WARNING,
-        'Net ağırlık bilgisi belgelerde bulunamadı; brüt ağırlık net ağırlık olarak kullanılmamalı.',
+        message,
         [
           { docType: DocumentType.INVOICE, field: 'net_weight', value: invoice.data['net_weight'] ?? null },
           { docType: DocumentType.PACKING_LIST, field: 'net_weight', value: pl.data['net_weight'] ?? null },
           { docType: DocumentType.PACKING_LIST, field: 'gross_weight', value: plGrossWeight ?? null },
+          ...(declarationNetWeight != null
+            ? [{ docType: DocumentType.DECLARATION_OUTPUT, field: 'net_weight', value: declarationNetWeight }]
+            : []),
         ],
       )
     }
@@ -485,14 +596,10 @@ export const CROSS_008: RuleDefinition = {
     if (packageBreakdownTotal != null && packageBreakdownTotal === declCount) {
       return {
         ruleCode: this.code,
-        severity: RuleSeverity.WARNING,
-        result: 'REVIEW_NEEDED',
-        message: `Kap sayısı beyannameyle ambalaj kırılımı üzerinden uzlaşıyor (${packageBreakdownTotal}), ancak çeki listesi ana package_count alanı ${plCount} olarak çıkarılmış. Palet/koli ayrımı kaynak belgeden manuel doğrulanmalı.`,
-        sourceRefs: [
-          { docType: DocumentType.PACKING_LIST, field: 'package_count', value: plCount },
-          { docType: DocumentType.PACKING_LIST, field: 'package_breakdown', value: packageBreakdownTotal },
-          { docType: DocumentType.DECLARATION_OUTPUT, field: 'package_count', value: declCount },
-        ],
+        severity: this.severity,
+        result: 'PASS',
+        message: `Kap sayısı ambalaj kırılımı üzerinden beyannameyle eşleşiyor: çeki listesi kırılımı ${packageBreakdownTotal}, beyanname ${declCount} KAP.`,
+        sourceRefs: [],
       }
     }
 

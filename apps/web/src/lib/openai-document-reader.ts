@@ -124,6 +124,9 @@ Rules:
 - Preserve document numbers, tax IDs, currency codes, dates, totals, weights, package counts, HS/GTIP codes, and party names exactly where possible.
 - For tables, read item rows and totals carefully.
 - For customs declarations (beyanname), read each kalem (line item) row into items[] with its own GTİP code, goods description, quantity, weights and value. Leave items null only when no line-item table is visible.
+- For customs declarations, wrapped GTİP values such as "8708,29," on one line and "90,90,00" on the next are one code: 870829909000. Keep the full reconstructed code in gtip_code, not the partial first line.
+- Preserve declaration value labels separately when visible: KAL.FİYAT, İST.KIYMET, FOB, customs/statistical values, and line-level values. Do not compare a partial invoice to the whole declaration total.
+- Preserve invoice references from packing lists and declarations. Commercial invoice numbers like FI62026000000062 are not the same as TPS/e-fatura technical references. Mark F.O.C/Bedelsiz references only when the label is visible.
 - Parse locale number formats carefully: "980.00" and "980,00" mean 980; "1,185.00" and "1.185,00" mean 1185. Do not drop decimal separators in a way that turns 980.00 into 98000.
 - For packing-list item rows, separate package_count from product quantity. If a row says "4 boxes" and "Quantity Inside 53 pcs", set item.package_count=4 and item.quantity=53.
 - For packing lists, pieces/adet, boxes/sandık, and pallets/palet are different unit categories. "480 pcs/adet in 12 wooden boxes on 3 pallets" means item quantity 480 and package_count 12; do not set package_count to 480, 3, or 15. If a table explicitly lists pallets as package rows and has Total/TOPLAM packages, use that explicit total and preserve package_breakdown.
@@ -132,6 +135,7 @@ Rules:
 - For loading instructions too, package_count is the declared box/package count. Do not add handling pallets in slash/on-pallet phrasing: "8 wooden boxes / 2 pallets" means package_count=8, not 10. If separate package lines say "6 pcs wooden box" and "3 pcs pallet", preserve package_breakdown and use package_count=9.
 - For loading instructions with only Brüt kg/Gross Weight, return net_weight as null.
 - For invoices, return country_of_origin only when an origin/menşe field is visible; do not copy seller country or address country into country_of_origin.
+- For invoices, set free_of_charge=true only when FREE OF CHARGE, F.O.C, or Bedelsiz is visible. Still return the visible customs/statistical invoice amount when the invoice shows a positive EUR total.
 - extracted_text must be a compact Turkish/English evidence summary with the key raw values you used, not a full transcript.
 - confidence must reflect document legibility and extraction certainty. Use below 0.65 if key fields are uncertain.`
 }

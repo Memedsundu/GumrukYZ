@@ -130,6 +130,10 @@ export function normalizeCountryCode(raw: unknown): string | null {
   const value = String(raw ?? '').trim()
   if (!value) return null
   const upper = value.toUpperCase().replace(/\./g, '').trim()
+  const numericAliases: Record<string, string> = {
+    '052': 'TR',
+  }
+  if (numericAliases[upper]) return numericAliases[upper]
   if (/^[A-Z]{2}$/.test(upper)) return upper
   const normalized = upper
     .normalize('NFD')

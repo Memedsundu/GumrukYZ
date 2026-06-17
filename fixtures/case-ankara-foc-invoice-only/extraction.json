@@ -1,50 +1,73 @@
 {
-  "_fixture": "case-ankara-real",
-  "_description": "Real Ankara export case: invoice PDF missing, packing/loading/declaration package totals reconcile as 6 wooden boxes + 3 pallets = 9 KAP, and Bedelsiz/F.O.C support needs review.",
+  "_fixture": "case-ankara-foc-invoice-only",
+  "_description": "Real Ankara export case after uploading only the F.O.C invoice FI62026000000063. Main invoice FI62026000000062 is still missing; the F.O.C invoice must not be compared to the whole declaration.",
   "_tradeFlow": "EXPORT",
   "_expectedResults": {
     "PRES-001": "REVIEW_NEEDED",
     "PRES-002": "PASS",
     "PRES-005": "PASS",
     "PRES-006": "PASS",
+    "EXP-001": "PASS",
+    "EXP-002": "PASS",
+    "EXP-003": "PASS",
+    "EXP-004": "PASS",
+    "EXP-006": "REVIEW_NEEDED",
     "PL-001": "PASS",
     "PL-002": "PASS",
     "DECL-001": "PASS",
     "DECL-003": "PASS",
     "DECL-004": "PASS",
     "DECL-005": "PASS",
-    "EXP-003": "PASS",
-    "EXP-004": "PASS",
-    "EXP-006": "REVIEW_NEEDED",
     "GTIP-001": "PASS",
     "GTIP-002": "PASS",
+    "GTIP-003": "PASS",
+    "CROSS-001": "REVIEW_NEEDED",
     "CROSS-002": "PASS",
+    "CROSS-003": "PASS",
+    "CROSS-006": "REVIEW_NEEDED",
+    "CROSS-007": "PASS",
     "CROSS-008": "PASS",
-    "CROSS-009": "PASS"
+    "CROSS-009": "PASS",
+    "VAL-001": "PASS",
+    "VAL-002": "PASS",
+    "VAL-003": "PASS"
   },
   "_expectedAbsentResults": [
-    "CROSS-001",
-    "CROSS-003",
-    "CROSS-004",
-    "CROSS-005",
-    "CROSS-006",
-    "CROSS-007",
-    "DECL-002",
-    "EXP-001",
-    "EXP-002",
-    "GTIP-003",
-    "INV-001",
-    "INV-002",
-    "INV-003",
-    "INV-004",
-    "INV-005",
-    "INV-006",
-    "VAL-001",
-    "VAL-002",
-    "VAL-003"
+    "CROSS-004"
   ],
   "_assertNoFailures": true,
   "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.98,
+      "data": {
+        "_filename": "FI62026000000063 (1).pdf",
+        "invoice_number": "FI62026000000063",
+        "invoice_date": "13-03-2026",
+        "seller_name": "FARHYM OTOMOTİV SAN. TİC. LTD. ŞTİ",
+        "seller_address": "ESENBOĞA YOLU 23.KM 06750 AKYURT/ANKARA/TÜRKİYE",
+        "buyer_name": "MAN BUS SP Z.O.O.",
+        "buyer_address": "ul. 1 Maja 12 / POLONYA PL",
+        "currency": "EUR",
+        "total_amount": 88.3,
+        "incoterm": "DAP",
+        "delivery_place": "27-200 Starachowice, ul. 1 Maja 12 Poland",
+        "country_of_origin": null,
+        "gtip_code": "870829909000",
+        "free_of_charge": true,
+        "net_weight": null,
+        "items": [
+          {
+            "description": "IC KAPAK KOMPLESI 1485mm TUR 22",
+            "hs_code": "870829909000",
+            "quantity": 5,
+            "unit": "Adet",
+            "unit_price": 17.66,
+            "total_price": 88.3
+          }
+        ]
+      }
+    },
     {
       "docType": "PACKING_LIST",
       "confidence": 0.98,
@@ -127,8 +150,8 @@
         "currency": "EUR",
         "incoterm": "DAP STARACHOWICE",
         "invoice_refs": [
-          { "number": "13.03.2026/26243160110886047396583", "free_of_charge": false },
-          { "number": "13.03.2026/26243160110886047396611", "free_of_charge": true }
+          { "number": "13.03.2026/26243160110886047396583", "free_of_charge": false, "source": "tps_e_fatura" },
+          { "number": "13.03.2026/26243160110886047396611", "free_of_charge": true, "source": "tps_e_fatura" }
         ],
         "free_of_charge": true,
         "free_of_charge_line_values": [96.56, 88.3],
@@ -141,7 +164,10 @@
             "unit": "AD",
             "net_weight": 3594.17,
             "gross_weight": 3973.56,
+            "package_count": null,
             "value": 54467.73,
+            "customs_value": 54467.73,
+            "statistical_value": 59564.42,
             "currency": "EUR",
             "origin_country": "Türkiye",
             "country_of_origin": "Türkiye"
@@ -154,10 +180,17 @@
             "unit": "AD",
             "net_weight": 5.83,
             "gross_weight": 6.44,
+            "package_count": 9,
             "value": 88.3,
+            "customs_value": 88.3,
+            "statistical_value": 96.56,
             "currency": "EUR",
             "origin_country": "Türkiye",
-            "country_of_origin": "Türkiye"
+            "country_of_origin": "Türkiye",
+            "free_of_charge": true,
+            "invoice_refs": [
+              { "number": "13.03.2026/26243160110886047396611", "free_of_charge": true, "source": "tps_e_fatura" }
+            ]
           }
         ]
       }

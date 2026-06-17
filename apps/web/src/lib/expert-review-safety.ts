@@ -13,6 +13,7 @@ export const EXPERT_REVIEW_SAFETY_GUARDRAILS = `
 - QUAL-002 veya OCR-001 non-pass ise belge türü/kalitesi ana konudur; aynı konuyu uzman bulgusu olarak tekrarlama, yalnızca deterministik kuralın kapsamadığı ek bir risk varsa yaz.
 - Deterministik non-pass kural aynı sorunu zaten yakaladıysa uzman bulgusunda tekrarlama; örneğin PL-001/PL-002, QUAL-002 veya OCR-001 bulgularını DOCUMENT_CONSISTENCY/DOCUMENT_QUALITY altında ikinci kez üretme.
 - EXP-006 non-pass ise Bedelsiz/F.O.C destek faturası veya değer açıklaması sorununu VALUATION/REGIME_CHOICE altında ikinci kez üretme.
+- Referans verilen ticari faturalardan bazıları eksikse, yüklenen tek F.O.C/Bedelsiz faturayı tüm beyanname toplam kıymetiyle karşılaştırıp kıymet uyumsuzluğu üretme; bu durumda ana konu eksik referans fatura ve kısmi dosya kapsamıdır.
 - Dosya setinde beyanname yoksa ve deterministik belge-varlığı/kıymet/rejim kuralı bunu non-pass olarak işaretlemediyse, yalnızca beyanname eksik diye REGIME_CHOICE veya VALUATION bulgusu üretme.
 - 870829909000 / 8708 / 870829 otobüs gövde aksamı veya aksesuarı bağlamında makul aday olabilir; nihai teyit için teknik çizim, malzeme, işlev, montaj yeri ve parçanın gövde bileşeni mi HVAC/mekanik parça mı olduğunu gösteren kanıt iste.
 - Aynı GTİP teknik belirsizliğini GTİP_PLAUSIBILITY ve PERMIT_PRODUCT_CONTROL olarak iki ayrı uyarıya bölme; mümkünse tek GTİP teknik teyit bulgusunda birleştir.

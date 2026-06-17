@@ -55,6 +55,7 @@ export type ReportWorkspaceProps = {
   counts: ReportCounts
   expertQuota: ExpertQuota
   hasCompletedExpertReview: boolean
+  expertReviewStatusMessage: string | null
   documents: ReportDocumentItem[]
   findings: ReportFindingItem[]
   reportState: ReportState
@@ -76,6 +77,7 @@ export default function ReportWorkspace({
   counts,
   expertQuota,
   hasCompletedExpertReview,
+  expertReviewStatusMessage,
   documents,
   findings,
   reportState,
@@ -412,6 +414,7 @@ export default function ReportWorkspace({
                 submissionId={submissionId}
                 expertQuota={expertQuota}
                 hasCompletedExpertReview={hasCompletedExpertReview}
+                expertReviewStatusMessage={expertReviewStatusMessage}
                 recommended={expertReviewRecommended}
               />
               <SuggestionChips
@@ -454,6 +457,7 @@ export default function ReportWorkspace({
                 submissionId={submissionId}
                 expertQuota={expertQuota}
                 hasCompletedExpertReview={hasCompletedExpertReview}
+                expertReviewStatusMessage={expertReviewStatusMessage}
                 recommended={expertReviewRecommended}
               />
               <SuggestionChips
@@ -1150,15 +1154,22 @@ function ExpertReviewCard({
   submissionId,
   expertQuota,
   hasCompletedExpertReview,
+  expertReviewStatusMessage,
   recommended,
 }: {
   submissionId: string
   expertQuota: ExpertQuota
   hasCompletedExpertReview: boolean
+  expertReviewStatusMessage: string | null
   recommended: boolean
 }) {
   return (
     <section className="rounded-2xl border border-ai-100 bg-ai-50/60 p-4 shadow-card">
+      {expertReviewStatusMessage && (
+        <div className="mb-3 rounded-lg border border-ai-100 bg-white/70 px-3 py-2 text-xs leading-5 text-ai-700">
+          {expertReviewStatusMessage}
+        </div>
+      )}
       <ExpertReviewButton
         submissionId={submissionId}
         quota={expertQuota}

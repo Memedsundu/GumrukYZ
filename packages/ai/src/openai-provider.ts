@@ -132,6 +132,9 @@ Schema name: ${schemaName}
 
 Return only what is clearly present in the document. Use null for missing fields.
 For packing lists, keep product quantity and package count separate: "Quantity Inside" / "Total Quantity" in pcs/adet is item quantity, while boxes/koli/sandık are package_count. Pallets/palet are handling units in "boxes on pallets" phrasing and must not be added to wooden boxes. If the source table explicitly lists pallet rows as package rows and has Total/TOPLAM packages, use that explicit total and preserve package_breakdown.
+For declarations, wrapped GTİP values such as "8708,29," followed by "90,90,00" are one full code: 870829909000. Do not return only the partial first line.
+Preserve commercial invoice references like FI62026000000062 separately from TPS/e-fatura technical references, and mark F.O.C/Bedelsiz only when visible.
+For invoices, set free_of_charge=true only when FREE OF CHARGE, F.O.C, or Bedelsiz is visible; still return the visible positive amount when present.
 
 Document text:
 ${rawText.slice(0, 6000)}`,

@@ -1116,9 +1116,28 @@ function enhanceStructuredDataFromText(
   if (docType === 'INVOICE') {
     const invoiceNumber = firstMatch(rawText, /Invoice Number:\s*([A-Z0-9]+)/i)
     const invoiceDate = firstMatch(rawText, /Invoice Date:\s*([0-9]{1,2}[-./][0-9]{1,2}[-./][0-9]{4})/i)
+    const gtipCode = firstMatch(rawText, /\b(\d{12})\b/)
+    const totalAmount = parseInvoiceTotalFromText(rawText)
+    const itemQuantity = numberOrNull(firstMatch(rawText, /Toplam Miktar\s*:?\s*([+-]?\d[\d.,]*)\s*(?:EA|Adet|pcs?)/i))
     if (invoiceNumber) next['invoice_number'] = invoiceNumber
     if (invoiceDate) next['invoice_date'] = invoiceDate
+    if (gtipCode) next['gtip_code'] = gtipCode
+    if (totalAmount != null) next['total_amount'] = totalAmount
     if (/FREE OF CHARGE|BEDELS[İI]Z/i.test(rawText)) next['free_of_charge'] = true
+    if (itemQuantity != null && itemQuantity > 0) {
+      const existingItems = Array.isArray(next['items'])
+        ? next['items'].filter((item): item is Record<string, unknown> =>
+            item != null && typeof item === 'object' && !Array.isArray(item),
+          )
+        : []
+      const item = {
+        ...(existingItems[0] ?? {}),
+        quantity: itemQuantity,
+        unit: existingItems[0]?.['unit'] ?? (/\bAdet\b/i.test(rawText) ? 'Adet' : 'EA'),
+        hs_code: existingItems[0]?.['hs_code'] ?? gtipCode ?? null,
+      }
+      next['items'] = [item, ...existingItems.slice(1)]
+    }
     if (!hasExplicitNetWeightEvidence(rawText)) {
       next['net_weight'] = null
     }
@@ -1205,6 +1224,17 @@ function roundConfidence(value: number): number {
 function firstMatch(text: string, pattern: RegExp): string | null {
   const match = text.match(pattern)
   return match?.[1]?.trim() ?? null
+}
+
+function parseInvoiceTotalFromText(rawText: string): number | null {
+  const payable = firstMatch(rawText, /Payable Amount(?:\s*\(TL\))?[\s\S]{0,240}?([+-]?\d[\d.,]*)\s*EUR/i)
+  const explicit = payable ?? firstMatch(rawText, /Total Price of Goods[\s\S]{0,240}?([+-]?\d[\d.,]*)\s*EUR/i)
+  if (explicit) return numberOrNull(explicit)
+  const eurValues = Array.from(rawText.matchAll(/([+-]?\d[\d.,]*)\s*EUR\b/gi))
+    .map((match) => numberOrNull(match[1]))
+    .filter((value): value is number => value != null && value > 0)
+  if (eurValues.length === 0) return null
+  return Math.max(...eurValues)
 }
 
 async function clearProcessingJobArtifacts(

@@ -33,6 +33,7 @@ type FreeOfChargeEvidence = {
 type InvoiceRef = {
   number: string
   freeOfCharge: boolean
+  commercialInvoice: boolean
 }
 
 const EXPORT_ORIGIN_DOC_TYPES = new Set<string>([
@@ -228,9 +229,6 @@ export const EXP_004: RuleDefinition = {
   evaluate(ctx: SubmissionContext): RuleEvaluationResult | null {
     if (ctx.tradeFlow !== 'EXPORT') return null
 
-    const invoice = ctx.documents.find((d) => d.docType === DocumentType.INVOICE)
-    if (!invoice) return null
-
     const evidence = collectExportOriginEvidence(ctx)
     const meaningfulEvidence = evidence.filter(
       (entry) => hasValue(entry.value) && !isPlaceholderValue(entry.value),
@@ -323,11 +321,11 @@ export const EXP_006: RuleDefinition = {
     const invoiceNumbers = new Set(
       ctx.documents
         .filter((doc) => doc.docType === DocumentType.INVOICE)
-        .map((doc) => String(doc.data['invoice_number'] ?? '').trim())
-        .filter(Boolean),
+        .map((doc) => normalizeInvoiceNumber(doc.data['invoice_number']))
+        .filter((number) => looksLikeCommercialInvoiceNumber(number)),
     )
     const invoiceRefs = collectInvoiceRefs(ctx)
-    const focRefs = invoiceRefs.filter((ref) => ref.freeOfCharge)
+    const focRefs = invoiceRefs.filter((ref) => ref.freeOfCharge && ref.commercialInvoice)
     const missingFocRefs = focRefs.filter((ref) => !invoiceNumbers.has(ref.number))
     const lineValues = collectFreeOfChargeLineValues(ctx)
 
@@ -412,14 +410,26 @@ function parseInvoiceRefs(rawRefs: unknown): InvoiceRef[] {
   for (const rawRef of rawRefs) {
     if (!rawRef || typeof rawRef !== 'object' || Array.isArray(rawRef)) continue
     const ref = rawRef as Record<string, unknown>
-    const number = String(ref['number'] ?? '').trim()
+    const number = normalizeInvoiceNumber(ref['number'])
     if (!number) continue
     refs.push({
       number,
       freeOfCharge: ref['free_of_charge'] === true || /F\.?\s*O\.?\s*C\.?|Bedelsiz/i.test(number),
+      commercialInvoice: looksLikeCommercialInvoiceNumber(number),
     })
   }
   return refs
+}
+
+function normalizeInvoiceNumber(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+}
+
+function looksLikeCommercialInvoiceNumber(value: unknown): boolean {
+  return /^FI[A-Z0-9-]{6,}$/.test(normalizeInvoiceNumber(value))
 }
 
 function collectFreeOfChargeLineValues(ctx: SubmissionContext): number[] {

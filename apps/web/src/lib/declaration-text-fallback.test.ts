@@ -17,9 +17,11 @@ Toplam FOB : 52056,03
 Top.Miktar       : 503
 Toplam Net / Brüt Kg: 3600 / 3980
 Ambalaj             : KAP
+TÜRKİYE
+052
 
 Kal   G.T.İ.P. EŞYANIN CİNSİ                                          MKTR                   MEN REJİ BRÜT KG        NET KG    ÖLÇÜ     İST MİK İST.KIYMET    KAL.FİYAT      KAP.AD
-2     8708,29,   OTOBÜS HAVALANDIRMA KANALI AKSAMLARI                              5,00 AD   052   1000    6,44       5,83     AD          5,00       96,56       88,30       9
+2     8708,29,   90,90,00 OTOBÜS HAVALANDIRMA KANALI AKSAMLARI                     5,00 AD   052   1000    6,44       5,83     AD          5,00       96,56       88,30       9
       EK BELGELER                        Kalem Notu :
       "Bedelsiz"
       IML=FARHYM OTO. SAN. TİC. LTD. ŞTİ./VN:4650222259 TPS-E-Fatura Var 13.03.2026/26243160110886047396611/1
@@ -73,18 +75,36 @@ function testEnhancementCapturesAnkaraDeclarationSignals() {
   assert.equal(enhanced['gross_weight'], 3980)
   assert.equal(enhanced['fob_value'], 52056.03)
   assert.equal(enhanced['free_of_charge'], true)
-  assert.deepEqual(enhanced['invoice_refs'], [
-    {
-      number: '13.03.2026/26243160110886047396583',
-      free_of_charge: false,
-    },
-    {
-      number: '13.03.2026/26243160110886047396611',
-      free_of_charge: true,
-    },
-  ])
+  assert.deepEqual(
+    (enhanced['invoice_refs'] as Array<Record<string, unknown>>).map((ref) => ({
+      number: ref['number'],
+      free_of_charge: ref['free_of_charge'],
+    })),
+    [
+      {
+        number: '13.03.2026/26243160110886047396583',
+        free_of_charge: false,
+      },
+      {
+        number: '13.03.2026/26243160110886047396611',
+        free_of_charge: true,
+      },
+    ],
+  )
   assert.ok(Array.isArray(enhanced['free_of_charge_line_values']))
   assert.ok((enhanced['free_of_charge_line_values'] as number[]).includes(88.3))
+  assert.equal(enhanced['country_of_origin'], 'Türkiye')
+  const items = enhanced['items'] as Array<Record<string, unknown>>
+  const freeItem = items.find((item) => item['line_number'] === 2)
+  assert.ok(freeItem)
+  assert.equal(freeItem['gtip_code'], '870829909000')
+  assert.equal(freeItem['quantity'], 5)
+  assert.equal(freeItem['gross_weight'], 6.44)
+  assert.equal(freeItem['net_weight'], 5.83)
+  assert.equal(freeItem['customs_value'], 88.3)
+  assert.equal(freeItem['statistical_value'], 96.56)
+  assert.equal(freeItem['package_count'], 9)
+  assert.equal(freeItem['country_of_origin'], 'Türkiye')
 }
 
 const tests = [

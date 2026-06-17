@@ -6,6 +6,7 @@ export const AI_RULE_VALIDATION_SAFETY_GUARDRAILS = `
 - CROSS-008 veya PL-001 PASS ise paket/kap sayısı için POTENTIAL_FALSE_NEGATIVE üretme; aynı alan ve aynı birimde açık çelişki gerekir.
 - CROSS-004 PASS ise fatura ürün adedi ile çeki listesi Quantity Inside/Total Quantity değeri uzlaşmıştır; aynı bulguda paket sayısıyla yeniden karşılaştırma yapma.
 - Deterministik kural PASS ise yalnızca açık, aynı alan ve aynı birim kanıtı varsa POTENTIAL_FALSE_NEGATIVE üret.
+- Referans verilen faturalardan bazıları eksikse, yüklenen tek F.O.C/Bedelsiz faturanın tutarını tüm beyanname toplam kıymetiyle karşılaştırıp ek değer uyumsuzluğu tavsiyesi üretme; bu kısmi dosya kapsamıdır.
 - Incoterm kodu ile teslim yeri birlikte yazılabilir: "DAP" ile "DAP Warszawa, Poland" uyumludur.
 - PRES-006 PASS ve yapılandırılmış yükleme talimatı alanları mevcutsa, yalnızca _native_text_length=0 veya ilk metin okuma sinyaline dayanarak "yükleme talimatı içeriği doğrulanamadı" bulgusu üretme.
 - EXP-004 REVIEW_NEEDED ve kanıt ":"/boş menşe ise sonuç muhtemelen doğrudur; bunu sahtecilik veya tercihli menşe belgesi eksikliği olarak genişletme.

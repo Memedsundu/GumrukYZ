@@ -13,6 +13,10 @@ function normalizeGtip(value: unknown): string | null {
   return digits.length >= 8 ? digits : null
 }
 
+function normalizeGtipDigits(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '')
+}
+
 function areCompatibleGtipCodes(a: string, b: string): boolean {
   const left = normalizeGtip(a)
   const right = normalizeGtip(b)
@@ -179,7 +183,17 @@ export const GTIP_001: RuleDefinition = {
     if (snapGtip) allCodes.push(snapGtip)
     if (allCodes.length === 0) return null
 
-    const invalidCodes = allCodes.filter((code) => !isValidGtip(code))
+    const validCodes = allCodes
+      .filter((code) => isValidGtip(code))
+      .map((code) => normalizeGtipDigits(code))
+    const invalidCodes = allCodes.filter((code) => {
+      if (isValidGtip(code)) return false
+      const fragment = normalizeGtipDigits(code)
+      if (fragment.length >= 4 && fragment.length < 8 && validCodes.some((valid) => valid.startsWith(fragment))) {
+        return false
+      }
+      return true
+    })
 
     if (invalidCodes.length === 0) {
       return passResult(this.code, this.severity, 'GTİP kod biçimi geçerli.')

@@ -172,6 +172,7 @@ function testEnhancementReplacesPartialPackageRowsFromAnkaraLayout() {
   ])
   assert.equal(items.length, 9)
   assert.equal(items.reduce((sum, item) => sum + Number(item['package_count']), 0), 9)
+  assert.deepEqual(items.map((item) => item['quantity']), Array.from({ length: 9 }, () => null))
 }
 
 const tests = [

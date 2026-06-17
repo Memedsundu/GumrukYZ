@@ -22,6 +22,8 @@ import {
 } from '@/lib/report-checklist-fingerprint'
 import {
   countIntegratedExpertFindings,
+  expertReviewDisplayStatus,
+  expertReviewStatusMessage,
   parseExpertEvidenceRefs,
   parseExpertGtipCandidates,
   shouldIntegrateExpertReview,
@@ -152,6 +154,7 @@ export default async function ReportPage({ params }: Props) {
   const visibleExpertReview = expertReview && visibleExpertFindings.length > 0
     ? { ...expertReview, findings: visibleExpertFindings }
     : null
+  const expertStatus = expertReviewDisplayStatus(expertReview, visibleExpertFindings)
   const expertCounts = countIntegratedExpertFindings(visibleExpertReview)
   const expertQuota = await getExpertReviewQuota(user.tenantId)
   const willChargeReanalysis = await willChargeAnalysis({ tenantId: user.tenantId, submissionId: id })
@@ -344,6 +347,7 @@ export default async function ReportPage({ params }: Props) {
       }}
       expertQuota={expertQuota}
       hasCompletedExpertReview={expertReview?.status === 'COMPLETED'}
+      expertReviewStatusMessage={expertReviewStatusMessage(expertStatus)}
       documents={documents}
       findings={findings}
       reportState={reportState}

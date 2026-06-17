@@ -26,6 +26,32 @@ export type ExpertReviewForDisplay = {
   }>
 }
 
+export type ExpertReviewDisplayStatus =
+  | 'not_run'
+  | 'ran_no_findings'
+  | 'ran_findings_filtered'
+  | 'ran_with_findings'
+
+export function expertReviewDisplayStatus(
+  review: ExpertReviewForDisplay | null | undefined,
+  visibleFindings: unknown[] = [],
+): ExpertReviewDisplayStatus {
+  if (!shouldIntegrateExpertReview(review)) return 'not_run'
+  if (visibleFindings.length > 0) return 'ran_with_findings'
+  const findingCount = review?.findings.length ?? 0
+  return findingCount > 0 ? 'ran_findings_filtered' : 'ran_no_findings'
+}
+
+export function expertReviewStatusMessage(status: ExpertReviewDisplayStatus): string | null {
+  if (status === 'ran_no_findings') {
+    return 'Uzman İncelemesi çalıştı; deterministik kontroller dışında ek aksiyon noktası bulmadı.'
+  }
+  if (status === 'ran_findings_filtered') {
+    return 'Uzman İncelemesi çalıştı; deterministik kurallarla aynı konuları tekrarlayan yorumlar aksiyon listesine eklenmedi.'
+  }
+  return null
+}
+
 export function shouldIntegrateExpertReview(review: ExpertReviewForDisplay | null | undefined): boolean {
   if (!review || review.supersededAt) return false
   return review.status === 'COMPLETED' || review.status === 'LEGAL_CONTEXT_INCOMPLETE'
