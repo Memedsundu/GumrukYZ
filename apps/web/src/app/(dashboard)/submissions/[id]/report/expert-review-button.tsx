@@ -13,6 +13,25 @@ type Quota = {
   period: 'MONTHLY'
 }
 
+type ExpertReviewSummary = {
+  status?: string | null
+  summary?: string | null
+  warningCount?: number
+  reviewNeededCount?: number
+}
+
+type ExpertReviewResponse = {
+  error?: string
+  message?: string
+  quota?: Quota
+  expertReview?: ExpertReviewSummary | null
+}
+
+type Notice = {
+  tone: 'info' | 'warning'
+  message: string
+}
+
 export default function ExpertReviewButton({
   submissionId,
   quota,
@@ -27,6 +46,7 @@ export default function ExpertReviewButton({
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
   const [currentQuota, setCurrentQuota] = useState(quota)
 
   const disabled = loading || currentQuota.remaining <= 0
@@ -41,15 +61,17 @@ export default function ExpertReviewButton({
   async function startExpertReview() {
     setLoading(true)
     setError(null)
+    setNotice(null)
     try {
       const res = await fetch(`/api/submissions/${submissionId}/expert-review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ force: hasCompletedExpertReview }),
       })
-      const data = await res.json() as { error?: string; quota?: Quota }
+      const data = await res.json().catch(() => ({})) as ExpertReviewResponse
       if (data.quota) setCurrentQuota(data.quota)
       if (!res.ok) throw new Error(data.error ?? 'Uzman İncelemesi başlatılamadı')
+      setNotice(expertReviewNotice(data))
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Uzman İncelemesi başlatılamadı')
@@ -101,6 +123,19 @@ export default function ExpertReviewButton({
       <p className="mt-3 text-xs leading-5 text-ai-600">
         Otomatik Risk Kontrolü her analizde çalışır ve Uzman İncelemesi hakkından düşmez.
       </p>
+      {notice && (
+        <div
+          aria-live="polite"
+          className={cn(
+            'mt-3 rounded-lg px-3 py-2 text-sm',
+            notice.tone === 'warning'
+              ? 'bg-warning-50 text-warning-700'
+              : 'bg-ai-100 text-ai-700',
+          )}
+        >
+          {notice.message}
+        </div>
+      )}
       {error && (
         <div className="mt-3 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">
           {error}
@@ -108,4 +143,46 @@ export default function ExpertReviewButton({
       )}
     </div>
   )
+}
+
+function expertReviewNotice(data: ExpertReviewResponse): Notice {
+  if (data.message) return { tone: 'info', message: data.message }
+
+  const review = data.expertReview
+  if (!review) {
+    return { tone: 'info', message: 'Uzman İncelemesi isteği tamamlandı. Rapor yenileniyor.' }
+  }
+
+  if (review.status === 'SKIPPED') {
+    return {
+      tone: 'warning',
+      message: review.summary?.trim() || 'Uzman İncelemesi yapılandırma eksikliği nedeniyle çalıştırılamadı.',
+    }
+  }
+
+  if (review.status === 'ERROR') {
+    return {
+      tone: 'warning',
+      message: review.summary?.trim() || 'Uzman İncelemesi tamamlanamadı. Daha sonra tekrar deneyin.',
+    }
+  }
+
+  if (review.status === 'LEGAL_CONTEXT_INCOMPLETE') {
+    return {
+      tone: 'warning',
+      message: review.summary?.trim() || 'Uzman İncelemesi için gerekli mevzuat kapsamı eksik.',
+    }
+  }
+
+  if (review.status === 'COMPLETED') {
+    const findingCount = (review.warningCount ?? 0) + (review.reviewNeededCount ?? 0)
+    return {
+      tone: 'info',
+      message: findingCount > 0
+        ? `Uzman İncelemesi tamamlandı; ${findingCount} ek aksiyon noktası bulundu.`
+        : 'Uzman İncelemesi tamamlandı; ek aksiyon noktası bulunmadı.',
+    }
+  }
+
+  return { tone: 'info', message: 'Uzman İncelemesi isteği tamamlandı. Rapor yenileniyor.' }
 }

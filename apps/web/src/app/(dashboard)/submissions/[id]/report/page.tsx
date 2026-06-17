@@ -347,7 +347,7 @@ export default async function ReportPage({ params }: Props) {
       }}
       expertQuota={expertQuota}
       hasCompletedExpertReview={expertReview?.status === 'COMPLETED'}
-      expertReviewStatusMessage={expertReviewStatusMessage(expertStatus)}
+      expertReviewStatusMessage={expertReviewStatusMessage(expertStatus, expertReview?.summary)}
       documents={documents}
       findings={findings}
       reportState={reportState}

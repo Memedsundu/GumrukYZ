@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { classifyDocumentCoverage } from '@gumrukyz/domain'
-import { FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff, ChevronDown } from 'lucide-react'
 import {
   isSupportedUploadFile,
   SUPPORTED_UPLOAD_ACCEPT,
@@ -539,7 +539,13 @@ export default function DocumentUploadClient({
                       )}
                     </div>
                     {doc.classificationReasoning && (
-                      <p className="mt-1 text-xs text-ink-muted">{doc.classificationReasoning}</p>
+                      <details className="group mt-2 max-w-xl">
+                        <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-0.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+                          <span>Sınıflandırma gerekçesi</span>
+                          <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+                        </summary>
+                        <p className="mt-1 text-xs leading-5 text-ink-muted">{doc.classificationReasoning}</p>
+                      </details>
                     )}
                     {doc.classificationSourceRefs.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">

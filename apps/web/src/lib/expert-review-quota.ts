@@ -5,6 +5,8 @@ import { getTenantEntitlements } from './entitlements'
 // keeps the concurrency lock + "reuse existing completed review" short-circuit;
 // the credit itself is reserved/consumed/refunded via the entitlement service.
 
+const STALE_RUNNING_REVIEW_MS = 15 * 60 * 1000
+
 export type ExpertReviewQuota = {
   limit: number
   used: number
@@ -50,6 +52,20 @@ export async function reserveExpertReviewSlot(params: {
 }): Promise<ExpertReviewReservation> {
   try {
     return await prisma.$transaction(async (tx) => {
+      await tx.expertReview.updateMany({
+        where: {
+          tenantId: params.tenantId,
+          submissionId: params.submissionId,
+          status: 'RUNNING',
+          createdAt: { lt: new Date(Date.now() - STALE_RUNNING_REVIEW_MS) },
+        },
+        data: {
+          status: 'ERROR',
+          summary: 'Önceki Uzman İncelemesi zaman aşımına uğradı. Yeniden başlatabilirsiniz.',
+          completedAt: new Date(),
+        },
+      })
+
       if (!params.forceNew) {
         const existingReview = await tx.expertReview.findFirst({
           where: {

@@ -169,7 +169,7 @@ export async function buildReportPayload(submissionId: string, tenantId: string)
       },
       expertIncluded: Boolean(visibleExpertReview),
       expertReviewStatus: expertStatus,
-      expertReviewStatusMessage: expertReviewStatusMessage(expertStatus),
+      expertReviewStatusMessage: expertReviewStatusMessage(expertStatus, expertReview?.summary),
     },
     documents: submission.documents.map((document) => ({
       id: document.id,

@@ -28,6 +28,9 @@ export type ExpertReviewForDisplay = {
 
 export type ExpertReviewDisplayStatus =
   | 'not_run'
+  | 'running'
+  | 'skipped'
+  | 'error'
   | 'ran_no_findings'
   | 'ran_findings_filtered'
   | 'ran_with_findings'
@@ -36,13 +39,29 @@ export function expertReviewDisplayStatus(
   review: ExpertReviewForDisplay | null | undefined,
   visibleFindings: unknown[] = [],
 ): ExpertReviewDisplayStatus {
+  if (!review || review.supersededAt) return 'not_run'
+  if (review.status === 'RUNNING' || review.status === 'PENDING') return 'running'
+  if (review.status === 'SKIPPED') return 'skipped'
+  if (review.status === 'ERROR') return 'error'
   if (!shouldIntegrateExpertReview(review)) return 'not_run'
   if (visibleFindings.length > 0) return 'ran_with_findings'
   const findingCount = review?.findings.length ?? 0
   return findingCount > 0 ? 'ran_findings_filtered' : 'ran_no_findings'
 }
 
-export function expertReviewStatusMessage(status: ExpertReviewDisplayStatus): string | null {
+export function expertReviewStatusMessage(
+  status: ExpertReviewDisplayStatus,
+  summary?: string | null,
+): string | null {
+  if (status === 'running') {
+    return 'Uzman İncelemesi devam ediyor. Sayfayı yenilediğinizde tamamlanan sonuçlar görünecek.'
+  }
+  if (status === 'skipped') {
+    return summary?.trim() || 'Uzman İncelemesi yapılandırma eksikliği nedeniyle çalıştırılamadı.'
+  }
+  if (status === 'error') {
+    return summary?.trim() || 'Uzman İncelemesi tamamlanamadı. Daha sonra tekrar deneyin.'
+  }
   if (status === 'ran_no_findings') {
     return 'Uzman İncelemesi çalıştı; deterministik kontroller dışında ek aksiyon noktası bulmadı.'
   }
