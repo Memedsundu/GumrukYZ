@@ -125,6 +125,9 @@ Rules:
 - For tables, read item rows and totals carefully.
 - For customs declarations (beyanname), read each kalem (line item) row into items[] with its own GTİP code, goods description, quantity, weights and value. Leave items null only when no line-item table is visible.
 - For customs declarations, wrapped GTİP values such as "8708,29," on one line and "90,90,00" on the next are one code: 870829909000. Keep the full reconstructed code in gtip_code, not the partial first line.
+- For Turkish "T.C. Gümrük Beyannamesi / Ekli Listesi" printouts, the same GTİP can appear as "87082990 90 00" on the summary page and as "8708,29," plus "90,90,00" in the attached kalem table. Reconstruct both as 870829909000.
+- For declaration attached-list rows, KAP.AD is the package count for that kalem. Do not read numbers from long TPS/e-fatura reference ranges as package counts.
+- For declaration totals, preserve "Toplam FOB", the currency/value line such as "EUR 54.556,03", and the "Toplam:" row separately when visible. Do not overwrite a labeled value with a nearby exchange-rate or TL conversion number.
 - Preserve declaration value labels separately when visible: KAL.FİYAT, İST.KIYMET, FOB, customs/statistical values, and line-level values. Do not compare a partial invoice to the whole declaration total.
 - Preserve invoice references from packing lists and declarations. Commercial invoice numbers like FI62026000000062 are not the same as TPS/e-fatura technical references. Mark F.O.C/Bedelsiz references only when the label is visible.
 - Parse locale number formats carefully: "980.00" and "980,00" mean 980; "1,185.00" and "1.185,00" mean 1185. Do not drop decimal separators in a way that turns 980.00 into 98000.

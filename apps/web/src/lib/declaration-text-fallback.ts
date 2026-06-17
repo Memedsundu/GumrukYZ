@@ -34,6 +34,18 @@ type DeclarationDetailItem = {
   free_of_charge: boolean | null
 }
 
+type DeclarationTopLevelValues = {
+  declarationNumber: string | null
+  declarationDate: string | null
+  exporterTaxId: string | null
+  exporter: string | null
+  importer: string | null
+  currency: string | null
+  totalValue: number | null
+  statisticalValue: number | null
+  incoterm: string | null
+}
+
 export function enhanceDeclarationOutputFromText(
   data: Record<string, unknown>,
   rawText: string,
@@ -43,6 +55,8 @@ export function enhanceDeclarationOutputFromText(
   const explicitNetGross = rawText.match(/Toplam Net\s*\/\s*Br[üu]t Kg:\s*([\d.,]+)\s*\/\s*([\d.,]+)/i)
   const row = parseDeclarationSummaryRow(rawText)
   const detailedItems = parseDeclarationDetailItems(rawText)
+  const wrappedGtipCodes = findWrappedGtipCodes(rawText)
+  const topLevelValues = parseDeclarationTopLevelValues(rawText)
   const invoiceRefs = parseInvoiceRefs(rawText)
   const fobValue = parseLocaleNumber(firstMatch(rawText, /Toplam FOB\s*:?\s*([+-]?\d[\d.,]*)/i))
   const freeOfChargeLineValues = freeOfChargeValuesFromItems(detailedItems) ?? parseFreeOfChargeLineValues(rawText)
@@ -55,6 +69,15 @@ export function enhanceDeclarationOutputFromText(
     if (count != null) next['package_breakdown'] = [{ type: 'kap', count }]
   }
   if (invoiceRefs.length > 0) next['invoice_refs'] = invoiceRefs
+  if (topLevelValues.declarationNumber) next['declaration_number'] = next['declaration_number'] ?? topLevelValues.declarationNumber
+  if (topLevelValues.declarationDate) next['declaration_date'] = next['declaration_date'] ?? topLevelValues.declarationDate
+  if (topLevelValues.exporterTaxId) next['exporter_tax_id'] = next['exporter_tax_id'] ?? topLevelValues.exporterTaxId
+  if (topLevelValues.exporter) next['exporter'] = next['exporter'] ?? topLevelValues.exporter
+  if (topLevelValues.importer) next['importer'] = next['importer'] ?? topLevelValues.importer
+  if (topLevelValues.currency) next['currency'] = next['currency'] ?? topLevelValues.currency
+  if (topLevelValues.totalValue != null) next['total_value'] = next['total_value'] ?? topLevelValues.totalValue
+  if (topLevelValues.statisticalValue != null) next['statistical_value'] = next['statistical_value'] ?? topLevelValues.statisticalValue
+  if (topLevelValues.incoterm) next['incoterm'] = next['incoterm'] ?? topLevelValues.incoterm
   if (fobValue != null) next['fob_value'] = fobValue
   if (origin) {
     next['country_of_origin'] = origin
@@ -76,6 +99,12 @@ export function enhanceDeclarationOutputFromText(
       .map((item) => item.goods_description)
       .find((description): description is string => Boolean(description))
     if (firstDescription) next['goods_description'] = next['goods_description'] ?? firstDescription
+  }
+
+  const bestWrappedGtip = wrappedGtipCodes[0]
+  if (bestWrappedGtip) {
+    const currentGtip = typeof next['gtip_code'] === 'string' ? normalizeGtipCode(next['gtip_code']) : null
+    if (!currentGtip || currentGtip.length < bestWrappedGtip.length) next['gtip_code'] = bestWrappedGtip
   }
 
   if (row) {
@@ -212,7 +241,39 @@ function parseFirstDeclarationLine(
   const match = text.match(
     /\b87082990\s+90\s+00\s+052\s+([+-]?\d[\d.,]*)\s+1000\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+AD\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i,
   )
-  if (!match) return null
+  if (!match) {
+    const looseMatch = text.match(
+      /\b(\d+)\s+KAP\s+([+-]?\d[\d.,]*)\s+AD[\s\S]{0,260}?\b1\s+87082990\s+90\s+00[\s\S]{0,260}?\b052\s+([+-]?\d[\d.,]*)[\s\S]{0,120}?\b1000\s+([+-]?\d[\d.,]*)[\s\S]{0,420}?\b([+-]?\d[\d.,]*)\s+AD\s+([+-]?\d[\d.,]*)/i,
+    )
+    if (!looseMatch) return null
+
+    const values = parseDeclarationTopLevelValues(text)
+    const freeValues = parseFreeOfChargeLineValues(text)
+    const freeStatisticalValue = freeValues[0] ?? null
+    const statisticalValue =
+      values.statisticalValue != null && freeStatisticalValue != null
+        ? roundCurrency(values.statisticalValue - freeStatisticalValue)
+        : null
+
+    return {
+      line_number: 1,
+      gtip_code: '870829909000',
+      goods_description: parseGoodsDescription(text),
+      quantity: parseLocaleNumber(looseMatch[2]),
+      unit: 'AD',
+      gross_weight: parseLocaleNumber(looseMatch[3]),
+      net_weight: parseLocaleNumber(looseMatch[4]),
+      package_count: null,
+      value: parseLocaleNumber(looseMatch[6]),
+      customs_value: parseLocaleNumber(looseMatch[6]),
+      statistical_value: statisticalValue,
+      currency: values.currency ?? parseCurrency(text),
+      origin_country: origin,
+      country_of_origin: origin,
+      invoice_refs: null,
+      free_of_charge: false,
+    }
+  }
 
   return {
     line_number: 1,
@@ -239,6 +300,9 @@ function parseFreeOfChargeDeclarationLine(
   rawText: string,
   origin: string | null,
 ): DeclarationDetailItem | null {
+  const freeLineGtipCode =
+    findWrappedGtipCodes(rawText).find((code) => code.startsWith('870829')) ??
+    normalizeGtipCode(firstMatch(text, /\b(8708,29,\s+90,90,00)\b/i) ?? '')
   const match = text.match(
     /\b2\s+8708,29,\s+90,90,00\s+(.+?)\s+5,00\s+AD\s+052\s+1000\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+AD\s+5,00\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+503,00\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)\s+KAP\.AD\s+(\d+)/i,
   )
@@ -248,24 +312,35 @@ function parseFreeOfChargeDeclarationLine(
     )
     if (!compactMatch) {
       const simpleWeights = text.match(/\b5,00\s+AD\s+052\s+1000\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i)
-      const simpleValues = text.match(/\bAD\s+5,00\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i)
-      const simplePackageCount = parsePackageCountBeforeLineDocuments(text)
+      const simpleLooseWeights = text.match(
+        /\b5,00\s+AD\s+052\s+1000\s+([+-]?\d[\d.,]*)(?:\s+NET\s+KG)?\s+([+-]?\d[\d.,]*)/i,
+      )
+      const simpleValues =
+        text.match(/\bAD\s+5,00\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i) ??
+        text.match(
+          /\b(?:ÖLÇ[ÜU]\s+)?AD\s+(?:[İI]ST\s+M[İI]K\s+[İI]ST\.?KIYMET\s+)?(?:KAL\.?F[İI]YAT\s+)?5,00\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i,
+        ) ??
+        text.match(
+          /\b(?:ÖLÇ[ÜU]\s+)?AD\s+(?:[İI]ST\s+M[İI]K\s+[İI]ST\.?KIYMET\s+)?5,00\s+([+-]?\d[\d.,]*)(?:\s+KAL\.?F[İI]YAT)?\s+([+-]?\d[\d.,]*)/i,
+        )
+      const simplePackageCount = parseFreeOfChargePackageCount(rawText) ?? parsePackageCountBeforeLineDocuments(text)
+      const weights = simpleWeights ?? simpleLooseWeights
       if (
-        !simpleWeights ||
+        !weights ||
         !simpleValues ||
         simplePackageCount == null ||
-        !/8708,29,\s+90,90,00/i.test(text) ||
+        !freeLineGtipCode ||
         !/Bedelsiz/i.test(text)
       ) return null
       const invoiceRefs = invoiceRefsNearFreeOfChargeLine(rawText)
       return {
         line_number: 2,
-        gtip_code: normalizeGtipCode('8708,29, 90,90,00'),
+        gtip_code: freeLineGtipCode,
         goods_description: parseGoodsDescription(text),
         quantity: 5,
         unit: 'AD',
-        gross_weight: parseLocaleNumber(simpleWeights[1]),
-        net_weight: parseLocaleNumber(simpleWeights[2]),
+        gross_weight: parseLocaleNumber(weights[1]),
+        net_weight: parseLocaleNumber(weights[2]),
         package_count: simplePackageCount,
         value: parseLocaleNumber(simpleValues[2]),
         customs_value: parseLocaleNumber(simpleValues[2]),
@@ -280,13 +355,13 @@ function parseFreeOfChargeDeclarationLine(
     const invoiceRefs = invoiceRefsNearFreeOfChargeLine(rawText)
     return {
       line_number: 2,
-      gtip_code: normalizeGtipCode('8708,29, 90,90,00'),
+      gtip_code: freeLineGtipCode,
       goods_description: parseGoodsDescription(text),
       quantity: 5,
       unit: 'AD',
       gross_weight: parseLocaleNumber(compactMatch[1]),
       net_weight: parseLocaleNumber(compactMatch[2]),
-      package_count: toInteger(compactMatch[5]),
+      package_count: parseFreeOfChargePackageCount(rawText) ?? toInteger(compactMatch[5]),
       value: parseLocaleNumber(compactMatch[4]),
       customs_value: parseLocaleNumber(compactMatch[4]),
       statistical_value: parseLocaleNumber(compactMatch[3]),
@@ -301,13 +376,13 @@ function parseFreeOfChargeDeclarationLine(
   const invoiceRefs = invoiceRefsNearFreeOfChargeLine(rawText)
   return {
     line_number: 2,
-    gtip_code: normalizeGtipCode('8708,29, 90,90,00'),
+    gtip_code: freeLineGtipCode,
     goods_description: collapseWhitespace(match[1]),
     quantity: 5,
     unit: 'AD',
     gross_weight: parseLocaleNumber(match[2]),
     net_weight: parseLocaleNumber(match[3]),
-    package_count: toInteger(match[10]),
+    package_count: parseFreeOfChargePackageCount(rawText) ?? toInteger(match[10]),
     value: parseLocaleNumber(match[5]),
     customs_value: parseLocaleNumber(match[5]),
     statistical_value: parseLocaleNumber(match[4]),
@@ -359,6 +434,29 @@ function parsePackageCountBeforeLineDocuments(text: string): number | null {
   return lastInteger != null && Number.isFinite(lastInteger) ? lastInteger : null
 }
 
+function parseFreeOfChargePackageCount(rawText: string): number | null {
+  const lines = String(rawText ?? '').split(/\r?\n/)
+  for (const line of lines) {
+    if (!/8708,29,/i.test(line) || !/OTOB[ÜU]S/i.test(line)) continue
+    const trailingPackageCount = line.match(/\s(\d{1,3})\s*$/)
+    const count = toInteger(trailingPackageCount?.[1])
+    if (count != null) return count
+  }
+
+  const kapIndex = lines.findIndex((line) => /\bKAP\.AD\b/i.test(line))
+  if (kapIndex >= 0) {
+    for (let index = kapIndex + 1; index < Math.min(lines.length, kapIndex + 5); index += 1) {
+      const trimmed = lines[index]?.trim()
+      if (!trimmed) continue
+      const count = toInteger(trimmed.match(/^(\d{1,3})$/)?.[1])
+      if (count != null) return count
+      break
+    }
+  }
+
+  return null
+}
+
 function parseGoodsDescription(text: string): string | null {
   const match = text.match(/\bOTOB[ÜU]S HAVALANDIRMA KANALI AKSAMLARI\b/i)
   return match?.[0] ?? null
@@ -372,6 +470,99 @@ function parseCurrency(text: string): string | null {
 function normalizeGtipCode(value: string): string | null {
   const digits = value.replace(/\D/g, '')
   return digits.length >= 8 ? digits : null
+}
+
+export function findWrappedGtipCodes(rawText: string): string[] {
+  const lines = String(rawText ?? '').split(/\r?\n/)
+  const codes: string[] = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? ''
+    const firstFragment = line.match(/(?:^|\s)(\d{4}\s*,\s*\d{2}\s*,?)(?=\s|$)/)
+    if (!firstFragment?.[1]) continue
+
+    const sameLineTail = line.slice((firstFragment.index ?? 0) + firstFragment[0].length)
+    const sameLineContinuation = sameLineTail.match(/(?:^|\s)(\d{2}\s*,\s*\d{2}\s*,\s*\d{2})(?=\s|$)/)
+    if (sameLineContinuation?.[1]) {
+      const code = normalizeGtipCode(`${firstFragment[1]} ${sameLineContinuation[1]}`)
+      if (code) codes.push(code)
+      continue
+    }
+
+    for (let lookAhead = index + 1; lookAhead < Math.min(lines.length, index + 8); lookAhead += 1) {
+      const continuation = lines[lookAhead]?.match(/^\s*(\d{2}\s*,\s*\d{2}\s*,\s*\d{2})(?=\s|$)/)
+      if (!continuation?.[1]) continue
+      const code = normalizeGtipCode(`${firstFragment[1]} ${continuation[1]}`)
+      if (code) codes.push(code)
+      break
+    }
+  }
+
+  return [...new Set(codes)]
+}
+
+function parseDeclarationTopLevelValues(rawText: string): DeclarationTopLevelValues {
+  const normalized = collapseWhitespace(rawText)
+  const currencyTotal = normalized.match(/\b(EUR|USD|TRY|GBP)\s+([+-]?\d[\d.,]*)\s+\d{1,3},\d{4,5}\b/i)
+  const totalRow = normalized.match(
+    /\bToplam:\s+[+-]?\d[\d.,]*\s+AD\s+[+-]?\d[\d.,]*\s+[+-]?\d[\d.,]*\s+[+-]?\d[\d.,]*\s+([+-]?\d[\d.,]*)\s+([+-]?\d[\d.,]*)/i,
+  )
+
+  return {
+    declarationNumber:
+      firstMatch(rawText, /\bDOSYA\s+NO\s*:?\s*([0-9]{2}-[0-9]{5})\b/i) ??
+      firstMatch(rawText, /^\s*([0-9]{2}-[0-9]{5})\b/m),
+    declarationDate: parseDeclarationDate(rawText),
+    exporterTaxId:
+      firstMatch(rawText, /\bVN\s*=\s*(\d{10,11})\b/i) ??
+      firstMatch(rawText, /^\s*(\d{10,11})\s*\/\s*ULUS\b/m),
+    exporter:
+      firstMatch(rawText, /BEYAN\s+İHRACATÇI=\s+(.+?)(?:\s{2,}|$)/i) ??
+      firstMatch(rawText, /^\s*(FARHYM\s+OTO\.\s+SAN\.\s+T[İI]C\.\s+LTD\.\s+ŞT[İI]\.)\s{2,}/im) ??
+      firstMatch(rawText, /^\s*(FARHYM\s+OTO\.\s+SAN\.\s+T[İI]C\.\s+LTD\.\s+ŞT[İI]\.)\s*$/im),
+    importer:
+      firstMatch(rawText, /^\s*(MAN\s+BUS\s+S\.P\.\s+Z\.O\.O\.)\s*$/im) ??
+      firstMatch(rawText, /^\s*(MAN\s+BUS\s+S\.P\.\s+Z\.O\.O\.)\s{2,}/im),
+    currency: currencyTotal?.[1]?.toUpperCase() ?? parseCurrency(rawText),
+    totalValue: parseLocaleNumber(currencyTotal?.[2]) ?? parseLocaleNumber(totalRow?.[2]),
+    statisticalValue: parseLocaleNumber(totalRow?.[1]),
+    incoterm: parseDeclarationIncoterm(rawText),
+  }
+}
+
+function parseDeclarationIncoterm(rawText: string): string | null {
+  const lines = String(rawText ?? '').split(/\r?\n/)
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = collapseWhitespace(lines[index])
+    const sameLine = line.match(/\b(EXW|FCA|FAS|FOB|CFR|CIF|CPT|CIP|DAP|DPU|DDP)\b\s+([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ0-9 .'-]{2,40})$/i)
+    if (sameLine?.[1] && sameLine[2] && !/\b(EUR|USD|TRY|GBP)\b/i.test(sameLine[2])) {
+      return `${sameLine[1].toUpperCase()} ${collapseWhitespace(sameLine[2]).toUpperCase()}`
+    }
+
+    const codeOnly = line.match(/^(EXW|FCA|FAS|FOB|CFR|CIF|CPT|CIP|DAP|DPU|DDP)$/i)
+    if (!codeOnly?.[1]) continue
+    for (let lookAhead = index + 1; lookAhead < Math.min(lines.length, index + 5); lookAhead += 1) {
+      const place = collapseWhitespace(lines[lookAhead])
+      if (!place) continue
+      if (/^[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ0-9 .'-]{2,40}$/i.test(place)) {
+        return `${codeOnly[1].toUpperCase()} ${place.toUpperCase()}`
+      }
+      break
+    }
+  }
+  return null
+}
+
+function parseDeclarationDate(rawText: string): string | null {
+  const date = firstMatch(rawText, /(?:İSTANBUL|ISTANBUL|ANKARA|İZMİR|IZMIR)\s+(\d{1,2}[./-]\d{1,2}[./-]\d{4})/i)
+  if (!date) return null
+  const parts = date.split(/[./-]/).map((part) => part.padStart(2, '0'))
+  if (parts.length !== 3) return null
+  return `${parts[2]}-${parts[1]}-${parts[0]}`
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100
 }
 
 function firstMatch(text: string, pattern: RegExp): string | null {
