@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -84,6 +85,7 @@ export default function ReportWorkspace({
   willChargeReanalysis,
   documentCoverage,
 }: ReportWorkspaceProps) {
+  const router = useRouter()
   const [items, setItems] = useState(findings)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
   const prevFindingKeysRef = useRef<Set<string>>(new Set(findings.map(findingKey)))
@@ -117,9 +119,8 @@ export default function ReportWorkspace({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [notePendingKeys, setNotePendingKeys] = useState<Set<string>>(() => new Set())
   const [noteErrors, setNoteErrors] = useState<Record<string, string>>({})
-  const [replacingDocumentIds, setReplacingDocumentIds] = useState<Set<string>>(() => new Set())
-  const [replaceErrors, setReplaceErrors] = useState<Record<string, string>>({})
-  const [replaceMessage, setReplaceMessage] = useState<string | null>(null)
+  const [reanalyzing, setReanalyzing] = useState(false)
+  const [reanalysisError, setReanalysisError] = useState<string | null>(null)
 
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantMessages, setAssistantMessages] = useState<ChatMessage[]>([])
@@ -277,48 +278,22 @@ export default function ReportWorkspace({
     }
   }
 
-  async function replaceDocument(documentId: string, file: File) {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    setReplacingDocumentIds((current) => new Set(current).add(documentId))
-    setReplaceErrors((current) => omitKey(current, documentId))
-    setReplaceMessage(null)
+  async function handleReanalyze() {
+    if (reanalyzing || reportState.activeJobId || reportState.validationRequired) return
+    setReanalyzing(true)
+    setReanalysisError(null)
 
     try {
-      const response = await fetch(`/api/submissions/${submissionId}/documents/${documentId}/versions`, {
-        method: 'POST',
-        body: formData,
-      })
-      const payload = await response.json().catch(() => null) as {
-        needsValidation?: boolean
-        processingJobId?: string
-        processingError?: string
-        error?: string
-      } | null
-      if (!response.ok || !payload) {
-        throw new Error(payload?.error ?? 'Dosya değiştirilemedi')
+      const response = await fetch(`/api/submissions/${submissionId}/process`, { method: 'POST' })
+      const payload = await response.json().catch(() => null) as { error?: string } | null
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'Yeniden analiz başlatılamadı')
       }
-
-      if (payload.processingError) {
-        setReplaceMessage(`Dosya değiştirildi, ancak analiz başlatılamadı: ${payload.processingError}`)
-      } else if (payload.needsValidation) {
-        setReplaceMessage('Dosya değiştirildi. Yeniden analiz için belge sınıflandırmasını doğrulayın.')
-      } else {
-        setReplaceMessage('Dosya değiştirildi. Rapor yeniden analiz ediliyor.')
-      }
-      window.setTimeout(() => window.location.reload(), 900)
+      router.refresh()
     } catch (error) {
-      setReplaceErrors((current) => ({
-        ...current,
-        [documentId]: error instanceof Error ? error.message : 'Dosya değiştirilemedi',
-      }))
+      setReanalysisError(error instanceof Error ? error.message : 'Yeniden analiz başlatılamadı')
     } finally {
-      setReplacingDocumentIds((current) => {
-        const next = new Set(current)
-        next.delete(documentId)
-        return next
-      })
+      setReanalyzing(false)
     }
   }
 
@@ -377,7 +352,15 @@ export default function ReportWorkspace({
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <main className="min-w-0 space-y-6">
-            <ReportStateBanner reportState={reportState} submissionId={submissionId} message={replaceMessage} />
+            <ReportStateBanner
+              reportState={reportState}
+              submissionId={submissionId}
+              willChargeReanalysis={willChargeReanalysis}
+              hasCompletedExpertReview={hasCompletedExpertReview}
+              reanalyzing={reanalyzing}
+              reanalysisError={reanalysisError}
+              onReanalyze={handleReanalyze}
+            />
 
             <DocumentCoveragePanel coverage={documentCoverage} />
 
@@ -399,10 +382,8 @@ export default function ReportWorkspace({
               notePendingKeys={notePendingKeys}
               noteErrors={noteErrors}
               readOnly={reportState.readonly}
-              onReplaceDocument={replaceDocument}
-              replacingDocumentIds={replacingDocumentIds}
-              replaceErrors={replaceErrors}
-              replacementDisabled={Boolean(reportState.activeJobId)}
+              submissionId={submissionId}
+              documentActionsDisabled={Boolean(reportState.activeJobId)}
               onClearCategory={() => setActiveCategory(null)}
               onExpandedChange={toggleExpanded}
               onToggle={toggleChecklist}
@@ -434,10 +415,8 @@ export default function ReportWorkspace({
                     activeCategory={activeCategory}
                     onCategoryChange={setActiveCategory}
                     sticky={false}
-                    onReplaceDocument={replaceDocument}
-                    replacingDocumentIds={replacingDocumentIds}
-                    replaceErrors={replaceErrors}
-                    replacementDisabled={Boolean(reportState.activeJobId)}
+                    submissionId={submissionId}
+                    documentActionsDisabled={Boolean(reportState.activeJobId)}
                   />
                 </div>
               </details>
@@ -472,10 +451,8 @@ export default function ReportWorkspace({
                 onCategoryChange={setActiveCategory}
                 sticky={false}
                 framed
-                onReplaceDocument={replaceDocument}
-                replacingDocumentIds={replacingDocumentIds}
-                replaceErrors={replaceErrors}
-                replacementDisabled={Boolean(reportState.activeJobId)}
+                submissionId={submissionId}
+                documentActionsDisabled={Boolean(reportState.activeJobId)}
               />
             </div>
           </aside>
@@ -510,13 +487,21 @@ export default function ReportWorkspace({
 function ReportStateBanner({
   reportState,
   submissionId,
-  message,
+  willChargeReanalysis,
+  hasCompletedExpertReview,
+  reanalyzing,
+  reanalysisError,
+  onReanalyze,
 }: {
   reportState: ReportState
   submissionId: string
-  message: string | null
+  willChargeReanalysis: boolean
+  hasCompletedExpertReview: boolean
+  reanalyzing: boolean
+  reanalysisError: string | null
+  onReanalyze: () => void
 }) {
-  if (!reportState.stale && !message) return null
+  if (!reportState.stale) return null
 
   return (
     <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-card">
@@ -528,16 +513,36 @@ function ReportStateBanner({
               {reportState.activeJobId ? 'Rapor yeniden analiz ediliyor' : 'Rapor güncel belge setini yansıtmıyor'}
             </p>
             <p className="mt-1 text-amber-800">
-              {message ?? reportState.staleReason ?? 'Belge değişikliği tamamlandıktan sonra rapor yenilenecek.'}
+              {reportState.staleReason ?? 'Belgeler değişti; rapor yeniden analiz bekliyor.'}
             </p>
+            {!reportState.activeJobId && (
+              <p className="mt-1 text-amber-800">
+                {willChargeReanalysis
+                  ? 'Yeniden analiz 1 analiz hakkı kullanır.'
+                  : 'Bu dosyada yeniden analiz ücretsizdir.'}
+                {hasCompletedExpertReview ? ' Önceki uzman incelemesi yeni raporla geçersiz sayılır.' : ''}
+              </p>
+            )}
+            {reanalysisError && <p className="mt-2 text-danger-700">{reanalysisError}</p>}
           </div>
         </div>
 
-        {reportState.validationRequired && (
+        {reportState.validationRequired ? (
           <Button asChild variant="outline" size="sm" className="shrink-0 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100">
             <Link href={`/submissions/${submissionId}/documents`}>Sınıflandırmayı doğrula</Link>
           </Button>
-        )}
+        ) : !reportState.activeJobId ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+            loading={reanalyzing}
+            onClick={onReanalyze}
+          >
+            Yeniden Analiz Et
+          </Button>
+        ) : null}
       </div>
     </section>
   )
@@ -601,50 +606,36 @@ function ChecklistOverview({
   )
 }
 
-function ReplaceDocumentControl({
+function ManageDocumentLink({
+  submissionId,
   documentId,
   label,
-  pending,
-  error,
   disabled,
-  onReplace,
 }: {
+  submissionId: string
   documentId: string
   label: string
-  pending: boolean
-  error?: string
   disabled: boolean
-  onReplace: (documentId: string, file: File) => void
 }) {
-  const inputId = `replace-${documentId}`
-
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
         <p className="min-w-0 truncate text-ink-muted">{label}</p>
-        <label
-          htmlFor={inputId}
-          className={cn(
-            'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-muted',
-            (pending || disabled) && 'pointer-events-none cursor-not-allowed opacity-50',
-          )}
-        >
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileUp className="h-3.5 w-3.5" />}
-          Dosyayı değiştir
-        </label>
+        {disabled ? (
+          <span className="inline-flex shrink-0 cursor-not-allowed items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-subtle opacity-60">
+            <FileUp className="h-3.5 w-3.5" />
+            Dosyayı değiştir
+          </span>
+        ) : (
+          <Link
+            href={`/submissions/${submissionId}/documents?documentId=${documentId}`}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-muted"
+          >
+            <FileUp className="h-3.5 w-3.5" />
+            Dosyayı değiştir
+          </Link>
+        )}
       </div>
-      <input
-        id={inputId}
-        type="file"
-        className="sr-only"
-        disabled={pending || disabled}
-        onChange={(event) => {
-          const file = event.target.files?.[0]
-          event.target.value = ''
-          if (file) onReplace(documentId, file)
-        }}
-      />
-      {error && <p className="mt-1 text-xs text-danger-700">{error}</p>}
     </div>
   )
 }
@@ -660,10 +651,8 @@ function ActionChecklist({
   notePendingKeys,
   noteErrors,
   readOnly,
-  onReplaceDocument,
-  replacingDocumentIds,
-  replaceErrors,
-  replacementDisabled,
+  submissionId,
+  documentActionsDisabled,
   onClearCategory,
   onExpandedChange,
   onToggle,
@@ -679,10 +668,8 @@ function ActionChecklist({
   notePendingKeys: Set<string>
   noteErrors: Record<string, string>
   readOnly: boolean
-  onReplaceDocument: (documentId: string, file: File) => void
-  replacingDocumentIds: Set<string>
-  replaceErrors: Record<string, string>
-  replacementDisabled: boolean
+  submissionId: string
+  documentActionsDisabled: boolean
   onClearCategory: () => void
   onExpandedChange: (key: string) => void
   onToggle: (finding: ReportFindingItem, completed: boolean) => void
@@ -734,10 +721,8 @@ function ActionChecklist({
                 notePending={notePendingKeys.has(findingKey(finding))}
                 noteError={noteErrors[findingKey(finding)]}
                 readOnly={readOnly}
-                onReplaceDocument={onReplaceDocument}
-                replacingDocumentIds={replacingDocumentIds}
-                replaceErrors={replaceErrors}
-                replacementDisabled={replacementDisabled}
+                submissionId={submissionId}
+                documentActionsDisabled={documentActionsDisabled}
                 onExpandedChange={() => onExpandedChange(findingKey(finding))}
                 onToggle={(completed) => onToggle(finding, completed)}
                 onSaveNote={(note) => onSaveNote(finding, note)}
@@ -757,10 +742,8 @@ function ActionChecklist({
                   notePending={notePendingKeys.has(findingKey(finding))}
                   noteError={noteErrors[findingKey(finding)]}
                   readOnly={readOnly}
-                  onReplaceDocument={onReplaceDocument}
-                  replacingDocumentIds={replacingDocumentIds}
-                  replaceErrors={replaceErrors}
-                  replacementDisabled={replacementDisabled}
+                  submissionId={submissionId}
+                  documentActionsDisabled={documentActionsDisabled}
                   onExpandedChange={() => onExpandedChange(findingKey(finding))}
                   onToggle={(completed) => onToggle(finding, completed)}
                   onSaveNote={(note) => onSaveNote(finding, note)}
@@ -812,10 +795,8 @@ function ChecklistItem({
   notePending,
   noteError,
   readOnly,
-  onReplaceDocument,
-  replacingDocumentIds,
-  replaceErrors,
-  replacementDisabled,
+  submissionId,
+  documentActionsDisabled,
   onExpandedChange,
   onToggle,
   onSaveNote,
@@ -827,10 +808,8 @@ function ChecklistItem({
   notePending: boolean
   noteError?: string
   readOnly: boolean
-  onReplaceDocument: (documentId: string, file: File) => void
-  replacingDocumentIds: Set<string>
-  replaceErrors: Record<string, string>
-  replacementDisabled: boolean
+  submissionId: string
+  documentActionsDisabled: boolean
   onExpandedChange: () => void
   onToggle: (completed: boolean) => void
   onSaveNote: (note: string) => void
@@ -919,10 +898,8 @@ function ChecklistItem({
           notePending={notePending}
           noteError={noteError}
           readOnly={readOnly}
-          onReplaceDocument={onReplaceDocument}
-          replacingDocumentIds={replacingDocumentIds}
-          replaceErrors={replaceErrors}
-          replacementDisabled={replacementDisabled}
+          submissionId={submissionId}
+          documentActionsDisabled={documentActionsDisabled}
           onSaveNote={onSaveNote}
         />
       )}
@@ -935,20 +912,16 @@ function ChecklistDetails({
   notePending,
   noteError,
   readOnly,
-  onReplaceDocument,
-  replacingDocumentIds,
-  replaceErrors,
-  replacementDisabled,
+  submissionId,
+  documentActionsDisabled,
   onSaveNote,
 }: {
   finding: ReportFindingItem
   notePending: boolean
   noteError?: string
   readOnly: boolean
-  onReplaceDocument: (documentId: string, file: File) => void
-  replacingDocumentIds: Set<string>
-  replaceErrors: Record<string, string>
-  replacementDisabled: boolean
+  submissionId: string
+  documentActionsDisabled: boolean
   onSaveNote: (note: string) => void
 }) {
   return (
@@ -1080,14 +1053,12 @@ function ChecklistDetails({
               <p className="font-semibold text-ink">Dosya düzeltme</p>
               <div className="mt-2 space-y-2">
                 {finding.sourceDocuments.map((document) => (
-                  <ReplaceDocumentControl
+                  <ManageDocumentLink
                     key={document.id}
+                    submissionId={submissionId}
                     documentId={document.id}
                     label={`${document.label} · ${document.filename}`}
-                    pending={replacingDocumentIds.has(document.id)}
-                    error={replaceErrors[document.id]}
-                    disabled={replacementDisabled}
-                    onReplace={onReplaceDocument}
+                    disabled={documentActionsDisabled}
                   />
                 ))}
               </div>

@@ -155,6 +155,38 @@ export async function processSubmission(
       if (!doc.latestVersion || doc.isIgnored || doc.docType === 'UNCLASSIFIED') continue
 
       const docType = doc.docType as DocumentType
+      // Reuse a prior successful extraction for this immutable, checksum-bound
+      // version instead of re-running OCR/LLM. DONE only: LOW_CONFIDENCE rows
+      // carry no business data and may stem from a transient reader outage, so
+      // they must re-extract on every re-run to keep the retry path alive.
+      const reusableExtraction = await prisma.documentExtraction.findFirst({
+        where: {
+          documentVersionId: doc.latestVersion.id,
+          tenantId,
+          extractionStatus: 'DONE',
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (reusableExtraction) {
+        await prisma.document.update({
+          where: { id: doc.id },
+          data: { status: 'DONE' },
+        })
+        extractionResults.push({
+          docType,
+          data: jsonObjectOrEmpty(reusableExtraction.structuredJson),
+          confidence: reusableExtraction.confidence ?? 0,
+        })
+        logger.info('processSubmission.extraction_reused', {
+          submissionId,
+          jobId,
+          docId: doc.id,
+          documentVersionId: doc.latestVersion.id,
+          extractionId: reusableExtraction.id,
+        })
+        continue
+      }
 
       // Update document status
       await prisma.document.update({
@@ -1102,6 +1134,11 @@ function hasUsableExtractedValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0
   const text = String(value).trim()
   return text.length > 0 && !isPlaceholderValue(text)
+}
+
+function jsonObjectOrEmpty(value: Prisma.JsonValue | null): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
 }
 
 /**

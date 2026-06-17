@@ -3,7 +3,7 @@ import { prisma, Prisma } from '@gumrukyz/db'
 import { z } from 'zod'
 import { FINAL_DOC_TYPES, normalizePartyName, normalizeTaxId } from '@/lib/classification'
 import { requireApiUser } from '@/lib/auth'
-import { startSubmissionProcessing } from '@/lib/processing-runner'
+import { isProcessingActive } from '@/lib/processing-runner'
 
 const DocumentDecisionSchema = z.object({
   id: z.string().uuid(),
@@ -51,6 +51,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       include: { documents: true },
     })
     if (!submission) return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 404 })
+    if (isProcessingActive(submission.status) || submission.classificationStatus === 'RUNNING') {
+      return NextResponse.json({ error: 'İşlem devam ederken sınıflandırma güncellenemez' }, { status: 409 })
+    }
 
     if (
       submission.dataClassification === 'REAL' &&
@@ -74,6 +77,45 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       decision: parsed.data.client,
     })
 
+    const now = new Date()
+    const decisionById = new Map(parsed.data.documents.map((document) => [document.id, document]))
+    const hasClassificationMutation = submission.tradeFlow !== parsed.data.tradeFlow ||
+      submission.documents.some((document) => {
+        const decision = decisionById.get(document.id)
+        return decision != null && (
+          decision.docType !== document.docType ||
+          decision.isIgnored !== document.isIgnored
+        )
+      })
+    const shouldStaleReport = hasClassificationMutation && (
+      Boolean(submission.currentReportJobId) ||
+      Boolean(submission.reportStaleAt) ||
+      submission.status === 'COMPLETED'
+    )
+
+    const documentsAfterValidation = submission.documents.map((document) => {
+      const decision = decisionById.get(document.id)
+      if (!decision) {
+        return {
+          docType: document.docType,
+          isIgnored: document.isIgnored,
+          classificationValidatedAt: document.classificationValidatedAt,
+        }
+      }
+
+      return {
+        docType: decision.docType,
+        isIgnored: decision.isIgnored,
+        classificationValidatedAt: now,
+      }
+    })
+    const allIncludedDocumentsValidated = documentsAfterValidation.every((document) =>
+      document.isIgnored ||
+      (document.docType !== 'UNCLASSIFIED' && Boolean(document.classificationValidatedAt)),
+    )
+    const nextClassificationStatus = allIncludedDocumentsValidated ? 'VALIDATED' : 'AWAITING_VALIDATION'
+    const staleReason = 'Belge türü veya analiz kapsamı değişti; rapor yeniden analiz bekliyor.'
+
     await prisma.$transaction(async (tx) => {
       for (const document of parsed.data.documents) {
         await tx.document.update({
@@ -82,7 +124,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             docType: document.docType,
             label: docTypeLabel(document.docType),
             isIgnored: document.isIgnored,
-            classificationValidatedAt: new Date(),
+            classificationValidatedAt: now,
             classificationValidatedBy: user.id,
           },
         })
@@ -93,10 +135,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         data: {
           tradeFlow: parsed.data.tradeFlow,
           brokerClientId,
-          classificationStatus: 'VALIDATED',
-          classificationValidatedAt: new Date(),
-          classificationValidatedBy: user.id,
+          classificationStatus: nextClassificationStatus,
+          classificationValidatedAt: allIncludedDocumentsValidated ? now : null,
+          classificationValidatedBy: allIncludedDocumentsValidated ? user.id : null,
           status: 'UPLOADED',
+          ...(shouldStaleReport
+            ? {
+                reportStaleAt: now,
+                reportStaleReason: staleReason,
+              }
+            : {}),
         },
       })
 
@@ -112,23 +160,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       })
     })
 
-    const processing = submission.reportStaleAt
-      ? await startSubmissionProcessing({ submissionId, tenantId: user.tenantId })
-      : null
-
     return NextResponse.json({
       id: submissionId,
       tradeFlow: parsed.data.tradeFlow,
       brokerClientId,
-      classificationStatus: 'VALIDATED',
-      processingJobId: processing?.ok ? processing.jobId : undefined,
-      processingError: processing
-        ? processing.ok
-          ? processing.status === 'FAILED'
-            ? processing.errorMessage ?? 'Analiz tamamlanamadı'
-            : undefined
-          : processing.error
-        : undefined,
+      classificationStatus: nextClassificationStatus,
+      reportStale: Boolean(submission.reportStaleAt) || shouldStaleReport,
+      reportStaleReason: shouldStaleReport ? staleReason : submission.reportStaleReason,
     })
   } catch (err) {
     if (err instanceof Error && err.message === 'Broker client not found') {

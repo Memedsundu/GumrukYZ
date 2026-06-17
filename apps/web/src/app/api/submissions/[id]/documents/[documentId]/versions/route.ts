@@ -2,16 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma, Prisma } from '@gumrukyz/db'
 import { put } from '@vercel/blob'
 import { createHash } from 'crypto'
-import { TradeFlow } from '@gumrukyz/domain'
 import { inferDocumentContentType, isSupportedUploadFile } from '@/lib/document-file-types'
 import { requireApiUser } from '@/lib/auth'
-import { classifySubmissionDocuments, FINAL_DOC_TYPES } from '@/lib/classification'
-import { startSubmissionProcessing, isProcessingActive } from '@/lib/processing-runner'
+import { classifySubmissionDocument } from '@/lib/classification'
+import { isProcessingActive } from '@/lib/processing-runner'
 import { docTypeLabel } from '@/lib/report-format'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
-const AUTO_VALIDATE_DOC_TYPE_CONFIDENCE = 0.78
-const AUTO_VALIDATE_TRADE_FLOW_CONFLICT_CONFIDENCE = 0.8
 
 interface Params {
   params: Promise<{ id: string; documentId: string }>
@@ -49,9 +46,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     const document = submission.documents[0]!
-    if (!FINAL_DOC_TYPES.includes(document.docType as (typeof FINAL_DOC_TYPES)[number])) {
-      return NextResponse.json({ error: 'Sınıflandırılmamış belge doğrudan değiştirilemez' }, { status: 409 })
-    }
 
     const formData = await req.formData()
     const file = formData.get('file') as File | null
@@ -85,6 +79,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const nextVersionNumber = (document.versions[0]?.versionNumber ?? 0) + 1
     const staleReason = `${docTypeLabel(document.docType)} belgesi değiştirildi; rapor yeniden analiz bekliyor.`
+    const shouldStaleReport = Boolean(submission.currentReportJobId) ||
+      Boolean(submission.reportStaleAt) ||
+      submission.status === 'COMPLETED'
 
     const version = await prisma.$transaction(async (tx) => {
       await tx.documentVersion.updateMany({
@@ -128,8 +125,12 @@ export async function POST(req: NextRequest, { params }: Params) {
           classificationStatus: 'PENDING',
           classificationValidatedAt: null,
           classificationValidatedBy: null,
-          reportStaleAt: new Date(),
-          reportStaleReason: staleReason,
+          ...(shouldStaleReport
+            ? {
+                reportStaleAt: new Date(),
+                reportStaleReason: staleReason,
+              }
+            : {}),
         },
       })
 
@@ -154,94 +155,32 @@ export async function POST(req: NextRequest, { params }: Params) {
       return created
     })
 
-    const classification = await classifySubmissionDocuments({
+    const classification = await classifySubmissionDocument({
       submissionId,
       tenantId: user.tenantId,
+      documentId,
     })
-
     const targetClassification = classification.documents.find((item) => item.id === documentId)
-    const canAutoValidate = Boolean(targetClassification) &&
-      targetClassification!.suggestedDocType === document.docType &&
-      targetClassification!.confidence >= AUTO_VALIDATE_DOC_TYPE_CONFIDENCE &&
-      tradeFlowStillValid({
-        currentTradeFlow: submission.tradeFlow,
-        suggestedTradeFlow: classification.submission.suggestedTradeFlow,
-        suggestedConfidence: classification.submission.suggestedTradeFlowConfidence,
-      })
-
-    let processingJobId: string | undefined
-    let processingError: string | undefined
-    if (canAutoValidate) {
-      await prisma.$transaction(async (tx) => {
-        await tx.document.update({
-          where: { id: documentId },
-          data: {
-            docType: document.docType,
-            label: docTypeLabel(document.docType),
-            classificationValidatedAt: new Date(),
-            classificationValidatedBy: user.id,
-          },
-        })
-        await tx.submission.update({
-          where: { id: submissionId },
-          data: {
-            tradeFlow: submission.tradeFlow,
-            classificationStatus: 'VALIDATED',
-            classificationValidatedAt: new Date(),
-            classificationValidatedBy: user.id,
-            status: 'UPLOADED',
-          },
-        })
-        await tx.auditLog.create({
-          data: {
-            tenantId: user.tenantId,
-            userId: user.id,
-            action: 'document.version_auto_validated',
-            entityType: 'Document',
-            entityId: documentId,
-            afterJson: {
-              documentId,
-              versionId: version.id,
-              docType: document.docType,
-              confidence: targetClassification?.confidence ?? null,
-            } as Prisma.InputJsonValue,
-          },
-        })
-      })
-
-      const processing = await startSubmissionProcessing({ submissionId, tenantId: user.tenantId })
-      if (processing.ok) {
-        processingJobId = processing.jobId
-        if (processing.status === 'FAILED') {
-          processingError = processing.errorMessage ?? 'Analiz tamamlanamadı'
-        }
-      } else {
-        processingError = processing.error
-      }
-    }
 
     return NextResponse.json({
       documentId,
       versionId: version.id,
       versionNumber: version.versionNumber,
-      needsValidation: !canAutoValidate,
-      processingJobId,
-      processingError,
-      reportStale: true,
-    }, { status: processingJobId ? 202 : 201 })
+      needsValidation: true,
+      classificationStatus: classification.submission.classificationStatus,
+      classification: targetClassification
+        ? {
+            suggestedDocType: targetClassification.suggestedDocType,
+            confidence: targetClassification.confidence,
+            reasoning: targetClassification.reasoning,
+            sourceRefs: targetClassification.sourceRefs,
+          }
+        : null,
+      reportStale: shouldStaleReport,
+      reportStaleReason: shouldStaleReport ? staleReason : null,
+    }, { status: 201 })
   } catch (err) {
     console.error('POST /api/submissions/[id]/documents/[documentId]/versions error:', err)
     return NextResponse.json({ error: 'Sunucu hatası' }, { status: 500 })
   }
-}
-
-function tradeFlowStillValid(input: {
-  currentTradeFlow: string
-  suggestedTradeFlow: string
-  suggestedConfidence: number
-}): boolean {
-  if (input.currentTradeFlow !== TradeFlow.IMPORT && input.currentTradeFlow !== TradeFlow.EXPORT) return false
-  if (!input.suggestedTradeFlow || input.suggestedTradeFlow === TradeFlow.UNKNOWN) return true
-  if (input.suggestedTradeFlow === input.currentTradeFlow) return true
-  return input.suggestedConfidence < AUTO_VALIDATE_TRADE_FLOW_CONFLICT_CONFIDENCE
 }

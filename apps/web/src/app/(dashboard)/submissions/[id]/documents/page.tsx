@@ -2,6 +2,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
+import { willChargeAnalysis } from '@/lib/entitlements'
 import DocumentUploadClient from './upload-client'
 
 export const dynamic = 'force-dynamic'
@@ -22,10 +23,19 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
           latestVersion: true,
         },
       },
+      expertReviews: {
+        where: {
+          status: 'COMPLETED',
+          supersededAt: null,
+        },
+        select: { id: true },
+        take: 1,
+      },
     },
   })
 
   if (!submission) notFound()
+  const willChargeReanalysis = await willChargeAnalysis({ tenantId: user.tenantId, submissionId: id })
 
   return (
     <PageShell>
@@ -52,6 +62,10 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
         submissionStatus={submission.status}
         tradeFlow={submission.tradeFlow}
         classificationStatus={submission.classificationStatus}
+        reportStaleAt={submission.reportStaleAt?.toISOString() ?? null}
+        reportStaleReason={submission.reportStaleReason}
+        willChargeReanalysis={willChargeReanalysis}
+        hasCompletedExpertReview={submission.expertReviews.length > 0}
         existingDocuments={submission.documents.map((d) => ({
           id: d.id,
           docType: d.docType,

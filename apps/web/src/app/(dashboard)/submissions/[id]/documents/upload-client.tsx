@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { classifyDocumentCoverage } from '@gumrukyz/domain'
-import { FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff, ChevronDown } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, Loader2, Play, SearchCheck, Eye, EyeOff, ChevronDown, AlertTriangle, FileUp } from 'lucide-react'
 import {
   isSupportedUploadFile,
   SUPPORTED_UPLOAD_ACCEPT,
@@ -52,6 +52,10 @@ interface Props {
   submissionStatus: string
   tradeFlow: string
   classificationStatus: string
+  reportStaleAt: string | null
+  reportStaleReason: string | null
+  willChargeReanalysis: boolean
+  hasCompletedExpertReview: boolean
   existingDocuments: ExistingDocument[]
 }
 
@@ -109,19 +113,52 @@ type ProcessingProgressState = {
   description: string
 }
 
+type UploadResponse = UploadedDoc & {
+  reportStale?: boolean
+  reportStaleReason?: string | null
+}
+
+type ClassificationValidationResponse = {
+  classificationStatus: string
+  reportStale?: boolean
+  reportStaleReason?: string | null
+}
+
+type ReplacementResponse = {
+  classificationStatus?: string
+  classification?: {
+    suggestedDocType: string
+    confidence: number
+    reasoning: string
+    sourceRefs: Array<{ field: string; value: string }>
+  } | null
+  reportStale?: boolean
+  reportStaleReason?: string | null
+  error?: string
+}
+
 export default function DocumentUploadClient({
   submissionId,
   submissionStatus: initialSubmissionStatus,
   tradeFlow,
   classificationStatus: initialClassificationStatus,
+  reportStaleAt,
+  reportStaleReason: initialReportStaleReason,
+  willChargeReanalysis,
+  hasCompletedExpertReview,
   existingDocuments,
 }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const resumeStartedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const focusedDocumentId = searchParams.get('documentId')
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [replacingDocumentIds, setReplacingDocumentIds] = useState<Set<string>>(() => new Set())
+  const [replaceErrors, setReplaceErrors] = useState<Record<string, string>>({})
+  const [replaceMessage, setReplaceMessage] = useState<string | null>(null)
   const [documents, setDocuments] = useState<UploadedDoc[]>(
     existingDocuments.map((d) => ({
       ...d,
@@ -129,6 +166,8 @@ export default function DocumentUploadClient({
     })),
   )
   const [classificationStatus, setClassificationStatus] = useState(initialClassificationStatus)
+  const [reportStale, setReportStale] = useState(Boolean(reportStaleAt))
+  const [reportStaleReason, setReportStaleReason] = useState<string | null>(initialReportStaleReason)
   const [tradeFlowChoice, setTradeFlowChoice] = useState(tradeFlow === 'IMPORT' || tradeFlow === 'EXPORT' ? tradeFlow : '')
   const [classifying, setClassifying] = useState(false)
   const [classificationError, setClassificationError] = useState<string | null>(null)
@@ -148,6 +187,10 @@ export default function DocumentUploadClient({
     documents.some((doc) => !doc.isIgnored && doc.docType === 'UNCLASSIFIED')
   )
   const canProcess = documents.length > 0 && !needsValidation
+  const pendingValidationCount = documents.filter((doc) =>
+    !doc.isIgnored &&
+    (doc.docType === 'UNCLASSIFIED' || !doc.classificationValidatedAt),
+  ).length
   const documentCoverage = useMemo(
     () => classifyDocumentCoverage({
       tradeFlow: tradeFlowChoice ?? tradeFlow,
@@ -163,6 +206,9 @@ export default function DocumentUploadClient({
     classifying,
     validating,
     processing,
+    reportStale,
+    willChargeReanalysis,
+    hasCompletedExpertReview,
   })
 
   useEffect(() => {
@@ -254,7 +300,7 @@ export default function DocumentUploadClient({
         throw new Error(data.error ?? 'Yükleme başarısız')
       }
 
-      const data = await res.json() as UploadedDoc
+      const data = await res.json() as UploadResponse
       setDocuments((prev) => [
         ...prev,
         {
@@ -269,6 +315,10 @@ export default function DocumentUploadClient({
         },
       ])
       setClassificationStatus('PENDING')
+      if (data.reportStale) {
+        setReportStale(true)
+        setReportStaleReason(data.reportStaleReason ?? 'Belge eklendi; rapor yeniden analiz bekliyor.')
+      }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Yükleme başarısız')
     } finally {
@@ -283,6 +333,67 @@ export default function DocumentUploadClient({
       await uploadFile(file)
     }
     if (files.length > 0) await handleClassify()
+  }
+
+  async function replaceDocument(documentId: string, file: File) {
+    setReplacingDocumentIds((current) => new Set(current).add(documentId))
+    setReplaceErrors((current) => {
+      const next = { ...current }
+      delete next[documentId]
+      return next
+    })
+    setReplaceMessage(null)
+
+    try {
+      if (!isSupportedUploadFile(file.name, file.type)) throw new Error('Desteklenmeyen dosya türü')
+      if (file.size > 20 * 1024 * 1024) throw new Error('Dosya boyutu 20MB altında olmalı')
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch(`/api/submissions/${submissionId}/documents/${documentId}/versions`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json().catch(() => null) as ReplacementResponse | null
+      if (!res.ok || !data) {
+        throw new Error(data?.error ?? 'Dosya değiştirilemedi')
+      }
+
+      setDocuments((prev) => prev.map((doc) => doc.id === documentId
+        ? {
+            ...doc,
+            filename: file.name,
+            status: 'PENDING',
+            classificationValidatedAt: null,
+            docType: data.classification?.suggestedDocType ?? doc.docType,
+            suggestedDocType: data.classification?.suggestedDocType ?? null,
+            suggestedDocTypeConfidence: data.classification?.confidence ?? null,
+            classificationReasoning: data.classification?.reasoning ?? null,
+            classificationSourceRefs: data.classification?.sourceRefs ?? [],
+          }
+        : doc,
+      ))
+      if (data.classificationStatus) setClassificationStatus(data.classificationStatus)
+      else setClassificationStatus('AWAITING_VALIDATION')
+      if (data.reportStale) {
+        setReportStale(true)
+        setReportStaleReason(data.reportStaleReason ?? 'Belge değiştirildi; rapor yeniden analiz bekliyor.')
+      }
+      setReplaceMessage('Dosya değiştirildi. Yeniden analiz için belge sınıflandırmasını doğrulayın.')
+      router.refresh()
+    } catch (err) {
+      setReplaceErrors((current) => ({
+        ...current,
+        [documentId]: err instanceof Error ? err.message : 'Dosya değiştirilemedi',
+      }))
+    } finally {
+      setReplacingDocumentIds((current) => {
+        const next = new Set(current)
+        next.delete(documentId)
+        return next
+      })
+    }
   }
 
   async function handleClassify() {
@@ -377,10 +488,18 @@ export default function DocumentUploadClient({
         throw new Error(data.error ?? 'Doğrulama kaydedilemedi')
       }
 
-      setClassificationStatus('VALIDATED')
+      const data = await res.json() as ClassificationValidationResponse
+      setClassificationStatus(data.classificationStatus)
+      if (data.reportStale) {
+        setReportStale(true)
+        setReportStaleReason(data.reportStaleReason ?? reportStaleReason)
+      }
+      const validatedAt = new Date().toISOString()
       setDocuments((prev) => prev.map((doc) => ({
         ...doc,
-        classificationValidatedAt: new Date().toISOString(),
+        classificationValidatedAt: doc.isIgnored || doc.docType !== 'UNCLASSIFIED'
+          ? validatedAt
+          : doc.classificationValidatedAt,
       })))
       router.refresh()
     } catch (err) {
@@ -424,9 +543,25 @@ export default function DocumentUploadClient({
       <div className="rounded-lg border border-brand-200 bg-brand-50 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Sıradaki adım</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+              {reportStale ? 'Rapor güncel değil' : 'Sıradaki adım'}
+            </p>
             <h2 className="mt-1 text-base font-semibold text-ink">{nextAction.title}</h2>
             <p className="mt-1 text-sm text-ink-muted">{nextAction.description}</p>
+            {reportStale && (
+              <div className="mt-2 flex items-start gap-2 text-sm text-brand-700">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p>{reportStaleReason ?? 'Belgeler değişti; rapor yeniden analiz bekliyor.'}</p>
+                  <p className="mt-0.5">
+                    {willChargeReanalysis
+                      ? 'Yeniden analiz 1 analiz hakkı kullanır.'
+                      : 'Bu dosyada yeniden analiz ücretsizdir.'}
+                    {hasCompletedExpertReview ? ' Önceki uzman incelemesi yeni raporla geçersiz sayılır.' : ''}
+                  </p>
+                </div>
+              </div>
+            )}
             {nextAction.blockingReasons.length > 0 && (
               <ul className="mt-2 space-y-1 text-sm text-brand-700">
                 {nextAction.blockingReasons.map((reason) => (
@@ -451,6 +586,16 @@ export default function DocumentUploadClient({
           </Button>
         </div>
       </div>
+
+      {replaceMessage && <div className="rounded-lg bg-brand-50 px-4 py-3 text-sm text-brand-700">{replaceMessage}</div>}
+
+      {/* Always-mounted analysis feedback: the "Analizi Başlat" card below is
+          hidden when the report is stale, so progress/errors for a re-analysis
+          triggered from the banner above must surface here. */}
+      {processError && <div className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{processError}</div>}
+      {(processing || processingProgress) && (
+        <ProgressBar progress={processingProgress} active={processing} />
+      )}
 
       <div className="rounded-lg border border-line bg-surface p-6">
         <h2 className="mb-4 text-base font-semibold text-ink">Belgeleri Yükle</h2>
@@ -520,7 +665,10 @@ export default function DocumentUploadClient({
           </div>
           <div className="divide-y divide-line">
             {documents.map((doc) => (
-              <div key={doc.id} className="px-6 py-4">
+              <div
+                key={doc.id}
+                className={`px-6 py-4 ${focusedDocumentId === doc.id ? 'bg-brand-50/70 ring-1 ring-inset ring-brand-200' : ''}`}
+              >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                   <FileText className="mt-1 h-5 w-5 text-ink-subtle" />
                   <div className="min-w-0 flex-1">
@@ -561,7 +709,14 @@ export default function DocumentUploadClient({
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <select
                         value={doc.docType === 'UNCLASSIFIED' ? '' : doc.docType}
-                        onChange={(e) => setDocuments((prev) => prev.map((item) => item.id === doc.id ? { ...item, docType: e.target.value } : item))}
+                        onChange={(e) => {
+                          const nextDocType = e.target.value || 'UNCLASSIFIED'
+                          setDocuments((prev) => prev.map((item) => item.id === doc.id
+                            ? { ...item, docType: nextDocType, classificationValidatedAt: null }
+                            : item,
+                          ))
+                          setClassificationStatus('AWAITING_VALIDATION')
+                        }}
                         disabled={doc.isIgnored}
                         className="w-full rounded-md border border-line-strong px-2 py-1 text-sm disabled:bg-surface-muted disabled:text-ink-subtle sm:min-w-44"
                       >
@@ -572,7 +727,13 @@ export default function DocumentUploadClient({
                       </select>
                       <button
                         type="button"
-                        onClick={() => setDocuments((prev) => prev.map((item) => item.id === doc.id ? { ...item, isIgnored: !item.isIgnored } : item))}
+                        onClick={() => {
+                          setDocuments((prev) => prev.map((item) => item.id === doc.id
+                            ? { ...item, isIgnored: !item.isIgnored, classificationValidatedAt: null }
+                            : item,
+                          ))
+                          setClassificationStatus('AWAITING_VALIDATION')
+                        }}
                         className={`inline-flex w-full items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors sm:min-w-32 ${
                           doc.isIgnored
                             ? 'border-line-strong bg-surface-muted text-ink-muted hover:bg-line'
@@ -585,6 +746,13 @@ export default function DocumentUploadClient({
                         {doc.isIgnored ? 'Analiz dışı' : 'Analize dahil'}
                       </button>
                     </div>
+                    <ReplaceDocumentButton
+                      documentId={doc.id}
+                      pending={replacingDocumentIds.has(doc.id)}
+                      error={replaceErrors[doc.id]}
+                      disabled={classifying || validating || processing}
+                      onReplace={replaceDocument}
+                    />
                     <DocumentStatusBadge status={doc.status} validated={Boolean(doc.classificationValidatedAt)} ignored={doc.isIgnored} />
                   </div>
                 </div>
@@ -680,7 +848,11 @@ export default function DocumentUploadClient({
           <div className="mt-5 flex items-center justify-between gap-4">
             <p className="flex items-center gap-2 text-sm text-ink-muted">
               {!needsValidation && <AnimatedCheck size={22} />}
-              {needsValidation ? 'Önerileri kontrol edip doğruladıktan sonra analiz başlatılabilir.' : 'Sınıflandırma doğrulandı.'}
+              {needsValidation
+                ? pendingValidationCount > 0
+                  ? `${pendingValidationCount} belge için sınıflandırma doğrulaması gerekiyor.`
+                  : 'Önerileri kontrol edip doğruladıktan sonra analiz başlatılabilir.'
+                : 'Sınıflandırma doğrulandı.'}
             </p>
             <Button onClick={handleValidate} loading={validating}>
               {!validating && <CheckCircle />}
@@ -692,7 +864,7 @@ export default function DocumentUploadClient({
       )}
 
       {documents.length > 0 && (
-        <div className="rounded-lg border border-line bg-surface p-6">
+        <div className={`rounded-lg border border-line bg-surface p-6 ${reportStale ? 'hidden' : ''}`}>
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm font-semibold text-ink">Analizi Başlat</h3>
@@ -711,12 +883,51 @@ export default function DocumentUploadClient({
               {processing ? 'İşleniyor...' : 'Analizi Başlat'}
             </Button>
           </div>
-          {processError && <div className="mt-4 rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{processError}</div>}
-          {(processing || processingProgress) && (
-            <ProgressBar progress={processingProgress} active={processing} />
-          )}
         </div>
       )}
+    </div>
+  )
+}
+
+function ReplaceDocumentButton({
+  documentId,
+  pending,
+  error,
+  disabled,
+  onReplace,
+}: {
+  documentId: string
+  pending: boolean
+  error?: string
+  disabled: boolean
+  onReplace: (documentId: string, file: File) => void
+}) {
+  const inputId = `document-replace-${documentId}`
+
+  return (
+    <div className="w-full sm:w-auto">
+      <label
+        htmlFor={inputId}
+        className={`inline-flex w-full cursor-pointer items-center justify-center rounded-md border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-muted sm:min-w-32 ${
+          (pending || disabled) ? 'pointer-events-none cursor-not-allowed opacity-50' : ''
+        }`}
+      >
+        {pending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileUp className="mr-1.5 h-3.5 w-3.5" />}
+        Dosyayı değiştir
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept={SUPPORTED_UPLOAD_ACCEPT}
+        className="sr-only"
+        disabled={pending || disabled}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          if (file) onReplace(documentId, file)
+        }}
+      />
+      {error && <p className="mt-1 text-xs text-danger-700">{error}</p>}
     </div>
   )
 }
@@ -819,6 +1030,9 @@ function getNextAction(params: {
   classifying: boolean
   validating: boolean
   processing: boolean
+  reportStale: boolean
+  willChargeReanalysis: boolean
+  hasCompletedExpertReview: boolean
 }): {
   title: string
   description: string
@@ -854,8 +1068,10 @@ function getNextAction(params: {
 
   if (params.needsValidation) {
     return {
-      title: 'Önerileri doğrulayın',
-      description: 'İşlem yönü, belge türleri ve müşteri eşleşmesi kullanıcı tarafından onaylanmalı.',
+      title: params.reportStale ? 'Değişen belgeleri doğrulayın' : 'Önerileri doğrulayın',
+      description: params.reportStale
+        ? 'Yeniden analizden önce değişen veya doğrulanmamış belgeler kullanıcı tarafından onaylanmalı.'
+        : 'İşlem yönü, belge türleri ve müşteri eşleşmesi kullanıcı tarafından onaylanmalı.',
       cta: params.validating ? 'Kaydediliyor' : 'Doğrulamayı kaydet',
       action: 'validate',
       disabled: params.validating,
@@ -864,6 +1080,26 @@ function getNextAction(params: {
         'İthalat/ihracat yönü seçili olmalı.',
         'Analize dahil edilen her belge için belge türü doğrulanmalı.',
       ],
+    }
+  }
+
+  if (params.reportStale) {
+    return {
+      title: 'Belgeler değişti - rapor güncel değil',
+      description: [
+        'Doğrulanan belge setiyle raporu yeniden üretin.',
+        params.willChargeReanalysis
+          ? 'Bu işlem 1 analiz hakkı kullanır.'
+          : 'Bu dosyada yeniden analiz ücretsizdir.',
+        params.hasCompletedExpertReview
+          ? 'Önceki uzman incelemesi yeni raporla geçersiz sayılır.'
+          : null,
+      ].filter(Boolean).join(' '),
+      cta: params.processing ? 'İşleniyor' : 'Yeniden Analiz Et',
+      action: 'process',
+      disabled: params.processing || !params.canProcess,
+      loading: params.processing,
+      blockingReasons: [],
     }
   }
 

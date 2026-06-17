@@ -1,4 +1,5 @@
-import { FileText, FileUp, Loader2, PanelRight } from 'lucide-react'
+import Link from 'next/link'
+import { FileText, FileUp, PanelRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ReportCitationItem, ReportDocumentItem } from './report-types'
 
@@ -8,10 +9,8 @@ export function EvidencePanel({
   reportSources,
   activeCategory,
   onCategoryChange,
-  onReplaceDocument,
-  replacingDocumentIds = new Set(),
-  replaceErrors = {},
-  replacementDisabled = false,
+  submissionId,
+  documentActionsDisabled = false,
   sticky = true,
   framed = sticky,
 }: {
@@ -20,10 +19,8 @@ export function EvidencePanel({
   reportSources: ReportCitationItem[]
   activeCategory: string | null
   onCategoryChange: (category: string | null) => void
-  onReplaceDocument?: (documentId: string, file: File) => void
-  replacingDocumentIds?: Set<string>
-  replaceErrors?: Record<string, string>
-  replacementDisabled?: boolean
+  submissionId: string
+  documentActionsDisabled?: boolean
   sticky?: boolean
   framed?: boolean
 }) {
@@ -96,15 +93,11 @@ export function EvidencePanel({
                         </span>
                       )}
                     </div>
-                    {onReplaceDocument && (
-                      <ReplaceDocumentButton
-                        documentId={document.id}
-                        pending={replacingDocumentIds.has(document.id)}
-                        error={replaceErrors[document.id]}
-                        disabled={replacementDisabled}
-                        onReplace={onReplaceDocument}
-                      />
-                    )}
+                    <DocumentManageLink
+                      submissionId={submissionId}
+                      documentId={document.id}
+                      disabled={documentActionsDisabled}
+                    />
                   </div>
                 </div>
               </div>
@@ -136,45 +129,31 @@ export function EvidencePanel({
   )
 }
 
-function ReplaceDocumentButton({
+function DocumentManageLink({
+  submissionId,
   documentId,
-  pending,
-  error,
   disabled,
-  onReplace,
 }: {
+  submissionId: string
   documentId: string
-  pending: boolean
-  error?: string
   disabled: boolean
-  onReplace: (documentId: string, file: File) => void
 }) {
-  const inputId = `evidence-replace-${documentId}`
-
   return (
     <div className="mt-2">
-      <label
-        htmlFor={inputId}
-        className={cn(
-          'inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-muted',
-          (pending || disabled) && 'pointer-events-none cursor-not-allowed opacity-50',
-        )}
-      >
-        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileUp className="h-3.5 w-3.5" />}
-        Dosyayı değiştir
-      </label>
-      <input
-        id={inputId}
-        type="file"
-        className="sr-only"
-        disabled={pending || disabled}
-        onChange={(event) => {
-          const file = event.target.files?.[0]
-          event.target.value = ''
-          if (file) onReplace(documentId, file)
-        }}
-      />
-      {error && <p className="mt-1 text-xs text-danger-700">{error}</p>}
+      {disabled ? (
+        <span className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-subtle opacity-60">
+          <FileUp className="h-3.5 w-3.5" />
+          Dosyayı değiştir
+        </span>
+      ) : (
+        <Link
+          href={`/submissions/${submissionId}/documents?documentId=${documentId}`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-muted"
+        >
+          <FileUp className="h-3.5 w-3.5" />
+          Dosyayı değiştir
+        </Link>
+      )}
     </div>
   )
 }

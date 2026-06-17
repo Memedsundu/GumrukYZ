@@ -204,6 +204,134 @@ export async function classifySubmissionDocuments(params: {
   }
 }
 
+export async function classifySubmissionDocument(params: {
+  submissionId: string
+  tenantId: string
+  documentId: string
+}): Promise<ClassificationResponse> {
+  const submission = await prisma.submission.findFirst({
+    where: { id: params.submissionId, tenantId: params.tenantId },
+    include: {
+      documents: {
+        where: { id: params.documentId },
+        include: { latestVersion: true },
+      },
+    },
+  })
+  if (!submission) throw new Error('Submission not found')
+  const document = submission.documents[0]
+  if (!document) throw new Error('Document not found')
+
+  await prisma.submission.update({
+    where: { id: submission.id },
+    data: { status: 'CLASSIFYING', classificationStatus: 'RUNNING' },
+  })
+  await prisma.documentClassificationSuggestion.deleteMany({
+    where: {
+      submissionId: submission.id,
+      tenantId: params.tenantId,
+      documentId: params.documentId,
+    },
+  })
+
+  const documentOutputs: ClassificationResponse['documents'] = []
+  const tradeFlowVotes: Array<{ value: string; confidence: number }> = []
+  const allParties: PartyCandidate[] = []
+
+  if (!document.isIgnored && document.latestVersion) {
+    const ai = new OpenAIProvider()
+    const read = await readForClassification(document, params.tenantId)
+    const classified = await classifyText({
+      tenantId: params.tenantId,
+      ai,
+      text: read.text,
+      filename: document.latestVersion.originalFilename,
+    })
+
+    const parties = classified.parties.length > 0
+      ? classified.parties
+      : extractPartiesHeuristically(read.text)
+    const sourceRefs = classified.sourceRefs.length > 0
+      ? classified.sourceRefs
+      : [{ field: 'filename', value: document.latestVersion.originalFilename }]
+
+    await prisma.documentClassificationSuggestion.create({
+      data: {
+        submissionId: submission.id,
+        documentId: document.id,
+        tenantId: params.tenantId,
+        providerRunId: classified.providerRunId ?? read.providerRunId,
+        suggestedDocType: classified.detectedType,
+        docTypeConfidence: classified.confidence,
+        suggestedTradeFlow: classified.detectedTradeFlow,
+        tradeFlowConfidence: classified.tradeFlowConfidence,
+        reasoning: classified.reasoning,
+        sourceRefsJson: sourceRefs as Prisma.InputJsonValue,
+        extractedPartiesJson: parties as Prisma.InputJsonValue,
+      },
+    })
+
+    await prisma.document.update({
+      where: { id: document.id },
+      data: {
+        suggestedDocType: classified.detectedType,
+        suggestedDocTypeConfidence: classified.confidence,
+        classificationReasoning: classified.reasoning,
+        classificationSourceRefsJson: sourceRefs as Prisma.InputJsonValue,
+      },
+    })
+
+    if (classified.detectedTradeFlow && classified.detectedTradeFlow !== TradeFlow.UNKNOWN) {
+      tradeFlowVotes.push({
+        value: classified.detectedTradeFlow,
+        confidence: classified.tradeFlowConfidence,
+      })
+    }
+    allParties.push(...parties)
+
+    documentOutputs.push({
+      id: document.id,
+      filename: document.latestVersion.originalFilename,
+      suggestedDocType: classified.detectedType,
+      confidence: classified.confidence,
+      reasoning: classified.reasoning,
+      sourceRefs,
+      parties,
+    })
+  }
+
+  const tradeFlow = chooseTradeFlow(tradeFlowVotes)
+  const suggestedTradeFlow = tradeFlow.value !== TradeFlow.UNKNOWN
+    ? tradeFlow.value
+    : submission.suggestedTradeFlow ?? submission.tradeFlow
+  const suggestedTradeFlowConfidence = tradeFlow.value !== TradeFlow.UNKNOWN
+    ? tradeFlow.confidence
+    : submission.suggestedTradeFlowConfidence ?? 0
+  const clientMatches = await matchBrokerClients(params.tenantId, allParties)
+
+  await prisma.submission.update({
+    where: { id: submission.id },
+    data: {
+      status: 'AWAITING_VALIDATION',
+      classificationStatus: 'AWAITING_VALIDATION',
+      suggestedTradeFlow,
+      suggestedTradeFlowConfidence,
+    },
+  })
+
+  return {
+    submission: {
+      id: submission.id,
+      suggestedTradeFlow,
+      suggestedTradeFlowConfidence,
+      classificationStatus: 'AWAITING_VALIDATION',
+    },
+    documents: documentOutputs,
+    clientMatches,
+    requiresValidation: true,
+  }
+}
+
 export function normalizePartyName(value: string | null | undefined): string {
   return String(value ?? '')
     .normalize('NFD')

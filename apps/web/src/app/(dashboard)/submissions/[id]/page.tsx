@@ -328,6 +328,7 @@ function tradeFlowLabel(tradeFlow: string) {
 function classificationStatusLabel(status: string) {
   const map: Record<string, string> = {
     PENDING: 'Bekliyor',
+    RUNNING: 'Sınıflandırılıyor',
     AWAITING_VALIDATION: 'Doğrulama bekliyor',
     VALIDATED: 'Doğrulandı',
   }

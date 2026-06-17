@@ -4,8 +4,7 @@ import { put } from '@vercel/blob'
 import { createHash } from 'crypto'
 import { inferDocumentContentType, isSupportedUploadFile } from '@/lib/document-file-types'
 import { requireApiUser } from '@/lib/auth'
-import { isProcessingActive, startSubmissionProcessing } from '@/lib/processing-runner'
-import { docTypeLabel } from '@/lib/report-format'
+import { isProcessingActive } from '@/lib/processing-runner'
 import { getTenantEntitlements, toEntitlementBlock } from '@/lib/entitlements'
 import { entitlementError } from '@/lib/api-errors'
 
@@ -34,8 +33,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'İşlem devam ederken belge yüklenemez' }, { status: 409 })
     }
 
-    // Read-only when trial/subscription is exhausted; also gates the auto-reprocess
-    // that an upload would trigger.
+    // Read-only when trial/subscription is exhausted; blocks uploading new
+    // documents. Adding a document only marks the report stale — re-analysis is
+    // a separate explicit action, credit-gated in /process.
     const entitlements = await getTenantEntitlements(user.tenantId)
     const block = toEntitlementBlock(entitlements)
     if (block) return entitlementError(block)
@@ -84,12 +84,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     })
 
     // Create Document and DocumentVersion in a transaction
-    const [document] = await prisma.$transaction(async (tx) => {
-      const existingDocs = await tx.document.findMany({
-        where: { submissionId, tenantId: user.tenantId },
-        orderBy: { createdAt: 'asc' },
-      })
-
+    const document = await prisma.$transaction(async (tx) => {
       const doc = await tx.document.create({
         data: {
           submissionId,
@@ -97,8 +92,8 @@ export async function POST(req: NextRequest, { params }: Params) {
           docType,
           label: label ?? (docType === 'UNCLASSIFIED' ? 'Sınıflandırılmamış belge' : docType),
           status: 'PENDING',
-          classificationValidatedAt: docType === 'UNCLASSIFIED' ? null : new Date(),
-          classificationValidatedBy: docType === 'UNCLASSIFIED' ? null : user.id,
+          classificationValidatedAt: null,
+          classificationValidatedBy: null,
         },
       })
 
@@ -133,25 +128,22 @@ export async function POST(req: NextRequest, { params }: Params) {
         },
       })
 
-      return [{ ...doc, latestVersionId: version.id, filename: file.name }, existingDocs] as const
+      return { ...doc, latestVersionId: version.id, filename: file.name }
     })
 
-    const shouldStaleReport = Boolean(submission.currentReportJobId) || submission.status === 'COMPLETED'
-    const shouldAutoProcess = shouldStaleReport &&
-      docType !== 'UNCLASSIFIED' &&
-      submission.classificationStatus === 'VALIDATED'
+    const shouldStaleReport = Boolean(submission.currentReportJobId) ||
+      Boolean(submission.reportStaleAt) ||
+      submission.status === 'COMPLETED'
     const submissionUpdate: Prisma.SubmissionUpdateInput = {}
-    if (submission.status === 'PENDING' || shouldStaleReport) {
+    if (submission.status === 'PENDING' || submission.status === 'FAILED' || shouldStaleReport) {
       submissionUpdate.status = 'UPLOADED'
     }
-    if (docType === 'UNCLASSIFIED') {
-      submissionUpdate.classificationStatus = 'PENDING'
-      submissionUpdate.classificationValidatedAt = null
-      submissionUpdate.classificationValidatedBy = null
-    }
+    submissionUpdate.classificationStatus = docType === 'UNCLASSIFIED' ? 'PENDING' : 'AWAITING_VALIDATION'
+    submissionUpdate.classificationValidatedAt = null
+    submissionUpdate.classificationValidatedBy = null
     if (shouldStaleReport) {
       submissionUpdate.reportStaleAt = new Date()
-      submissionUpdate.reportStaleReason = `${docTypeLabel(docType)} belgesi eklendi; rapor yeniden analiz bekliyor.`
+      submissionUpdate.reportStaleReason = 'Yeni belge eklendi; rapor yeniden analiz bekliyor.'
     }
     if (Object.keys(submissionUpdate).length > 0) {
       await prisma.submission.update({
@@ -160,10 +152,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       })
     }
 
-    const processing = shouldAutoProcess
-      ? await startSubmissionProcessing({ submissionId, tenantId: user.tenantId })
-      : null
-
     return NextResponse.json({
       id: document.id,
       docType: document.docType,
@@ -171,14 +159,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       filename: file.name,
       status: document.status,
       reportStale: shouldStaleReport,
-      processingJobId: processing?.ok ? processing.jobId : undefined,
-      processingError: processing
-        ? processing.ok
-          ? processing.status === 'FAILED'
-            ? processing.errorMessage ?? 'Analiz tamamlanamadı'
-            : undefined
-          : processing.error
-        : undefined,
+      reportStaleReason: shouldStaleReport ? String(submissionUpdate.reportStaleReason) : null,
     }, { status: 201 })
   } catch (err) {
     console.error('POST /api/submissions/[id]/documents error:', err)
