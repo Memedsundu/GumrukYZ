@@ -1,0 +1,83 @@
+{
+  "_fixture": "export-origin-destination-confusion",
+  "_description": "Export origin should pass when invoice/packing origin was mistakenly populated from buyer or destination country, but declaration MEN origin clearly says Turkiye.",
+  "_tradeFlow": "EXPORT",
+  "_expectedResults": {
+    "EXP-004": "PASS"
+  },
+  "documents": [
+    {
+      "docType": "INVOICE",
+      "confidence": 0.98,
+      "data": {
+        "invoice_number": "FI62026000000063",
+        "invoice_date": "2026-03-13",
+        "seller_name": "FARHYM OTOMOTIV SAN. TIC. LTD. STI",
+        "seller_address": "Akyurt/Ankara/Turkiye",
+        "buyer_name": "MAN BUS SP Z.O.O.",
+        "buyer_address": "ul. 1 Maja 12 / POLONYA PL",
+        "currency": "EUR",
+        "total_amount": 88.3,
+        "incoterm": "DAP",
+        "delivery_place": "27-200 Starachowice, Poland",
+        "country_of_origin": "POLONYA",
+        "gtip_code": "870829909000",
+        "items": [
+          {
+            "description": "IC KAPAK KOMPLESI 1485mm TUR 22",
+            "hs_code": "870829909000",
+            "quantity": 5,
+            "unit": "Adet",
+            "unit_price": 17.66,
+            "total_price": 88.3
+          }
+        ]
+      }
+    },
+    {
+      "docType": "PACKING_LIST",
+      "confidence": 0.98,
+      "data": {
+        "package_count": 9,
+        "gross_weight": 3980,
+        "net_weight": null,
+        "goods_description": "AIR CHANNEL SCOPE",
+        "shipper": "FARHYM OTO. SAN. TIC. LTD. STI.",
+        "consignee": "MAN BUS SP Z.O.O.-POLAND",
+        "destination": "Poland",
+        "country_of_origin": "POLONYA"
+      }
+    },
+    {
+      "docType": "DECLARATION_OUTPUT",
+      "confidence": 0.98,
+      "data": {
+        "declaration_number": "26-00721",
+        "declaration_date": "2026-03-14",
+        "exporter": "FARHYM OTO. SAN. TIC. LTD. STI.",
+        "importer": "MAN BUS S.P. Z.O.O.",
+        "regime_code": "1000",
+        "gtip_code": "870829909000",
+        "goods_description": "OTOBUS HAVALANDIRMA KANALI AKSAMLARI",
+        "country_of_origin": "Turkiye",
+        "origin_country": "Turkiye",
+        "package_count": 9,
+        "gross_weight": 3980,
+        "net_weight": 3600,
+        "total_value": 54556.03,
+        "currency": "EUR"
+      }
+    }
+  ],
+  "declarationSnapshot": {
+    "declarationNumber": "26-00721",
+    "declarationDate": "2026-03-14",
+    "regimeCode": "1000",
+    "totalValue": 54556.03,
+    "currency": "EUR",
+    "totalNetWeight": 3600,
+    "totalGrossWeight": 3980,
+    "packageCount": 9,
+    "gtipCode": "870829909000"
+  }
+}

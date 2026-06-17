@@ -52,6 +52,21 @@ const ORIGIN_FIELDS = [
   'menşe_ülke',
 ]
 
+const DESTINATION_LIKE_FIELDS_BY_DOC_TYPE: Record<string, string[]> = {
+  [DocumentType.INVOICE]: ['buyer_name', 'buyer_address', 'consignee', 'delivery_place'],
+  [DocumentType.PACKING_LIST]: ['consignee', 'destination'],
+}
+
+const COUNTRY_ALIASES_BY_CODE: Record<string, string[]> = {
+  TR: ['TR', 'TURKIYE', 'TURKEY', 'REPUBLIC OF TURKEY', 'TURKIYE CUMHURIYETI'],
+  PL: ['PL', 'POLONYA', 'POLAND'],
+  DE: ['DE', 'ALMANYA', 'GERMANY'],
+  FR: ['FR', 'FRANSA', 'FRANCE'],
+  IT: ['IT', 'ITALYA', 'ITALY'],
+  RO: ['RO', 'ROMANYA', 'ROMANIA'],
+  BG: ['BG', 'BULGARISTAN', 'BULGARIA'],
+}
+
 function collectExportOriginEvidence(ctx: SubmissionContext): OriginEvidence[] {
   const evidence: OriginEvidence[] = []
 
@@ -125,6 +140,40 @@ function sourceRefsFromOriginEvidence(evidence: OriginEvidence[]) {
     field: entry.field,
     value: entry.value,
   }))
+}
+
+function isDestinationLikeOriginEvidence(entry: OriginEvidence): boolean {
+  const normalized = entry.normalized
+  if (!normalized) return false
+  const fields = DESTINATION_LIKE_FIELDS_BY_DOC_TYPE[entry.doc.docType] ?? []
+  if (fields.length === 0) return false
+
+  return fields.some((field) => mentionsCountryCode(entry.doc.data[field], normalized))
+}
+
+function mentionsCountryCode(value: unknown, code: string): boolean {
+  const text = normalizeCountryText(value)
+  if (!text) return false
+  const aliases = COUNTRY_ALIASES_BY_CODE[code] ?? [code]
+  const tokens = new Set(text.split(/\s+/).filter(Boolean))
+
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeCountryText(alias)
+    if (!normalizedAlias) return false
+    if (normalizedAlias.length === 2) return tokens.has(normalizedAlias)
+    return text.includes(normalizedAlias)
+  })
+}
+
+function normalizeCountryText(value: unknown): string {
+  if (!hasValue(value)) return ''
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[İIı]/g, 'I')
+    .replace(/[^A-Z]+/gi, ' ')
+    .toUpperCase()
+    .trim()
 }
 
 /** EXP-001 — İhracat faturasında fatura numarası bulunmalı. */
@@ -233,7 +282,9 @@ export const EXP_004: RuleDefinition = {
     const meaningfulEvidence = evidence.filter(
       (entry) => hasValue(entry.value) && !isPlaceholderValue(entry.value),
     )
-    const validEvidence = meaningfulEvidence.filter((entry) => entry.normalized)
+    const destinationLikeEvidence = meaningfulEvidence.filter(isDestinationLikeOriginEvidence)
+    const trustedEvidence = meaningfulEvidence.filter((entry) => !isDestinationLikeOriginEvidence(entry))
+    const validEvidence = trustedEvidence.filter((entry) => entry.normalized)
     const validCodes = new Set(validEvidence.map((entry) => entry.normalized))
 
     if (validCodes.size === 1) {
@@ -250,16 +301,25 @@ export const EXP_004: RuleDefinition = {
         this.code,
         this.severity,
         'İhracat dosyasındaki menşe ülke bilgileri farklı ülkelere işaret ediyor; fatura, çeki listesi ve beyanname özetindeki menşe alanları manuel doğrulanmalı.',
-        sourceRefsFromOriginEvidence(meaningfulEvidence),
+        sourceRefsFromOriginEvidence(trustedEvidence),
       )
     }
 
-    if (meaningfulEvidence.length > 0) {
+    if (trustedEvidence.length > 0) {
       return reviewResult(
         this.code,
         this.severity,
         'İhracat dosyasındaki menşe ülke bilgisi standart ülke adı veya ISO ülke koduna normalize edilemedi. Menşe kanıtı ya da düzeltilmiş belge istenmeli.',
-        sourceRefsFromOriginEvidence(meaningfulEvidence),
+        sourceRefsFromOriginEvidence(trustedEvidence),
+      )
+    }
+
+    if (destinationLikeEvidence.length > 0) {
+      return reviewResult(
+        this.code,
+        this.severity,
+        'İhracat dosyasındaki menşe alanı alıcı/varış ülkesiyle karışmış olabilir. Beyanname veya menşe kanıtı üzerinden gerçek menşe manuel doğrulanmalı.',
+        sourceRefsFromOriginEvidence(destinationLikeEvidence),
       )
     }
 
