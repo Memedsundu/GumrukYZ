@@ -8,7 +8,7 @@ export function DocumentCoveragePanel({
 }: {
   coverage: DocumentCoverageResult
 }) {
-  if (coverage.isComplete && coverage.missingConditional.length === 0) {
+  if (coverage.isComplete && coverage.missingConditional.length === 0 && coverage.missingReferencedInvoices.length === 0) {
     return (
       <section className="rounded-2xl border border-line bg-surface p-5 shadow-card">
         <h2 className="text-sm font-semibold text-ink">Belge kapsamı</h2>
@@ -44,6 +44,12 @@ export function DocumentCoveragePanel({
               <div>
                 <p className="font-medium text-ink">Koşullu eksik belgeler</p>
                 <p className="mt-1 text-ink-muted">{coverage.missingConditionalLabels.join(', ')}</p>
+              </div>
+            )}
+            {coverage.missingReferencedInvoiceLabels.length > 0 && (
+              <div>
+                <p className="font-medium text-ink">Eksik referans faturalar</p>
+                <p className="mt-1 text-ink-muted">{coverage.missingReferencedInvoiceLabels.join(', ')}</p>
               </div>
             )}
           </div>

@@ -200,19 +200,12 @@ function parseInvoiceRefs(rawText: string): InvoiceReference[] {
   for (const match of rawText.matchAll(/\b(FI[\d-]{6,}|[A-Z]{1,4}\d{10,})\b(\s*\((?:F\.?\s*O\.?\s*C\.?|BEDELS[İI]Z)\))?/gi)) {
     const number = match[1]?.trim()
     if (!number) continue
-    const nearby = lineContaining(rawText, match.index ?? 0)
     refs.set(number, {
       number,
-      free_of_charge: Boolean(match[2]) || /F\.?\s*O\.?\s*C\.?|BEDELS[İI]Z/i.test(nearby),
+      free_of_charge: Boolean(match[2]),
     })
   }
   return Array.from(refs.values())
-}
-
-function lineContaining(rawText: string, index: number): string {
-  const start = rawText.lastIndexOf('\n', index)
-  const end = rawText.indexOf('\n', index)
-  return rawText.slice(start < 0 ? 0 : start + 1, end < 0 ? rawText.length : end)
 }
 
 function hasHandlingUnitRelationship(text: string): boolean {

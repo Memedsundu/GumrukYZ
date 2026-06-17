@@ -45,8 +45,9 @@ export function enhanceDeclarationOutputFromText(
   const detailedItems = parseDeclarationDetailItems(rawText)
   const invoiceRefs = parseInvoiceRefs(rawText)
   const fobValue = parseLocaleNumber(firstMatch(rawText, /Toplam FOB\s*:?\s*([+-]?\d[\d.,]*)/i))
-  const freeOfChargeLineValues = parseFreeOfChargeLineValues(rawText)
+  const freeOfChargeLineValues = freeOfChargeValuesFromItems(detailedItems) ?? parseFreeOfChargeLineValues(rawText)
   const origin = parseDeclarationOrigin(rawText)
+  const customsOfficeCode = parseCustomsOfficeCode(rawText)
 
   if (explicitPackageCount) next['package_count'] = parseLocaleNumber(explicitPackageCount)
   if (explicitPackageCount) {
@@ -56,9 +57,10 @@ export function enhanceDeclarationOutputFromText(
   if (invoiceRefs.length > 0) next['invoice_refs'] = invoiceRefs
   if (fobValue != null) next['fob_value'] = fobValue
   if (origin) {
-    next['country_of_origin'] = next['country_of_origin'] ?? origin
-    next['origin_country'] = next['origin_country'] ?? origin
+    next['country_of_origin'] = origin
+    next['origin_country'] = origin
   }
+  if (customsOfficeCode) next['customs_office_code'] = customsOfficeCode
   if (/Bedelsiz|F\.?\s*O\.?\s*C\.?|FREE OF CHARGE/i.test(rawText)) next['free_of_charge'] = true
   if (freeOfChargeLineValues.length > 0) next['free_of_charge_line_values'] = freeOfChargeLineValues
   if (explicitNetGross) {
@@ -338,6 +340,17 @@ function parseDeclarationOrigin(rawText: string): string | null {
   return country ? 'Türkiye' : null
 }
 
+function parseCustomsOfficeCode(rawText: string): string | null {
+  const labeled = firstMatch(rawText, /(?:G[üu]mr[üu]k\s+(?:M[üu]d[üu]rl[üu][ğg][üu]|[İI]daresi|Ofisi|Office))[\s\S]{0,80}?\b(\d{3})\b/i)
+  if (labeled) return labeled
+  const beforeDeclarationNo = firstMatch(rawText, /\b(\d{3})\s+(?:\d{2}-\d{5}|\d{8,})\b/)
+  if (beforeDeclarationNo) return beforeDeclarationNo
+  if (/MURATBEY\s+G[ÜU]MR[ÜU]K\s+M[ÜU]D[ÜU]RL[ÜU][ĞG][ÜU]/i.test(rawText) && /\b060\b/.test(rawText)) {
+    return '060'
+  }
+  return null
+}
+
 function parsePackageCountBeforeLineDocuments(text: string): number | null {
   const tail = text.match(/\bAD\s+5,00\s+([\s\S]{0,160}?)\s+EK BELGELER/i)?.[1]
   if (!tail) return toInteger(firstMatch(text, /KAP\.AD\s+(\d+)/i) ?? undefined)
@@ -393,12 +406,13 @@ function parseInvoiceRefs(rawText: string): Array<{
     const number = match[1]?.trim()
     if (!number) continue
     const nearby = lineContaining(rawText, match.index ?? 0)
+    const freeOfCharge = Boolean(match[2])
     refs.set(number, {
       number,
-      free_of_charge: Boolean(match[2]) || /F\.?\s*O\.?\s*C\.?|BEDELS[İI]Z/i.test(nearby),
+      free_of_charge: freeOfCharge,
       source: 'document_text',
       source_text: collapseWhitespace(nearby),
-      role: Boolean(match[2]) || /F\.?\s*O\.?\s*C\.?|BEDELS[İI]Z/i.test(nearby) ? 'FOC' : 'UNKNOWN',
+      role: freeOfCharge ? 'FOC' : 'UNKNOWN',
     })
   }
 
@@ -451,6 +465,15 @@ function parseFreeOfChargeLineValues(rawText: string): number[] {
   return Array.from(match[1].matchAll(/(?<!\d)(\d{1,6}[.,]\d{2})(?!\d)/g))
     .map((value) => parseLocaleNumber(value[1]))
     .filter((value): value is number => value != null && value > 0)
+}
+
+function freeOfChargeValuesFromItems(items: DeclarationDetailItem[]): number[] | null {
+  const values = items.flatMap((item) => {
+    if (item.free_of_charge !== true) return []
+    return [item.statistical_value, item.customs_value]
+      .filter((value): value is number => value != null && value > 0)
+  })
+  return values.length > 0 ? [...new Set(values)] : null
 }
 
 function collapseWhitespace(value: string | undefined): string {

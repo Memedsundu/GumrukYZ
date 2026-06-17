@@ -269,6 +269,11 @@ function ReportPdfDocument({ payload }: { payload: ReportPayload }) {
                 Koşullu eksik belgeler: {payload.documentCoverage.missingConditionalLabels.join(', ')}
               </Text>
             )}
+            {payload.documentCoverage.missingReferencedInvoiceLabels.length > 0 && (
+              <Text style={styles.sourceRef}>
+                Eksik referans faturalar: {payload.documentCoverage.missingReferencedInvoiceLabels.join(', ')}
+              </Text>
+            )}
           </View>
         </View>
 

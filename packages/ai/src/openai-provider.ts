@@ -185,6 +185,7 @@ ${rawText.slice(0, 6000)}`,
 - Mevcut belgeler: ${documentCoverage.presentLabels.join(', ') || '—'}
 - Eksik beklenen belgeler: ${documentCoverage.missingExpectedLabels.join(', ') || '—'}
 - Koşullu eksik belgeler: ${documentCoverage.missingConditionalLabels.join(', ') || '—'}
+- Eksik referans faturalar: ${documentCoverage.missingReferencedInvoiceLabels?.join(', ') || '—'}
 - Sınırlama: ${documentCoverage.limitationNotice}`
       : ''
 

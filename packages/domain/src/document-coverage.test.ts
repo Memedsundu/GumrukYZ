@@ -22,6 +22,32 @@ function testStandardExportInvoicePackingListIsComplete() {
   assert.deepEqual(result.missingConditional, [])
 }
 
+function testExportWithMissingReferencedInvoiceIsLimited() {
+  const result = classifyDocumentCoverage({
+    tradeFlow: TradeFlow.EXPORT,
+    uploadedDocTypes: [DocumentType.INVOICE, DocumentType.PACKING_LIST],
+    documents: [
+      {
+        docType: DocumentType.INVOICE,
+        data: { invoice_number: 'FI62026000000063' },
+      },
+      {
+        docType: DocumentType.PACKING_LIST,
+        data: {
+          invoice_refs: [
+            { number: 'FI62026000000062', free_of_charge: false },
+            { number: 'FI62026000000063', free_of_charge: true },
+          ],
+        },
+      },
+    ],
+  })
+  assert.equal(result.isComplete, false)
+  assert.deepEqual(result.missingExpected, [])
+  assert.deepEqual(result.missingReferencedInvoices, ['FI62026000000062'])
+  assert.match(result.limitationNotice, /FI62026000000062/)
+}
+
 function testTemporaryExportConditionallyRequiresLoadingInstruction() {
   const result = classifyDocumentCoverage({
     tradeFlow: TradeFlow.EXPORT,
@@ -67,6 +93,7 @@ function testConditionalOriginOnlyWhenSignalExists() {
 const tests = [
   testImportMissingTransport,
   testStandardExportInvoicePackingListIsComplete,
+  testExportWithMissingReferencedInvoiceIsLimited,
   testTemporaryExportConditionallyRequiresLoadingInstruction,
   testCompleteImportSet,
   testConditionalOriginOnlyWhenSignalExists,

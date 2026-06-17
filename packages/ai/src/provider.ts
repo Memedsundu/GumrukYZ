@@ -51,6 +51,7 @@ export interface RiskSummaryCoverageContext {
   presentLabels: string[]
   missingExpectedLabels: string[]
   missingConditionalLabels: string[]
+  missingReferencedInvoiceLabels?: string[]
   limitationNotice: string
 }
 

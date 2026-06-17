@@ -52,6 +52,8 @@ export type DocumentCoverageResult = {
   missingExpectedLabels: string[]
   missingConditional: string[]
   missingConditionalLabels: string[]
+  missingReferencedInvoices: string[]
+  missingReferencedInvoiceLabels: string[]
   isComplete: boolean
   limitationNotice: string
 }
@@ -107,6 +109,40 @@ function hasLoadingInstructionSignal(
   })
 }
 
+function normalizeInvoiceNumber(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+}
+
+function looksLikeCommercialInvoiceNumber(value: unknown): boolean {
+  return /^FI[A-Z0-9-]{6,}$/.test(normalizeInvoiceNumber(value))
+}
+
+function collectUploadedInvoiceNumbers(documents: DocumentCoverageDocument[]): Set<string> {
+  return new Set(
+    documents
+      .filter((doc) => doc.docType === DocumentType.INVOICE)
+      .map((doc) => normalizeInvoiceNumber(doc.data?.['invoice_number']))
+      .filter((number) => looksLikeCommercialInvoiceNumber(number)),
+  )
+}
+
+function collectReferencedInvoiceNumbers(documents: DocumentCoverageDocument[]): string[] {
+  const refs = new Set<string>()
+  for (const doc of documents) {
+    const rawRefs = doc.data?.['invoice_refs']
+    if (!Array.isArray(rawRefs)) continue
+    for (const rawRef of rawRefs) {
+      if (!rawRef || typeof rawRef !== 'object' || Array.isArray(rawRef)) continue
+      const number = normalizeInvoiceNumber((rawRef as Record<string, unknown>)['number'])
+      if (looksLikeCommercialInvoiceNumber(number)) refs.add(number)
+    }
+  }
+  return [...refs]
+}
+
 export function classifyDocumentCoverage(params: {
   tradeFlow: string
   uploadedDocTypes: string[]
@@ -128,6 +164,9 @@ export function classifyDocumentCoverage(params: {
 
   const present = [...uploaded].filter((docType) => !docType.startsWith('UNCLASSIFIED'))
   const missingExpected = baseline.filter((docType) => !hasDocType(uploaded, docType))
+  const uploadedInvoiceNumbers = collectUploadedInvoiceNumbers(documents)
+  const missingReferencedInvoices = collectReferencedInvoiceNumbers(documents)
+    .filter((number) => !uploadedInvoiceNumbers.has(number))
 
   const missingConditional: string[] = []
   if (hasOriginSignal(documents, snapshot) && !hasDocType(uploaded, DocumentType.ORIGIN_DOC)) {
@@ -144,10 +183,12 @@ export function classifyDocumentCoverage(params: {
     missingConditional.push(DocumentType.LOADING_INSTRUCTION)
   }
 
-  const missingAll = [...missingExpected, ...missingConditional]
+  const missingAll = [...missingExpected, ...missingConditional, ...missingReferencedInvoices]
   const isComplete = missingAll.length === 0
   const limitationNotice = isComplete
     ? 'Analiz mevcut belgelerle tam kapsamda çalıştırıldı.'
+    : missingReferencedInvoices.length > 0 && missingExpected.length === 0 && missingConditional.length === 0
+      ? `Bu analiz mevcut belgelerle sınırlıdır; referans verilen fatura(lar) eksik: ${missingReferencedInvoices.join(', ')}.`
     : 'Bu analiz mevcut belgelerle sınırlıdır.'
 
   return {
@@ -157,6 +198,8 @@ export function classifyDocumentCoverage(params: {
     missingExpectedLabels: missingExpected.map(labelFor),
     missingConditional,
     missingConditionalLabels: missingConditional.map(labelFor),
+    missingReferencedInvoices,
+    missingReferencedInvoiceLabels: missingReferencedInvoices.map((number) => `Fatura ${number}`),
     isComplete,
     limitationNotice,
   }

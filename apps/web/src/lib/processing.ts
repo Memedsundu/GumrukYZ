@@ -57,6 +57,10 @@ import {
   shouldRunOpenAIDocumentReader,
 } from './openai-document-reader'
 import { runAiRuleValidationForSubmission } from './ai-rule-validation'
+import {
+  runExtractionConfirmationShadow,
+  type ExtractionConfirmationDocument,
+} from './extraction-confirmation'
 import { consumeMetric, refundMetric } from './entitlements'
 import { UsageMetric } from '@gumrukyz/domain'
 
@@ -142,6 +146,7 @@ export async function processSubmission(
 
     const ai = new OpenAIProvider()
     const extractionResults: ExtractionData[] = []
+    const extractionConfirmationDocuments: ExtractionConfirmationDocument[] = []
 
     // ─── EXTRACTING ────────────────────────────────────────────────────────────
     await updateJobStatus(jobId, submissionId, 'EXTRACTING', 'EXTRACTING')
@@ -549,6 +554,13 @@ export async function processSubmission(
           data: structuredData,
           confidence: aiConfidence,
         })
+        extractionConfirmationDocuments.push({
+          extractionId: extraction.id,
+          docType,
+          filename,
+          rawText,
+          structuredData,
+        })
       } catch (docErr) {
         logger.error('Document extraction failed', {
           docId: doc.id,
@@ -557,6 +569,37 @@ export async function processSubmission(
         await prisma.document.update({
           where: { id: doc.id },
           data: { status: 'FAILED' },
+        })
+      }
+    }
+
+    const confirmation = await runExtractionConfirmationShadow({
+      documents: extractionConfirmationDocuments,
+    }).catch((confirmationErr) => {
+      logger.warn('Extraction confirmation shadow pass failed, continuing processing', {
+        submissionId,
+        jobId,
+        error: confirmationErr instanceof Error ? confirmationErr.message : String(confirmationErr),
+      })
+      return null
+    })
+
+    if (confirmation) {
+      for (const input of extractionConfirmationDocuments) {
+        const findings = confirmation.findingsByExtractionId.get(input.extractionId)
+        if (!findings || findings.length === 0) continue
+        const extractionResult = extractionResults.find((result) => result.data === input.structuredData)
+        if (!extractionResult) continue
+        extractionResult.data = {
+          ...extractionResult.data,
+          _extraction_confirmation_shadow: {
+            promptVersion: confirmation.promptVersion,
+            findings,
+          },
+        }
+        await prisma.documentExtraction.update({
+          where: { id: input.extractionId },
+          data: { structuredJson: extractionResult.data as Prisma.InputJsonValue },
         })
       }
     }
@@ -907,6 +950,7 @@ export async function processSubmission(
               presentLabels: documentCoverage.presentLabels,
               missingExpectedLabels: documentCoverage.missingExpectedLabels,
               missingConditionalLabels: documentCoverage.missingConditionalLabels,
+              missingReferencedInvoiceLabels: documentCoverage.missingReferencedInvoiceLabels,
               limitationNotice: documentCoverage.limitationNotice,
             },
           )
@@ -950,6 +994,7 @@ export async function processSubmission(
       const missingLabels = [
         ...documentCoverage.missingExpectedLabels,
         ...documentCoverage.missingConditionalLabels,
+        ...documentCoverage.missingReferencedInvoiceLabels,
       ]
       summaryText = missingLabels.length > 0
         ? `${documentCoverage.limitationNotice} Eksik beklenen belgeler: ${missingLabels.join(', ')}.`

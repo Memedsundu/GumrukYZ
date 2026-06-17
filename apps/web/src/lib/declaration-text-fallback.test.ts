@@ -9,9 +9,13 @@ Kalem             GTİP                           Eşya Tanımı                
 `
 
 const ankaraDeclarationText = `
+MURATBEY GÜMRÜK MÜDÜRLÜĞÜ
+060
+
 9 KAP 498 AD Marka:ADDR                                                        1                 87082990     90      00
 Ticari tanımı:OTOBÜS HAVALANDIRMA KANALI AKSAMLARI
 TPS-E-Fatura Var 13.03.2026/26243160110886047396583/1-2-3
+1-Tescilsiz---4454,92TL
 
 Toplam FOB : 52056,03
 Top.Miktar       : 503
@@ -65,6 +69,8 @@ function testEnhancementCapturesAnkaraDeclarationSignals() {
       package_count: 6,
       gross_weight: null,
       net_weight: null,
+      country_of_origin: 'POLONYA',
+      items: [{ line_number: 2, country_of_origin: 'POLONYA' }],
     },
     ankaraDeclarationText,
   )
@@ -93,7 +99,11 @@ function testEnhancementCapturesAnkaraDeclarationSignals() {
   )
   assert.ok(Array.isArray(enhanced['free_of_charge_line_values']))
   assert.ok((enhanced['free_of_charge_line_values'] as number[]).includes(88.3))
+  assert.ok((enhanced['free_of_charge_line_values'] as number[]).includes(96.56))
+  assert.equal((enhanced['free_of_charge_line_values'] as number[]).includes(4454.92), false)
   assert.equal(enhanced['country_of_origin'], 'Türkiye')
+  assert.equal(enhanced['origin_country'], 'Türkiye')
+  assert.equal(enhanced['customs_office_code'], '060')
   const items = enhanced['items'] as Array<Record<string, unknown>>
   const freeItem = items.find((item) => item['line_number'] === 2)
   assert.ok(freeItem)
