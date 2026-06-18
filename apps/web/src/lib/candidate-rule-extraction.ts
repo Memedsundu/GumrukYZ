@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { parseStructuredOutput } from '@gumrukyz/ai'
 import { prisma } from '@gumrukyz/db'
 import { estimateModelCostUsd, logger } from '@gumrukyz/shared'
+import { openAIProviderUsageFields } from './provider-usage'
 
 const DEFAULT_MODEL = 'gpt-5.4-mini'
 const DEFAULT_TIMEOUT_MS = 90_000
@@ -111,10 +112,12 @@ export async function extractCandidateRules(params: {
     await prisma.providerRun.update({
       where: { id: providerRun.id },
       data: {
-        model: responseModel,
-        inputTokens,
-        outputTokens,
-        estimatedCostUsd: estimateModelCostUsd(model, inputTokens, outputTokens),
+        ...openAIProviderUsageFields({
+          model: responseModel,
+          inputTokens,
+          outputTokens,
+          estimatedCostUsd: estimateModelCostUsd(model, inputTokens, outputTokens),
+        }),
         durationMs: Date.now() - startedAt,
       },
     })

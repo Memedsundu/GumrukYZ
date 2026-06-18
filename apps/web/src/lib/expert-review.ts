@@ -8,6 +8,7 @@ import {
   EXPERT_REVIEW_SAFETY_GUARDRAILS,
   applyExpertReviewSafetyFilters,
 } from './expert-review-safety'
+import { openAIProviderUsageFields } from './provider-usage'
 
 const DEFAULT_MODEL = 'gpt-5.4'
 const DEFAULT_REASONING_EFFORT = 'medium'
@@ -147,6 +148,7 @@ export async function runExpertReviewForSubmission(params: {
   const providerRun = await prisma.providerRun.create({
     data: {
       tenantId: params.tenantId,
+      submissionId: params.submissionId,
       provider: 'openai',
       model,
       operation: 'expert_review',
@@ -207,10 +209,12 @@ export async function runExpertReviewForSubmission(params: {
     await prisma.providerRun.update({
       where: { id: providerRun.id },
       data: {
-        model: generated.responseModel,
-        inputTokens: generated.inputTokens,
-        outputTokens: generated.outputTokens,
-        estimatedCostUsd: estimateCost(model, generated.inputTokens, generated.outputTokens),
+        ...openAIProviderUsageFields({
+          model: generated.responseModel,
+          inputTokens: generated.inputTokens,
+          outputTokens: generated.outputTokens,
+          estimatedCostUsd: estimateCost(model, generated.inputTokens, generated.outputTokens),
+        }),
         durationMs: Date.now() - startedAt,
       },
     })

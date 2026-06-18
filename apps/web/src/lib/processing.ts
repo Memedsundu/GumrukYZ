@@ -40,17 +40,14 @@ import { logger } from '@gumrukyz/shared'
 import type { DocumentType, TradeFlow } from '@gumrukyz/domain'
 import type { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import { extractTextFromPdf } from './pdf-extractor'
 import { runOcrFallback } from './ocr-client'
 import { formatRuleResultMessage } from './report-format'
 import { enhanceDeclarationOutputFromText } from './declaration-text-fallback'
 import { enhanceLoadingInstructionFromText } from './loading-instruction-text-fallback'
 import { enhancePackingListFromText } from './packing-list-text-fallback'
-import {
-  type AzureDocumentIntelligenceResult,
-  isAzureDocumentIntelligenceEnabled,
-  runAzureLayoutExtraction,
-} from './azure-document-intelligence'
+import { isAzureDocumentIntelligenceEnabled } from './azure-document-intelligence'
+import { readDocumentText } from './document-read'
+import { openAIProviderUsageFields } from './provider-usage'
 import {
   getOpenAIDocumentReaderMinimumConfidence,
   runOpenAIDocumentReader,
@@ -61,6 +58,10 @@ import {
   runExtractionConfirmationShadow,
   type ExtractionConfirmationDocument,
 } from './extraction-confirmation'
+import {
+  persistExtractedFields,
+  persistExtractionVerificationFindings,
+} from './extracted-fields'
 import { consumeMetric, refundMetric } from './entitlements'
 import { UsageMetric } from '@gumrukyz/domain'
 
@@ -211,11 +212,13 @@ export async function processSubmission(
       })
 
       try {
-        // Step 1: Get raw text — reuse the classification read when usable,
-        // otherwise extract native PDF text (managed layout/OCR fallbacks follow).
+        // Step 1: Get raw text from the canonical per-version read. Classification
+        // usually creates it first; processing reuses it instead of paying Azure
+        // again for the same immutable file version.
         const filename = doc.latestVersion.originalFilename
         const mimeType = doc.latestVersion.mimeType
         const extractionSchema = getExtractionSchema(docType)
+        const readerMode = getDocumentReaderMode()
         let rawText: string
         let extractionConfidence: number
         let extractionMethod: string
@@ -224,11 +227,23 @@ export async function processSubmission(
         let pdfImageCount: number
         let pdfPagesWithImages: number
         let likelyRasterScan: boolean
+        let lastReaderProviderRunId: string | null = null
+        let structuredProviderRunId: string | null = null
+        const canUseCachedClassificationText =
+          reuseClassificationText &&
+          cachedClassificationText &&
+          (
+            readerMode === 'native' ||
+            cachedClassificationText.extractionMethod === 'AZURE_DOC_INTEL' ||
+            !isAzureDocumentIntelligenceEnabled()
+          )
 
-        if (reuseClassificationText && cachedClassificationText) {
+        if (canUseCachedClassificationText) {
           rawText = cachedClassificationText.rawText ?? ''
           extractionConfidence = cachedClassificationText.confidence ?? 0
           extractionMethod = cachedClassificationText.extractionMethod ?? 'TEXT_PDF'
+          lastReaderProviderRunId = cachedClassificationText.providerRunId ?? null
+          structuredProviderRunId = lastReaderProviderRunId
           nativeTextConfidence = extractionConfidence
           nativeTextLength = rawText.trim().length
           // Reuse only happens at high confidence, which never enters the
@@ -244,26 +259,42 @@ export async function processSubmission(
             extractionId: cachedClassificationText.id,
           })
         } else {
-          const textResult = await extractTextFromPdf(doc.latestVersion.fileUrl, filename, mimeType)
+          const textResult = await readDocumentText({
+            tenantId,
+            submissionId,
+            documentId: doc.id,
+            documentVersion: doc.latestVersion,
+            operation: `layout_${docType.toLowerCase()}`,
+            preferAzure: readerMode !== 'native',
+            allowNativeFallback: true,
+            minimumConfidence: LOW_CONFIDENCE_THRESHOLD,
+            minimumTextLength: 50,
+          })
           rawText = textResult.text
           extractionConfidence = textResult.confidence
           extractionMethod = textResult.method
+          lastReaderProviderRunId = textResult.providerRunId
+          structuredProviderRunId = lastReaderProviderRunId
           nativeTextConfidence = textResult.confidence
           nativeTextLength = textResult.text.trim().length
-          pdfImageCount = textResult.imageCount
-          pdfPagesWithImages = textResult.pagesWithImages
-          likelyRasterScan = textResult.likelyRasterScan
+          pdfImageCount = textResult.pdfImageCount ?? 0
+          pdfPagesWithImages = textResult.pdfPagesWithImages ?? 0
+          likelyRasterScan = textResult.likelyRasterScan ?? false
         }
 
-        let lastReaderProviderRunId: string | null = null
         let structuredData: Record<string, unknown> = {}
         let structuredDataAlreadyExtracted = false
         let openAIDocumentReaderNeedsOcr = false
-        let managedReaderFallbackNeeded = false
+        let managedReaderFallbackNeeded =
+          readerMode !== 'native' &&
+          (
+            extractionConfidence < getOpenAIDocumentReaderMinimumConfidence() ||
+            rawText.trim().length < 50
+          )
 
         // Step 2: Create the extraction record, or reuse the classification row
         // in place so a single row per version flows through to DONE.
-        const extraction = reuseClassificationText && cachedClassificationText
+        const extraction = canUseCachedClassificationText
           ? await prisma.documentExtraction.update({
               where: { id: cachedClassificationText.id },
               data: {
@@ -271,6 +302,7 @@ export async function processSubmission(
                 extractionMethod,
                 rawText,
                 confidence: extractionConfidence,
+                providerRunId: lastReaderProviderRunId,
               },
             })
           : await prisma.documentExtraction.create({
@@ -281,80 +313,9 @@ export async function processSubmission(
                 extractionMethod,
                 rawText,
                 confidence: extractionConfidence,
+                providerRunId: lastReaderProviderRunId,
               },
             })
-
-        const readerMode = getDocumentReaderMode()
-        if (
-          readerMode !== 'native' &&
-          isAzureDocumentIntelligenceEnabled() &&
-          (readerMode === 'managed' || extractionConfidence < LOW_CONFIDENCE_THRESHOLD)
-        ) {
-          const startedAt = Date.now()
-          const providerRun = await prisma.providerRun.create({
-            data: {
-              tenantId,
-              provider: 'azure_doc_intel',
-              model: process.env.AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID ?? 'prebuilt-layout',
-              operation: `layout_${docType.toLowerCase()}`,
-              status: 'OK',
-            },
-          })
-
-          try {
-            const azureResult = await runAzureLayoutExtraction(
-              doc.latestVersion.fileUrl,
-              filename,
-              mimeType,
-            )
-
-            lastReaderProviderRunId = providerRun.id
-            managedReaderFallbackNeeded =
-              azureResult.confidence < getOpenAIDocumentReaderMinimumConfidence() ||
-              azureResult.text.trim().length < 50
-
-            await prisma.providerRun.update({
-              where: { id: providerRun.id },
-              data: {
-                model: azureResult.modelId,
-                estimatedCostUsd: azureResult.estimatedCostUsd,
-                durationMs: Date.now() - startedAt,
-              },
-            })
-
-            if (shouldUseAzureResult(readerMode, azureResult, rawText, extractionConfidence)) {
-              rawText = azureResult.text
-              extractionConfidence = azureResult.confidence
-              extractionMethod = azureResult.method
-
-              await prisma.documentExtraction.update({
-                where: { id: extraction.id },
-                data: {
-                  extractionMethod,
-                  rawText,
-                  confidence: extractionConfidence,
-                  providerRunId: providerRun.id,
-                },
-              })
-            }
-          } catch (azureErr) {
-            logger.warn('Azure Document Intelligence extraction failed, continuing with local readers', {
-              docType,
-              error: azureErr instanceof Error ? azureErr.message : String(azureErr),
-            })
-            managedReaderFallbackNeeded = true
-            await prisma.providerRun.update({
-              where: { id: providerRun.id },
-              data: {
-                status: 'ERROR',
-                errorMessage: azureErr instanceof Error
-                  ? azureErr.message
-                  : 'Azure Document Intelligence extraction failed',
-                durationMs: Date.now() - startedAt,
-              },
-            })
-          }
-        }
 
         if (
           extractionSchema &&
@@ -366,6 +327,9 @@ export async function processSubmission(
           const providerRun = await prisma.providerRun.create({
             data: {
               tenantId,
+              submissionId,
+              documentId: doc.id,
+              documentVersionId: doc.latestVersion.id,
               provider: 'openai',
               model: process.env.OPENAI_DOCUMENT_READER_MODEL ?? 'gpt-5.4-mini',
               operation: `document_read_${docType.toLowerCase()}`,
@@ -386,6 +350,7 @@ export async function processSubmission(
             extractionConfidence = readerResult.confidence
             extractionMethod = readerResult.method
             lastReaderProviderRunId = providerRun.id
+            structuredProviderRunId = providerRun.id
             openAIDocumentReaderNeedsOcr =
               readerResult.confidence < getOpenAIDocumentReaderMinimumConfidence()
 
@@ -399,10 +364,12 @@ export async function processSubmission(
             await prisma.providerRun.update({
               where: { id: providerRun.id },
               data: {
-                model: readerResult.model,
-                inputTokens: readerResult.inputTokens,
-                outputTokens: readerResult.outputTokens,
-                estimatedCostUsd: readerResult.estimatedCostUsd,
+                ...openAIProviderUsageFields({
+                  model: readerResult.model,
+                  inputTokens: readerResult.inputTokens,
+                  outputTokens: readerResult.outputTokens,
+                  estimatedCostUsd: readerResult.estimatedCostUsd,
+                }),
                 durationMs: Date.now() - startedAt,
               },
             })
@@ -440,6 +407,9 @@ export async function processSubmission(
           const providerRun = await prisma.providerRun.create({
             data: {
               tenantId,
+              submissionId,
+              documentId: doc.id,
+              documentVersionId: doc.latestVersion.id,
               provider: 'ocr-service',
               model: 'python-ocr-service',
               operation: `ocr_${docType.toLowerCase()}`,
@@ -458,6 +428,7 @@ export async function processSubmission(
             extractionConfidence = ocrResult.confidence
             extractionMethod = ocrResult.method
             lastReaderProviderRunId = providerRun.id
+            structuredProviderRunId = providerRun.id
 
             await prisma.providerRun.update({
               where: { id: providerRun.id },
@@ -539,6 +510,9 @@ export async function processSubmission(
           const providerRun = await prisma.providerRun.create({
             data: {
               tenantId,
+              submissionId,
+              documentId: doc.id,
+              documentVersionId: doc.latestVersion.id,
               provider: 'openai',
               model: process.env['OPENAI_MODEL'] ?? 'gpt-4o',
               operation: `extract_${docType.toLowerCase()}`,
@@ -558,6 +532,7 @@ export async function processSubmission(
               result as Record<string, unknown>,
               rawText,
             )
+            structuredProviderRunId = providerRun.id
             aiConfidence = deriveStructuredExtractionConfidence(
               docType,
               structuredData,
@@ -567,9 +542,12 @@ export async function processSubmission(
             await prisma.providerRun.update({
               where: { id: providerRun.id },
               data: {
-                inputTokens: meta.inputTokens,
-                outputTokens: meta.outputTokens,
-                estimatedCostUsd: meta.estimatedCostUsd,
+                ...openAIProviderUsageFields({
+                  model: meta.model,
+                  inputTokens: meta.inputTokens,
+                  outputTokens: meta.outputTokens,
+                  estimatedCostUsd: meta.estimatedCostUsd,
+                }),
                 durationMs: meta.durationMs,
               },
             })
@@ -634,6 +612,17 @@ export async function processSubmission(
           },
         })
 
+        await persistExtractedFields({
+          tenantId,
+          documentId: doc.id,
+          documentVersionId: doc.latestVersion.id,
+          extractionId: extraction.id,
+          providerRunId: structuredProviderRunId,
+          structuredData,
+          confidence: aiConfidence,
+          extractionMethod,
+        })
+
         await prisma.document.update({
           where: { id: doc.id },
           data: { status: 'DONE' },
@@ -646,6 +635,8 @@ export async function processSubmission(
         })
         extractionConfirmationDocuments.push({
           extractionId: extraction.id,
+          documentId: doc.id,
+          documentVersionId: doc.latestVersion.id,
           docType,
           filename,
           rawText,
@@ -664,6 +655,8 @@ export async function processSubmission(
     }
 
     const confirmation = await runExtractionConfirmationShadow({
+      tenantId,
+      submissionId,
       documents: extractionConfirmationDocuments,
     }).catch((confirmationErr) => {
       logger.warn('Extraction confirmation shadow pass failed, continuing processing', {
@@ -678,6 +671,15 @@ export async function processSubmission(
       for (const input of extractionConfirmationDocuments) {
         const findings = confirmation.findingsByExtractionId.get(input.extractionId)
         if (!findings || findings.length === 0) continue
+        await persistExtractionVerificationFindings({
+          tenantId,
+          documentId: input.documentId,
+          documentVersionId: input.documentVersionId,
+          extractionId: input.extractionId,
+          providerRunId: confirmation.providerRunId,
+          promptVersion: confirmation.promptVersion,
+          findings,
+        })
         const extractionResult = extractionResults.find((result) => result.data === input.structuredData)
         if (!extractionResult) continue
         extractionResult.data = {
@@ -983,6 +985,7 @@ export async function processSubmission(
           const embedRun = await prisma.providerRun.create({
             data: {
               tenantId,
+              submissionId,
               provider: 'openai',
               model: 'text-embedding-3-small',
               operation: 'embed_query',
@@ -1022,6 +1025,7 @@ export async function processSubmission(
         const summaryRun = await prisma.providerRun.create({
           data: {
             tenantId,
+            submissionId,
             provider: 'openai',
             model: process.env['OPENAI_MODEL'] ?? 'gpt-4o',
             operation: 'risk_summary',
@@ -1055,10 +1059,12 @@ export async function processSubmission(
           await prisma.providerRun.update({
             where: { id: summaryRun.id },
             data: {
-              model: meta.model,
-              inputTokens: meta.inputTokens,
-              outputTokens: meta.outputTokens,
-              estimatedCostUsd: meta.estimatedCostUsd,
+              ...openAIProviderUsageFields({
+                model: meta.model,
+                inputTokens: meta.inputTokens,
+                outputTokens: meta.outputTokens,
+                estimatedCostUsd: meta.estimatedCostUsd,
+              }),
               durationMs: meta.durationMs ?? Date.now() - summaryStartedAt,
             },
           })
@@ -1229,21 +1235,6 @@ function getDocumentReaderMode(): DocumentReaderMode {
   if (configured === 'native' || configured === 'local') return 'native'
   if (configured === 'hybrid') return 'hybrid'
   return isAzureDocumentIntelligenceEnabled() ? 'managed' : 'hybrid'
-}
-
-function shouldUseAzureResult(
-  readerMode: DocumentReaderMode,
-  azureResult: AzureDocumentIntelligenceResult,
-  currentText: string,
-  currentConfidence: number,
-): boolean {
-  if (!azureResult.text.trim()) return false
-  if (readerMode === 'managed') return true
-  if (currentConfidence < LOW_CONFIDENCE_THRESHOLD) return true
-
-  const hasMoreUsefulText = azureResult.text.length > currentText.length * 1.2
-  const hasTables = azureResult.tableCount > 0
-  return hasMoreUsefulText || hasTables
 }
 
 function enhanceStructuredDataFromText(

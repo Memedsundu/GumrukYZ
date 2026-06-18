@@ -1,5 +1,8 @@
 import { z } from 'zod'
 import { parseStructuredOutput } from '@gumrukyz/ai'
+import { prisma } from '@gumrukyz/db'
+import { estimateModelCostUsd } from '@gumrukyz/shared'
+import { openAIProviderUsageFields } from './provider-usage'
 
 const EXTRACTION_CONFIRMATION_PROMPT_VERSION = '2026-06-17.1'
 
@@ -20,6 +23,8 @@ const ConfirmationResponseSchema = z.object({
 
 export type ExtractionConfirmationDocument = {
   extractionId: string
+  documentId: string
+  documentVersionId: string
   docType: string
   filename: string
   rawText: string
@@ -30,6 +35,7 @@ export type ExtractionConfirmationFinding = z.infer<typeof ConfirmationFindingSc
 
 export type ExtractionConfirmationResult = {
   promptVersion: string
+  providerRunId: string | null
   findingsByExtractionId: Map<string, ExtractionConfirmationFinding[]>
   meta: {
     model: string
@@ -40,10 +46,15 @@ export type ExtractionConfirmationResult = {
 
 export function isExtractionConfirmationEnabled(): boolean {
   const mode = process.env.EXTRACTION_CONFIRMATION_MODE?.trim().toLowerCase()
-  return mode === 'shadow' || mode === 'on' || process.env.EXTRACTION_CONFIRMATION_ENABLED === 'true'
+  if (mode === 'off' || mode === 'disabled' || mode === 'false') return false
+  if (mode === 'shadow' || mode === 'on') return true
+  if (process.env.EXTRACTION_CONFIRMATION_ENABLED === 'true') return true
+  return !mode && process.env.EXTRACTION_CONFIRMATION_ENABLED !== 'false'
 }
 
 export async function runExtractionConfirmationShadow(params: {
+  tenantId: string
+  submissionId: string
   documents: ExtractionConfirmationDocument[]
 }): Promise<ExtractionConfirmationResult | null> {
   if (!isExtractionConfirmationEnabled()) return null
@@ -53,21 +64,66 @@ export async function runExtractionConfirmationShadow(params: {
   if (suspectDocs.length === 0) return null
 
   const model = process.env.EXTRACTION_CONFIRMATION_MODEL ?? process.env.OPENAI_DOCUMENT_READER_MODEL ?? 'gpt-5.4-mini'
-  const { parsed, responseModel, inputTokens, outputTokens } = await parseStructuredOutput<z.infer<typeof ConfirmationResponseSchema>>({
-    model,
-    schema: ConfirmationResponseSchema,
-    schemaName: 'extraction_confirmation_shadow',
-    system: 'You verify customs extraction fields against source text. Return only source-grounded suggestions; do not invent values.',
-    user: [
-      {
-        type: 'input_text',
-        text: buildConfirmationPrompt(suspectDocs),
-      },
-    ],
-    maxOutputTokens: 4_000,
-    timeoutMs: 60_000,
-    maxRetries: 1,
+  const startedAt = Date.now()
+  const providerRun = await prisma.providerRun.create({
+    data: {
+      tenantId: params.tenantId,
+      submissionId: params.submissionId,
+      provider: 'openai',
+      model,
+      operation: 'extraction_confirmation_shadow',
+      status: 'OK',
+      promptVersion: EXTRACTION_CONFIRMATION_PROMPT_VERSION,
+    },
   })
+
+  let parsed: z.infer<typeof ConfirmationResponseSchema>
+  let responseModel = model
+  let inputTokens: number | undefined
+  let outputTokens: number | undefined
+  try {
+    const response = await parseStructuredOutput<z.infer<typeof ConfirmationResponseSchema>>({
+      model,
+      schema: ConfirmationResponseSchema,
+      schemaName: 'extraction_confirmation_shadow',
+      system: 'You verify customs extraction fields against source text. Return only source-grounded suggestions; do not invent values.',
+      user: [
+        {
+          type: 'input_text',
+          text: buildConfirmationPrompt(suspectDocs),
+        },
+      ],
+      maxOutputTokens: 4_000,
+      timeoutMs: 60_000,
+      maxRetries: 1,
+    })
+    parsed = response.parsed
+    responseModel = response.responseModel
+    inputTokens = response.inputTokens
+    outputTokens = response.outputTokens
+    await prisma.providerRun.update({
+      where: { id: providerRun.id },
+      data: {
+        ...openAIProviderUsageFields({
+          model: responseModel,
+          inputTokens,
+          outputTokens,
+          estimatedCostUsd: estimateModelCostUsd(responseModel, inputTokens, outputTokens),
+        }),
+        durationMs: Date.now() - startedAt,
+      },
+    })
+  } catch (error) {
+    await prisma.providerRun.update({
+      where: { id: providerRun.id },
+      data: {
+        status: 'ERROR',
+        errorMessage: error instanceof Error ? error.message : 'Extraction confirmation failed',
+        durationMs: Date.now() - startedAt,
+      },
+    }).catch(() => {})
+    throw error
+  }
 
   const extractionByDocType = new Map(suspectDocs.map((doc) => [doc.docType, doc.extractionId]))
   const findingsByExtractionId = new Map<string, ExtractionConfirmationFinding[]>()
@@ -86,6 +142,7 @@ export async function runExtractionConfirmationShadow(params: {
 
   return {
     promptVersion: EXTRACTION_CONFIRMATION_PROMPT_VERSION,
+    providerRunId: providerRun.id,
     findingsByExtractionId,
     meta: {
       model: responseModel,
@@ -127,4 +184,3 @@ structured_data=${JSON.stringify(doc.structuredData).slice(0, 3000)}
 source_text=${doc.rawText.slice(0, 5000)}
 `).join('\n---\n')}`
 }
-

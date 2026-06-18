@@ -7,6 +7,7 @@ import {
   AI_RULE_VALIDATION_SAFETY_GUARDRAILS,
   applyAiRuleValidationSafetyFilters,
 } from './ai-rule-validation-safety'
+import { openAIProviderUsageFields } from './provider-usage'
 
 const DEFAULT_MODEL = 'gpt-5.4-mini'
 const DEFAULT_TIMEOUT_MS = 60_000
@@ -84,6 +85,7 @@ export async function runAiRuleValidationForSubmission(params: {
   const providerRun = await prisma.providerRun.create({
     data: {
       tenantId: params.tenantId,
+      submissionId: params.submissionId,
       provider: 'openai',
       model,
       operation: 'ai_rule_validation',
@@ -122,10 +124,12 @@ export async function runAiRuleValidationForSubmission(params: {
       await tx.providerRun.update({
         where: { id: providerRun.id },
         data: {
-          model: responseModel,
-          inputTokens,
-          outputTokens,
-          estimatedCostUsd: estimateModelCostUsd(model, inputTokens, outputTokens),
+          ...openAIProviderUsageFields({
+            model: responseModel,
+            inputTokens,
+            outputTokens,
+            estimatedCostUsd: estimateModelCostUsd(model, inputTokens, outputTokens),
+          }),
           durationMs: Date.now() - startedAt,
         },
       })

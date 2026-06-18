@@ -3,6 +3,7 @@ import { parseStructuredOutput } from '@gumrukyz/ai'
 import { prisma } from '@gumrukyz/db'
 import { estimateModelCostUsd, logger } from '@gumrukyz/shared'
 import { buildReportPayload } from '@/lib/report-data'
+import { openAIProviderUsageFields } from './provider-usage'
 
 const ASSISTANT_MODEL = process.env['OPENAI_ASSISTANT_MODEL'] ?? 'gpt-5.4-mini'
 const MAX_CONTEXT_FINDINGS = 24
@@ -110,6 +111,7 @@ export async function answerFileQuestion(params: {
   const providerRun = await prisma.providerRun.create({
     data: {
       tenantId: params.tenantId,
+      submissionId: params.submissionId,
       provider: 'openai',
       model: ASSISTANT_MODEL,
       operation: 'file_assistant',
@@ -136,10 +138,12 @@ export async function answerFileQuestion(params: {
     await prisma.providerRun.update({
       where: { id: providerRun.id },
       data: {
-        model: responseModel,
-        inputTokens,
-        outputTokens,
-        estimatedCostUsd: estimateModelCostUsd(ASSISTANT_MODEL, inputTokens, outputTokens),
+        ...openAIProviderUsageFields({
+          model: responseModel,
+          inputTokens,
+          outputTokens,
+          estimatedCostUsd: estimateModelCostUsd(ASSISTANT_MODEL, inputTokens, outputTokens),
+        }),
         durationMs: Date.now() - startedAt,
       },
     })

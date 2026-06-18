@@ -2,11 +2,8 @@ import { prisma, Prisma } from '@gumrukyz/db'
 import { OpenAIProvider } from '@gumrukyz/ai'
 import { DocumentType, TradeFlow } from '@gumrukyz/domain'
 import { logger } from '@gumrukyz/shared'
-import { extractTextFromPdf } from './pdf-extractor'
-import {
-  isAzureDocumentIntelligenceEnabled,
-  runAzureLayoutExtraction,
-} from './azure-document-intelligence'
+import { readDocumentText } from './document-read'
+import { openAIProviderUsageFields } from './provider-usage'
 
 export const FINAL_DOC_TYPES = [
   DocumentType.INVOICE,
@@ -120,10 +117,13 @@ export async function classifySubmissionDocuments(params: {
   for (const document of submission.documents) {
     if (document.isIgnored || !document.latestVersion) continue
 
-    const read = await readForClassification(document, params.tenantId)
+    const read = await readForClassification(document, params.tenantId, submission.id)
     await cacheClassificationExtraction(document.latestVersion.id, params.tenantId, read)
     const classified = await classifyText({
       tenantId: params.tenantId,
+      submissionId: submission.id,
+      documentId: document.id,
+      documentVersionId: document.latestVersion.id,
       ai,
       text: read.text,
       filename: document.latestVersion.originalFilename,
@@ -243,10 +243,13 @@ export async function classifySubmissionDocument(params: {
 
   if (!document.isIgnored && document.latestVersion) {
     const ai = new OpenAIProvider()
-    const read = await readForClassification(document, params.tenantId)
+    const read = await readForClassification(document, params.tenantId, submission.id)
     await cacheClassificationExtraction(document.latestVersion.id, params.tenantId, read)
     const classified = await classifyText({
       tenantId: params.tenantId,
+      submissionId: submission.id,
+      documentId: document.id,
+      documentVersionId: document.latestVersion.id,
       ai,
       text: read.text,
       filename: document.latestVersion.originalFilename,
@@ -425,74 +428,21 @@ export async function matchBrokerClients(
 async function readForClassification(
   document: DocumentForClassification,
   tenantId: string,
+  submissionId: string,
 ): Promise<ClassificationReadResult> {
   if (!document.latestVersion) return { text: '', confidence: 0, method: 'EMPTY', providerRunId: null }
 
-  if (isAzureDocumentIntelligenceEnabled()) {
-    const startedAt = Date.now()
-    const providerRun = await prisma.providerRun.create({
-      data: {
-        tenantId,
-        provider: 'azure_doc_intel',
-        model: process.env.AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID ?? 'prebuilt-layout',
-        operation: 'classification_read',
-        status: 'OK',
-      },
-    })
-
-    try {
-      const result = await runAzureLayoutExtraction(
-        document.latestVersion.fileUrl,
-        document.latestVersion.originalFilename,
-        document.latestVersion.mimeType,
-      )
-      await prisma.providerRun.update({
-        where: { id: providerRun.id },
-        data: {
-          model: result.modelId,
-          estimatedCostUsd: result.estimatedCostUsd,
-          durationMs: Date.now() - startedAt,
-        },
-      })
-      const azureRead = { text: result.text, confidence: result.confidence, method: result.method, providerRunId: providerRun.id }
-      if (isUsableClassificationRead(azureRead)) return azureRead
-
-      logger.warn('Azure classification read was weak, trying native PDF text', {
-        documentId: document.id,
-        confidence: result.confidence,
-        textLength: result.text.trim().length,
-      })
-      const nativeRead = await readNativeTextForClassification(document)
-      return chooseBestClassificationRead(azureRead, nativeRead)
-    } catch (error) {
-      await prisma.providerRun.update({
-        where: { id: providerRun.id },
-        data: {
-          status: 'ERROR',
-          errorMessage: error instanceof Error ? error.message : 'Azure classification read failed',
-          durationMs: Date.now() - startedAt,
-        },
-      })
-      logger.warn('Azure classification read failed, falling back to native text probe', {
-        documentId: document.id,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
-
-  return readNativeTextForClassification(document)
-}
-
-async function readNativeTextForClassification(
-  document: DocumentForClassification,
-): Promise<ClassificationReadResult> {
-  if (!document.latestVersion) return { text: '', confidence: 0, method: 'EMPTY', providerRunId: null }
-  const result = await extractTextFromPdf(
-    document.latestVersion.fileUrl,
-    document.latestVersion.originalFilename,
-    document.latestVersion.mimeType,
-  )
-  return { text: result.text, confidence: result.confidence, method: result.method, providerRunId: null }
+  return readDocumentText({
+    tenantId,
+    submissionId,
+    documentId: document.id,
+    documentVersion: document.latestVersion,
+    operation: 'classification_read',
+    preferAzure: true,
+    allowNativeFallback: true,
+    minimumConfidence: MIN_CLASSIFICATION_READ_CONFIDENCE,
+    minimumTextLength: MIN_CLASSIFICATION_TEXT_LENGTH,
+  })
 }
 
 async function cacheClassificationExtraction(
@@ -528,27 +478,11 @@ async function cacheClassificationExtraction(
   })
 }
 
-function isUsableClassificationRead(read: ClassificationReadResult): boolean {
-  return read.confidence >= MIN_CLASSIFICATION_READ_CONFIDENCE &&
-    read.text.trim().length >= MIN_CLASSIFICATION_TEXT_LENGTH
-}
-
-function chooseBestClassificationRead(
-  primary: ClassificationReadResult,
-  fallback: ClassificationReadResult,
-): ClassificationReadResult {
-  if (isUsableClassificationRead(fallback) && !isUsableClassificationRead(primary)) return fallback
-  const primaryUsefulChars = primary.text.trim().length
-  const fallbackUsefulChars = fallback.text.trim().length
-  if (fallback.confidence > primary.confidence && fallbackUsefulChars > primaryUsefulChars * 1.2) {
-    return fallback
-  }
-  if (fallbackUsefulChars >= primaryUsefulChars + 300) return fallback
-  return primary
-}
-
 async function classifyText(params: {
   tenantId: string
+  submissionId: string
+  documentId: string
+  documentVersionId: string
   ai: OpenAIProvider
   text: string
   filename: string
@@ -568,6 +502,9 @@ async function classifyText(params: {
     const providerRun = await prisma.providerRun.create({
       data: {
         tenantId: params.tenantId,
+        submissionId: params.submissionId,
+        documentId: params.documentId,
+        documentVersionId: params.documentVersionId,
         provider: 'openai',
         model: process.env.OPENAI_MODEL ?? 'gpt-4o',
         operation: 'classify_document',
@@ -592,9 +529,11 @@ async function classifyText(params: {
         where: { id: providerRun.id },
         data: {
           model: meta.model,
-          inputTokens: meta.inputTokens,
-          outputTokens: meta.outputTokens,
-          estimatedCostUsd: meta.estimatedCostUsd,
+          ...openAIProviderUsageFields({
+            inputTokens: meta.inputTokens,
+            outputTokens: meta.outputTokens,
+            estimatedCostUsd: meta.estimatedCostUsd,
+          }),
           durationMs: meta.durationMs,
         },
       })

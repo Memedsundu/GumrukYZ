@@ -9,6 +9,10 @@ interface ProviderStats {
   provider: string
   total: number
   errors: number
+  totalBillableUnits: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalPageCount: number
   totalCostUsd: number | null
   avgDurationMs: number | null
 }
@@ -17,6 +21,7 @@ interface DailyRun {
   day: Date
   count: number
   errors: number
+  totalCostUsd: number
 }
 
 interface RawProviderStats {
@@ -25,6 +30,14 @@ interface RawProviderStats {
   errors: unknown
   totalCostUsd?: unknown
   totalcostusd?: unknown
+  totalBillableUnits?: unknown
+  totalbillableunits?: unknown
+  totalInputTokens?: unknown
+  totalinputtokens?: unknown
+  totalOutputTokens?: unknown
+  totaloutputtokens?: unknown
+  totalPageCount?: unknown
+  totalpagecount?: unknown
   avgDurationMs?: unknown
   avgdurationms?: unknown
 }
@@ -33,6 +46,8 @@ interface RawDailyRun {
   day: Date | string
   count: unknown
   errors: unknown
+  totalCostUsd?: unknown
+  totalcostusd?: unknown
 }
 
 function formatCost(usd: number | null): string {
@@ -45,6 +60,16 @@ function formatMs(ms: number | null): string {
   if (ms == null) return '—'
   if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
   return `${Math.round(ms)}ms`
+}
+
+function formatBillableUnits(stat: ProviderStats): string {
+  if (stat.provider === 'azure_doc_intel') {
+    return `${stat.totalPageCount.toLocaleString('tr')} sayfa`
+  }
+  const totalTokens = stat.totalInputTokens + stat.totalOutputTokens
+  if (totalTokens > 0) return `${totalTokens.toLocaleString('tr')} token`
+  if (stat.totalBillableUnits > 0) return stat.totalBillableUnits.toLocaleString('tr')
+  return '—'
 }
 
 function toNumber(value: unknown): number {
@@ -78,6 +103,10 @@ function normalizeProviderStats(rows: RawProviderStats[]): ProviderStats[] {
     provider: row.provider,
     total: toNumber(row.total),
     errors: toNumber(row.errors),
+    totalBillableUnits: toNumber(row.totalBillableUnits ?? row.totalbillableunits),
+    totalInputTokens: toNumber(row.totalInputTokens ?? row.totalinputtokens),
+    totalOutputTokens: toNumber(row.totalOutputTokens ?? row.totaloutputtokens),
+    totalPageCount: toNumber(row.totalPageCount ?? row.totalpagecount),
     totalCostUsd: toNullableNumber(row.totalCostUsd ?? row.totalcostusd),
     avgDurationMs: toNullableNumber(row.avgDurationMs ?? row.avgdurationms),
   }))
@@ -88,6 +117,7 @@ function normalizeDailyRuns(rows: RawDailyRun[]): DailyRun[] {
     day: row.day instanceof Date ? row.day : new Date(row.day),
     count: toNumber(row.count),
     errors: toNumber(row.errors),
+    totalCostUsd: toNumber(row.totalCostUsd ?? row.totalcostusd),
   }))
 }
 
@@ -105,6 +135,10 @@ export default async function ObservabilityPage() {
         provider,
         COUNT(*)::integer AS total,
         SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END)::integer AS errors,
+        COALESCE(SUM(billable_units), 0)::double precision AS "totalBillableUnits",
+        COALESCE(SUM(input_tokens), 0)::integer AS "totalInputTokens",
+        COALESCE(SUM(output_tokens), 0)::integer AS "totalOutputTokens",
+        COALESCE(SUM(page_count), 0)::integer AS "totalPageCount",
         COALESCE(SUM(estimated_cost_usd), 0)::double precision AS "totalCostUsd",
         AVG(duration_ms)::double precision AS "avgDurationMs"
       FROM provider_runs
@@ -118,7 +152,8 @@ export default async function ObservabilityPage() {
       SELECT
         date_trunc('day', created_at) AS day,
         COUNT(*)::integer AS count,
-        SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END)::integer AS errors
+        SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END)::integer AS errors,
+        COALESCE(SUM(estimated_cost_usd), 0)::double precision AS "totalCostUsd"
       FROM provider_runs
       WHERE tenant_id = ${user.tenantId}
         AND created_at >= NOW() - INTERVAL '7 days'
@@ -222,6 +257,7 @@ export default async function ObservabilityPage() {
                 <tr className="bg-surface-muted text-xs font-medium uppercase tracking-wider text-ink-muted">
                   <th className="px-6 py-3 text-left">Sağlayıcı</th>
                   <th className="px-6 py-3 text-right">İstek</th>
+                  <th className="px-6 py-3 text-right">Birim</th>
                   <th className="px-6 py-3 text-right">Hata</th>
                   <th className="px-6 py-3 text-right">Maliyet</th>
                   <th className="px-6 py-3 text-right">Ort. Süre</th>
@@ -235,6 +271,9 @@ export default async function ObservabilityPage() {
                     </td>
                     <td className="px-6 py-3 text-right text-sm text-ink-muted">
                       {stat.total.toLocaleString('tr')}
+                    </td>
+                    <td className="px-6 py-3 text-right text-sm text-ink-muted">
+                      {formatBillableUnits(stat)}
                     </td>
                     <td className="px-6 py-3 text-right text-sm">
                       <span className={stat.errors > 0 ? 'text-danger-600 font-medium' : 'text-ink-subtle'}>
@@ -305,6 +344,7 @@ export default async function ObservabilityPage() {
                   <th className="px-6 py-3 text-left">Tarih</th>
                   <th className="px-6 py-3 text-right">İstek</th>
                   <th className="px-6 py-3 text-right">Hata</th>
+                  <th className="px-6 py-3 text-right">Maliyet</th>
                   <th className="px-6 py-3 text-right">Başarı Oranı</th>
                 </tr>
               </thead>
@@ -325,6 +365,9 @@ export default async function ObservabilityPage() {
                       <td className="px-6 py-3 text-right text-sm text-ink-muted">{count}</td>
                       <td className="px-6 py-3 text-right text-sm">
                         <span className={errors > 0 ? 'text-danger-600' : 'text-ink-subtle'}>{errors}</span>
+                      </td>
+                      <td className="px-6 py-3 text-right text-sm text-ink-muted">
+                        {formatCost(row.totalCostUsd)}
                       </td>
                       <td className="px-6 py-3 text-right text-sm text-ink-muted">
                         {successRate !== '—' ? `%${successRate}` : '—'}
