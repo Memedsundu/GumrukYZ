@@ -34,6 +34,8 @@ export default function NewSubmissionPage() {
 
       const data = await res.json() as { id: string }
       router.push(`/submissions/${data.id}/documents`)
+      // Re-run the dashboard layout's server fetch so the new case appears in the sidebar list.
+      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Bir hata oluştu')
     } finally {

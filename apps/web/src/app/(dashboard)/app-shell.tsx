@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Sidebar } from './sidebar'
+import type { RecentCase } from './sidebar-nav'
 import { Topbar } from './topbar'
 import { TrialBanner } from './trial-banner'
 import type { EntitlementsState } from '@/lib/entitlements'
@@ -10,11 +11,13 @@ const COOKIE = 'sidebar_collapsed'
 
 export function AppShell({
   showAdmin,
+  recentCases,
   initialCollapsed,
   entitlement,
   children,
 }: {
   showAdmin: boolean
+  recentCases: RecentCase[]
   initialCollapsed: boolean
   entitlement: EntitlementsState | null
   children: React.ReactNode
@@ -34,6 +37,7 @@ export function AppShell({
     <div className="flex h-dvh overflow-hidden bg-canvas">
       <Sidebar
         showAdmin={showAdmin}
+        recentCases={recentCases}
         collapsed={collapsed}
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}

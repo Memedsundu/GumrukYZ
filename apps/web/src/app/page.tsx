@@ -10,7 +10,7 @@ import { LegalCopy } from '@/components/marketing/legal-copy'
 export default async function HomePage() {
   // Signed-in users skip the marketing page (middleware also redirects).
   const { userId, orgId } = await auth()
-  if (userId && orgId) redirect('/dashboard')
+  if (userId && orgId) redirect('/submissions/new')
   if (userId) redirect('/onboarding')
 
   return (

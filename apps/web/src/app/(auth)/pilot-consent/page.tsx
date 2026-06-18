@@ -10,7 +10,7 @@ export default async function PilotConsentPage() {
   if (!orgId) redirect('/onboarding')
 
   const user = await getProvisioningUser()
-  if (user.pilotConsentAt) redirect('/dashboard')
+  if (user.pilotConsentAt) redirect('/submissions/new')
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">

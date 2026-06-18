@@ -60,6 +60,7 @@ export type ClassificationResponse = {
 type ClassificationReadResult = {
   text: string
   confidence: number
+  method: string
   providerRunId: string | null
 }
 
@@ -80,6 +81,7 @@ type DocumentForClassification = {
   id: string
   docType: string
   latestVersion: {
+    id: string
     fileUrl: string
     originalFilename: string
     mimeType: string
@@ -119,6 +121,7 @@ export async function classifySubmissionDocuments(params: {
     if (document.isIgnored || !document.latestVersion) continue
 
     const read = await readForClassification(document, params.tenantId)
+    await cacheClassificationExtraction(document.latestVersion.id, params.tenantId, read)
     const classified = await classifyText({
       tenantId: params.tenantId,
       ai,
@@ -241,6 +244,7 @@ export async function classifySubmissionDocument(params: {
   if (!document.isIgnored && document.latestVersion) {
     const ai = new OpenAIProvider()
     const read = await readForClassification(document, params.tenantId)
+    await cacheClassificationExtraction(document.latestVersion.id, params.tenantId, read)
     const classified = await classifyText({
       tenantId: params.tenantId,
       ai,
@@ -422,7 +426,7 @@ async function readForClassification(
   document: DocumentForClassification,
   tenantId: string,
 ): Promise<ClassificationReadResult> {
-  if (!document.latestVersion) return { text: '', confidence: 0, providerRunId: null }
+  if (!document.latestVersion) return { text: '', confidence: 0, method: 'EMPTY', providerRunId: null }
 
   if (isAzureDocumentIntelligenceEnabled()) {
     const startedAt = Date.now()
@@ -450,7 +454,7 @@ async function readForClassification(
           durationMs: Date.now() - startedAt,
         },
       })
-      const azureRead = { text: result.text, confidence: result.confidence, providerRunId: providerRun.id }
+      const azureRead = { text: result.text, confidence: result.confidence, method: result.method, providerRunId: providerRun.id }
       if (isUsableClassificationRead(azureRead)) return azureRead
 
       logger.warn('Azure classification read was weak, trying native PDF text', {
@@ -482,13 +486,46 @@ async function readForClassification(
 async function readNativeTextForClassification(
   document: DocumentForClassification,
 ): Promise<ClassificationReadResult> {
-  if (!document.latestVersion) return { text: '', confidence: 0, providerRunId: null }
+  if (!document.latestVersion) return { text: '', confidence: 0, method: 'EMPTY', providerRunId: null }
   const result = await extractTextFromPdf(
     document.latestVersion.fileUrl,
     document.latestVersion.originalFilename,
     document.latestVersion.mimeType,
   )
-  return { text: result.text, confidence: result.confidence, providerRunId: null }
+  return { text: result.text, confidence: result.confidence, method: result.method, providerRunId: null }
+}
+
+async function cacheClassificationExtraction(
+  documentVersionId: string,
+  tenantId: string,
+  read: ClassificationReadResult,
+): Promise<void> {
+  // Persist the text read during classification so the first analysis run can
+  // reuse it instead of re-reading the document — skipping a duplicate native
+  // parse and, when enabled, a duplicate paid Azure call. Keyed to the immutable
+  // document version. Never downgrade a completed (DONE) extraction.
+  if (read.text.trim().length < MIN_CLASSIFICATION_TEXT_LENGTH) return
+
+  const existingDone = await prisma.documentExtraction.findFirst({
+    where: { documentVersionId, tenantId, extractionStatus: 'DONE' },
+    select: { id: true },
+  })
+  if (existingDone) return
+
+  await prisma.documentExtraction.deleteMany({
+    where: { documentVersionId, tenantId, extractionStatus: 'TEXT_READY' },
+  })
+  await prisma.documentExtraction.create({
+    data: {
+      documentVersionId,
+      tenantId,
+      extractionStatus: 'TEXT_READY',
+      extractionMethod: read.method,
+      rawText: read.text,
+      confidence: read.confidence,
+      providerRunId: read.providerRunId,
+    },
+  })
 }
 
 function isUsableClassificationRead(read: ClassificationReadResult): boolean {

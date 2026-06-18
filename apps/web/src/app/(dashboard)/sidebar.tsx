@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/ui/brand-mark'
-import { SidebarNav } from './sidebar-nav'
+import { SidebarNav, type RecentCase } from './sidebar-nav'
 
 function Brand({ collapsed }: { collapsed: boolean }) {
   return (
@@ -17,13 +17,14 @@ function Brand({ collapsed }: { collapsed: boolean }) {
 
 export interface SidebarProps {
   showAdmin: boolean
+  recentCases: RecentCase[]
   collapsed: boolean
   mobileOpen: boolean
   onMobileClose: () => void
   onNavigate: () => void
 }
 
-export function Sidebar({ showAdmin, collapsed, mobileOpen, onMobileClose, onNavigate }: SidebarProps) {
+export function Sidebar({ showAdmin, recentCases, collapsed, mobileOpen, onMobileClose, onNavigate }: SidebarProps) {
   return (
     <>
       {/* Desktop: static, collapsible to an icon rail */}
@@ -34,7 +35,7 @@ export function Sidebar({ showAdmin, collapsed, mobileOpen, onMobileClose, onNav
         )}
       >
         <Brand collapsed={collapsed} />
-        <SidebarNav showAdmin={showAdmin} collapsed={collapsed} />
+        <SidebarNav showAdmin={showAdmin} recentCases={recentCases} collapsed={collapsed} />
       </aside>
 
       {/* Mobile: drawer + overlay */}
@@ -54,7 +55,7 @@ export function Sidebar({ showAdmin, collapsed, mobileOpen, onMobileClose, onNav
           )}
         >
           <Brand collapsed={false} />
-          <SidebarNav showAdmin={showAdmin} collapsed={false} onNavigate={onNavigate} />
+          <SidebarNav showAdmin={showAdmin} recentCases={recentCases} collapsed={false} onNavigate={onNavigate} />
         </aside>
       </div>
     </>

@@ -1,11 +1,14 @@
 import { z } from 'zod'
 import { parseStructuredOutput } from '@gumrukyz/ai'
-import { logger } from '@gumrukyz/shared'
+import { prisma } from '@gumrukyz/db'
+import { estimateModelCostUsd, logger } from '@gumrukyz/shared'
 import { buildReportPayload } from '@/lib/report-data'
 
 const ASSISTANT_MODEL = process.env['OPENAI_ASSISTANT_MODEL'] ?? 'gpt-5.4-mini'
 const MAX_CONTEXT_FINDINGS = 24
 const MAX_HISTORY = 10
+/** Bump when the file assistant prompt or schema changes. */
+const FILE_ASSISTANT_PROMPT_VERSION = '2026-06-18.1'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -103,9 +106,20 @@ export async function answerFileQuestion(params: {
 
   const context = buildContext(payload)
   const transcript = buildTranscript(params.messages)
+  const startedAt = Date.now()
+  const providerRun = await prisma.providerRun.create({
+    data: {
+      tenantId: params.tenantId,
+      provider: 'openai',
+      model: ASSISTANT_MODEL,
+      operation: 'file_assistant',
+      status: 'OK',
+      promptVersion: FILE_ASSISTANT_PROMPT_VERSION,
+    },
+  })
 
   try {
-    const { parsed } = await parseStructuredOutput<z.infer<typeof AnswerSchema>>({
+    const { parsed, responseModel, inputTokens, outputTokens } = await parseStructuredOutput<z.infer<typeof AnswerSchema>>({
       model: ASSISTANT_MODEL,
       schema: AnswerSchema,
       schemaName: 'gumrukyz_file_assistant',
@@ -118,10 +132,30 @@ export async function answerFileQuestion(params: {
       timeoutMs: 30_000,
       maxRetries: 1,
     })
+
+    await prisma.providerRun.update({
+      where: { id: providerRun.id },
+      data: {
+        model: responseModel,
+        inputTokens,
+        outputTokens,
+        estimatedCostUsd: estimateModelCostUsd(ASSISTANT_MODEL, inputTokens, outputTokens),
+        durationMs: Date.now() - startedAt,
+      },
+    })
+
     const answer = parsed.answer?.trim()
     if (!answer) return { ok: false, status: 502, error: 'Asistan yanıt üretemedi.' }
     return { ok: true, answer }
   } catch (error) {
+    await prisma.providerRun.update({
+      where: { id: providerRun.id },
+      data: {
+        status: 'ERROR',
+        errorMessage: error instanceof Error ? error.message : 'File assistant answer failed',
+        durationMs: Date.now() - startedAt,
+      },
+    })
     logger.warn('file assistant answer failed', {
       submissionId: params.submissionId,
       error: error instanceof Error ? error.message : String(error),

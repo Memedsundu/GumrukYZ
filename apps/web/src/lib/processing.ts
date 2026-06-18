@@ -188,6 +188,22 @@ export async function processSubmission(
         continue
       }
 
+      // Reuse the lightweight text captured during classification (keyed to this
+      // immutable version) instead of re-reading the document. When it is
+      // confident enough we skip the native parse and — via the confidence gate
+      // below — the duplicate Azure call, jumping straight to structured extraction.
+      const cachedClassificationText = await prisma.documentExtraction.findFirst({
+        where: {
+          documentVersionId: doc.latestVersion.id,
+          tenantId,
+          extractionStatus: 'TEXT_READY',
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+      const reuseClassificationText =
+        (cachedClassificationText?.rawText?.trim().length ?? 0) > 0 &&
+        (cachedClassificationText?.confidence ?? 0) >= LOW_CONFIDENCE_THRESHOLD
+
       // Update document status
       await prisma.document.update({
         where: { id: doc.id },
@@ -195,36 +211,78 @@ export async function processSubmission(
       })
 
       try {
-        // Step 1: Extract raw text from native PDF text, then managed layout/OCR fallbacks.
+        // Step 1: Get raw text — reuse the classification read when usable,
+        // otherwise extract native PDF text (managed layout/OCR fallbacks follow).
         const filename = doc.latestVersion.originalFilename
         const mimeType = doc.latestVersion.mimeType
-        const textResult = await extractTextFromPdf(doc.latestVersion.fileUrl, filename, mimeType)
         const extractionSchema = getExtractionSchema(docType)
-        let rawText = textResult.text
-        let extractionConfidence = textResult.confidence
-        const nativeTextConfidence = textResult.confidence
-        const nativeTextLength = textResult.text.trim().length
-        const pdfImageCount = textResult.imageCount
-        const pdfPagesWithImages = textResult.pagesWithImages
-        const likelyRasterScan = textResult.likelyRasterScan
-        let extractionMethod: string = textResult.method
+        let rawText: string
+        let extractionConfidence: number
+        let extractionMethod: string
+        let nativeTextConfidence: number
+        let nativeTextLength: number
+        let pdfImageCount: number
+        let pdfPagesWithImages: number
+        let likelyRasterScan: boolean
+
+        if (reuseClassificationText && cachedClassificationText) {
+          rawText = cachedClassificationText.rawText ?? ''
+          extractionConfidence = cachedClassificationText.confidence ?? 0
+          extractionMethod = cachedClassificationText.extractionMethod ?? 'TEXT_PDF'
+          nativeTextConfidence = extractionConfidence
+          nativeTextLength = rawText.trim().length
+          // Reuse only happens at high confidence, which never enters the
+          // raster/OCR path, so these image-scan signals stay at safe defaults.
+          pdfImageCount = 0
+          pdfPagesWithImages = 0
+          likelyRasterScan = false
+          logger.info('processSubmission.text_reused_from_classification', {
+            submissionId,
+            jobId,
+            docId: doc.id,
+            documentVersionId: doc.latestVersion.id,
+            extractionId: cachedClassificationText.id,
+          })
+        } else {
+          const textResult = await extractTextFromPdf(doc.latestVersion.fileUrl, filename, mimeType)
+          rawText = textResult.text
+          extractionConfidence = textResult.confidence
+          extractionMethod = textResult.method
+          nativeTextConfidence = textResult.confidence
+          nativeTextLength = textResult.text.trim().length
+          pdfImageCount = textResult.imageCount
+          pdfPagesWithImages = textResult.pagesWithImages
+          likelyRasterScan = textResult.likelyRasterScan
+        }
+
         let lastReaderProviderRunId: string | null = null
         let structuredData: Record<string, unknown> = {}
         let structuredDataAlreadyExtracted = false
         let openAIDocumentReaderNeedsOcr = false
         let managedReaderFallbackNeeded = false
 
-        // Step 2: Create extraction record
-        const extraction = await prisma.documentExtraction.create({
-          data: {
-            documentVersionId: doc.latestVersion.id,
-            tenantId,
-            extractionStatus: 'PENDING',
-            extractionMethod,
-            rawText,
-            confidence: extractionConfidence,
-          },
-        })
+        // Step 2: Create the extraction record, or reuse the classification row
+        // in place so a single row per version flows through to DONE.
+        const extraction = reuseClassificationText && cachedClassificationText
+          ? await prisma.documentExtraction.update({
+              where: { id: cachedClassificationText.id },
+              data: {
+                extractionStatus: 'PENDING',
+                extractionMethod,
+                rawText,
+                confidence: extractionConfidence,
+              },
+            })
+          : await prisma.documentExtraction.create({
+              data: {
+                documentVersionId: doc.latestVersion.id,
+                tenantId,
+                extractionStatus: 'PENDING',
+                extractionMethod,
+                rawText,
+                confidence: extractionConfidence,
+              },
+            })
 
         const readerMode = getDocumentReaderMode()
         if (
