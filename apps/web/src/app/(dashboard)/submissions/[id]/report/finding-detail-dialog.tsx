@@ -14,9 +14,12 @@ import type { ReportFindingItem } from './report-types'
 export function FindingDetailDialog({
   finding,
   onClose,
+  readOnly = false,
 }: {
   finding: ReportFindingItem | null
   onClose: () => void
+  /** Hide action controls (override) — used on the read-only Risk Raporu surface. */
+  readOnly?: boolean
 }) {
   return (
     <Dialog open={finding !== null} onOpenChange={(open) => !open && onClose()}>
@@ -156,7 +159,7 @@ export function FindingDetailDialog({
                     )}
                   </div>
 
-                  {finding.canOverride && <OverrideButton ruleResultId={finding.id} />}
+                  {finding.canOverride && !readOnly && <OverrideButton ruleResultId={finding.id} />}
                 </div>
               </div>
             </DialogBody>

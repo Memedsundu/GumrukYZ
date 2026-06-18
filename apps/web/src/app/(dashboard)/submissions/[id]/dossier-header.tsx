@@ -55,16 +55,18 @@ export function DossierHeader({
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <SubmissionNextStep
-            submissionId={submissionId}
-            initialStatus={status}
-            initialClassificationStatus={classificationStatus}
-            hasReport={hasReport}
-            variant="header-button"
-            poll={false}
-          />
-        </div>
+        {status !== 'COMPLETED' && (
+          <div className="flex shrink-0 items-center gap-2">
+            <SubmissionNextStep
+              submissionId={submissionId}
+              initialStatus={status}
+              initialClassificationStatus={classificationStatus}
+              hasReport={hasReport}
+              variant="header-button"
+              poll={false}
+            />
+          </div>
+        )}
       </div>
     </header>
   )
