@@ -3,17 +3,13 @@
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
-  AlertTriangle,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
   ClipboardCheck,
   Download,
   ExternalLink,
   FileUp,
-  Info,
   Loader2,
   MessageCircleQuestion,
   Save,
@@ -51,7 +47,6 @@ export type {
 
 export type ReportWorkspaceProps = {
   submissionId: string
-  submissionTitle: string
   generatedAt: string
   counts: ReportCounts
   expertQuota: ExpertQuota
@@ -73,7 +68,6 @@ type ChecklistResponse = ReportChecklistState & {
 
 export default function ReportWorkspace({
   submissionId,
-  submissionTitle,
   generatedAt,
   counts,
   expertQuota,
@@ -85,7 +79,6 @@ export default function ReportWorkspace({
   willChargeReanalysis,
   documentCoverage,
 }: ReportWorkspaceProps) {
-  const router = useRouter()
   const [items, setItems] = useState(findings)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
   const prevFindingKeysRef = useRef<Set<string>>(new Set(findings.map(findingKey)))
@@ -119,8 +112,6 @@ export default function ReportWorkspace({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [notePendingKeys, setNotePendingKeys] = useState<Set<string>>(() => new Set())
   const [noteErrors, setNoteErrors] = useState<Record<string, string>>({})
-  const [reanalyzing, setReanalyzing] = useState(false)
-  const [reanalysisError, setReanalysisError] = useState<string | null>(null)
 
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantMessages, setAssistantMessages] = useState<ChatMessage[]>([])
@@ -278,48 +269,17 @@ export default function ReportWorkspace({
     }
   }
 
-  async function handleReanalyze() {
-    if (reanalyzing || reportState.activeJobId || reportState.validationRequired) return
-    setReanalyzing(true)
-    setReanalysisError(null)
-
-    try {
-      const response = await fetch(`/api/submissions/${submissionId}/process`, { method: 'POST' })
-      const payload = await response.json().catch(() => null) as { error?: string } | null
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'Yeniden analiz başlatılamadı')
-      }
-      router.refresh()
-    } catch (error) {
-      setReanalysisError(error instanceof Error ? error.message : 'Yeniden analiz başlatılamadı')
-    } finally {
-      setReanalyzing(false)
-    }
-  }
-
   return (
-    <div className="min-h-full bg-canvas px-4 py-6 sm:px-6 lg:px-8">
+    <div>
       <div className="mx-auto max-w-[1500px]">
         <header className="mb-5">
-          <Link
-            href={`/submissions/${submissionId}`}
-            className="mb-3 inline-flex items-center text-sm text-ink-muted hover:text-ink"
-          >
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            {submissionTitle}
-          </Link>
-
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="font-display text-3xl font-bold tracking-tight text-ink">Aksiyon listesi</h1>
+                <h2 className="font-display text-xl font-semibold tracking-tight text-ink">Aksiyon listesi</h2>
                 <RiskBadge counts={counts} />
               </div>
               <p className="mt-1 text-sm text-ink-muted">Risk Raporu · Üretilme: {generatedAt}</p>
-              <p className="mt-2 inline-flex max-w-full items-start gap-1.5 text-xs leading-5 text-ink-subtle">
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>Bilgilendirme amaçlıdır; bağlayıcı hukuki karar yerine geçmez.</span>
-              </p>
               {!reportState.readonly && (
                 <p className="mt-1 text-xs text-ink-subtle">
                   {willChargeReanalysis
@@ -352,17 +312,7 @@ export default function ReportWorkspace({
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <main className="min-w-0 space-y-6">
-            <ReportStateBanner
-              reportState={reportState}
-              submissionId={submissionId}
-              willChargeReanalysis={willChargeReanalysis}
-              hasCompletedExpertReview={hasCompletedExpertReview}
-              reanalyzing={reanalyzing}
-              reanalysisError={reanalysisError}
-              onReanalyze={handleReanalyze}
-            />
-
-            <DocumentCoveragePanel coverage={documentCoverage} />
+            <DocumentCoveragePanel coverage={documentCoverage} submissionId={submissionId} />
 
             <ChecklistOverview
               counts={counts}
@@ -481,70 +431,6 @@ export default function ReportWorkspace({
         onSend={askAssistant}
       />
     </div>
-  )
-}
-
-function ReportStateBanner({
-  reportState,
-  submissionId,
-  willChargeReanalysis,
-  hasCompletedExpertReview,
-  reanalyzing,
-  reanalysisError,
-  onReanalyze,
-}: {
-  reportState: ReportState
-  submissionId: string
-  willChargeReanalysis: boolean
-  hasCompletedExpertReview: boolean
-  reanalyzing: boolean
-  reanalysisError: string | null
-  onReanalyze: () => void
-}) {
-  if (!reportState.stale) return null
-
-  return (
-    <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-card">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-2">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0">
-            <p className="font-semibold">
-              {reportState.activeJobId ? 'Rapor yeniden analiz ediliyor' : 'Rapor güncel belge setini yansıtmıyor'}
-            </p>
-            <p className="mt-1 text-amber-800">
-              {reportState.staleReason ?? 'Belgeler değişti; rapor yeniden analiz bekliyor.'}
-            </p>
-            {!reportState.activeJobId && (
-              <p className="mt-1 text-amber-800">
-                {willChargeReanalysis
-                  ? 'Yeniden analiz 1 analiz hakkı kullanır.'
-                  : 'Bu dosyada yeniden analiz ücretsizdir.'}
-                {hasCompletedExpertReview ? ' Önceki uzman incelemesi yeni raporla geçersiz sayılır.' : ''}
-              </p>
-            )}
-            {reanalysisError && <p className="mt-2 text-danger-700">{reanalysisError}</p>}
-          </div>
-        </div>
-
-        {reportState.validationRequired ? (
-          <Button asChild variant="outline" size="sm" className="shrink-0 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100">
-            <Link href={`/submissions/${submissionId}/documents`}>Sınıflandırmayı doğrula</Link>
-          </Button>
-        ) : !reportState.activeJobId ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
-            loading={reanalyzing}
-            onClick={onReanalyze}
-          >
-            Yeniden Analiz Et
-          </Button>
-        ) : null}
-      </div>
-    </section>
   )
 }
 

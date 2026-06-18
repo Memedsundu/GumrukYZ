@@ -81,20 +81,12 @@ export async function startProcessingWithProgress(
     maxAttempts?: number
   },
 ): Promise<SubmissionStatusResponse> {
-  let cancelled = false
-
-  const pollPromise = pollSubmissionUntilSettled(submissionId, {
-    ...options,
-    isCancelled: () => cancelled,
-  })
-
   const processResponse = await fetch(`/api/submissions/${submissionId}/process`, { method: 'POST' })
-  const processData = await processResponse.json() as { error?: string }
+  const processData = await processResponse.json() as { error?: string; errorMessage?: string | null }
 
   if (!processResponse.ok) {
-    cancelled = true
-    throw new Error(processData.error ?? 'İşleme başarısız')
+    throw new Error(processData.error ?? processData.errorMessage ?? 'İşleme başarısız')
   }
 
-  return pollPromise
+  return pollSubmissionUntilSettled(submissionId, options)
 }

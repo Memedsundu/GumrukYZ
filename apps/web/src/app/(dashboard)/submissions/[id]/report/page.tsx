@@ -131,8 +131,8 @@ export default async function ReportPage({ params }: Props) {
   const reportExpertReviews = filterByReportJob(submission.expertReviews, effectiveReportJobId)
   const activeJob = submission.processingJobs[0] ?? null
   const reportState = {
-    stale: Boolean(submission.reportStaleAt) || Boolean(activeJob),
-    readonly: Boolean(submission.reportStaleAt) || Boolean(activeJob),
+    stale: Boolean(submission.reportStaleAt) || Boolean(activeJob) || submission.status === 'FAILED',
+    readonly: Boolean(submission.reportStaleAt) || Boolean(activeJob) || submission.status === 'FAILED',
     staleReason: activeJob
       ? 'Düzeltilen belge yeniden analiz ediliyor. Bu sırada eski rapor referans olarak gösterilir.'
       : submission.reportStaleReason,
@@ -337,7 +337,6 @@ export default async function ReportPage({ params }: Props) {
   return (
     <ReportWorkspace
       submissionId={id}
-      submissionTitle={submission.title}
       generatedAt={formatDateTime(currentReport.generatedAt)}
       counts={{
         errors: errors.length,

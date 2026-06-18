@@ -1,12 +1,15 @@
 'use client'
 
+import Link from 'next/link'
 import { FileWarning } from 'lucide-react'
 import type { DocumentCoverageResult } from '@gumrukyz/domain'
 
 export function DocumentCoveragePanel({
   coverage,
+  submissionId,
 }: {
   coverage: DocumentCoverageResult
+  submissionId?: string
 }) {
   if (coverage.isComplete && coverage.missingConditional.length === 0 && coverage.missingReferencedInvoices.length === 0) {
     return (
@@ -53,6 +56,14 @@ export function DocumentCoveragePanel({
               </div>
             )}
           </div>
+          {submissionId && (
+            <Link
+              href={`/submissions/${submissionId}/documents?focus=upload`}
+              className="mt-4 inline-flex items-center rounded-md border border-warning-300 bg-warning-50 px-3 py-1.5 text-xs font-semibold text-warning-700 transition-colors hover:bg-warning-100"
+            >
+              Eksik belge ekle
+            </Link>
+          )}
         </div>
       </div>
     </section>

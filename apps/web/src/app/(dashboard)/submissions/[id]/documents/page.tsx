@@ -1,8 +1,6 @@
 import { getAuthenticatedUser } from '@/lib/auth'
-import { PageShell } from '@/components/ui/page-shell'
 import { prisma } from '@gumrukyz/db'
 import { notFound } from 'next/navigation'
-import { willChargeAnalysis } from '@/lib/entitlements'
 import DocumentUploadClient from './upload-client'
 
 export const dynamic = 'force-dynamic'
@@ -23,49 +21,19 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
           latestVersion: true,
         },
       },
-      expertReviews: {
-        where: {
-          status: 'COMPLETED',
-          supersededAt: null,
-        },
-        select: { id: true },
-        take: 1,
-      },
     },
   })
 
   if (!submission) notFound()
-  const willChargeReanalysis = await willChargeAnalysis({ tenantId: user.tenantId, submissionId: id })
 
   return (
-    <PageShell>
-      <div className="mb-8">
-        <div className="flex items-center gap-2 text-sm text-ink-muted mb-2">
-          <span>Kontrol paneli</span>
-          <span>/</span>
-          <span>{submission.title}</span>
-          <span>/</span>
-          <span>Belgeler</span>
-        </div>
-        <h1 className="text-2xl font-bold text-ink">{submission.title}</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          {submission.tradeFlow === 'UNKNOWN'
-            ? 'İşlem yönü otomatik önerilecek'
-            : submission.tradeFlow === 'IMPORT'
-              ? 'İthalat'
-              : 'İhracat'} dosyası - belgeleri yükleyin
-        </p>
-      </div>
-
-      <DocumentUploadClient
+    <DocumentUploadClient
         submissionId={submission.id}
         submissionStatus={submission.status}
         tradeFlow={submission.tradeFlow}
         classificationStatus={submission.classificationStatus}
         reportStaleAt={submission.reportStaleAt?.toISOString() ?? null}
         reportStaleReason={submission.reportStaleReason}
-        willChargeReanalysis={willChargeReanalysis}
-        hasCompletedExpertReview={submission.expertReviews.length > 0}
         existingDocuments={submission.documents.map((d) => ({
           id: d.id,
           docType: d.docType,
@@ -80,7 +48,6 @@ export default async function SubmissionDocumentsPage({ params }: Props) {
           status: d.status,
           filename: d.latestVersion?.originalFilename ?? null,
         }))}
-      />
-    </PageShell>
+    />
   )
 }

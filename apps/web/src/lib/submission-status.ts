@@ -33,6 +33,28 @@ export type SubmissionNextAction = {
   progressPercent: number
 }
 
+export type DocumentWorkflowAction = {
+  title: string
+  description: string
+  cta: string
+  action: 'upload' | 'classify' | 'validate' | 'process'
+  disabled: boolean
+  loading: boolean
+  blockingReasons: string[]
+}
+
+export type DocumentWorkflowActionParams = {
+  submissionStatus: string
+  classificationStatus: string
+  documentCount: number
+  needsValidation: boolean
+  canProcess: boolean
+  classifying: boolean
+  validating: boolean
+  processing: boolean
+  reportStale: boolean
+}
+
 export function shouldPollSubmissionStatus(status: string, classificationStatus: string): boolean {
   return ACTIVE_PROCESSING_STATUSES.includes(status as typeof ACTIVE_PROCESSING_STATUSES[number])
     || classificationStatus === 'RUNNING'
@@ -159,6 +181,107 @@ export function resolveSubmissionNextAction(
   }
 
   return null
+}
+
+export function resolveDocumentWorkflowAction(params: DocumentWorkflowActionParams): DocumentWorkflowAction {
+  if (params.documentCount === 0) {
+    return {
+      title: 'Belgeleri yükleyin',
+      description: 'Belgeleri yükleyin; sistem belge türünü ve ithalat/ihracat yönünü otomatik önerecek.',
+      cta: 'Belge seç',
+      action: 'upload',
+      disabled: false,
+      loading: false,
+      blockingReasons: [],
+    }
+  }
+
+  if (params.classifying || params.classificationStatus === 'RUNNING' || params.submissionStatus === 'CLASSIFYING') {
+    return {
+      title: 'Belgeleri sistem okuyor',
+      description: 'Belge türü, işlem yönü ve müşteri eşleşmesi hazırlanıyor.',
+      cta: 'Okunuyor',
+      action: 'classify',
+      disabled: true,
+      loading: true,
+      blockingReasons: [],
+    }
+  }
+
+  if (ACTIVE_PROCESSING_STATUSES.includes(params.submissionStatus as typeof ACTIVE_PROCESSING_STATUSES[number])) {
+    return {
+      title: 'Analiz sürüyor',
+      description: 'Doğrulanmış belgeler üzerinden rapor üretiliyor.',
+      cta: 'İşleniyor',
+      action: 'process',
+      disabled: true,
+      loading: true,
+      blockingReasons: [],
+    }
+  }
+
+  if (params.classificationStatus !== 'AWAITING_VALIDATION' && params.classificationStatus !== 'VALIDATED') {
+    return {
+      title: 'Belgeleri sistem okusun',
+      description: 'Sistem belge türünü, işlem yönünü ve müşteri eşleşmesini önerecek.',
+      cta: 'Oku ve sınıflandır',
+      action: 'classify',
+      disabled: false,
+      loading: false,
+      blockingReasons: [],
+    }
+  }
+
+  if (params.needsValidation) {
+    return {
+      title: params.reportStale ? 'Değişen belgeleri doğrulayın' : 'Önerileri doğrulayın',
+      description: params.reportStale
+        ? 'Yeniden analizden önce değişen veya doğrulanmamış belgeler kullanıcı tarafından onaylanmalı.'
+        : 'İşlem yönü, belge türleri ve müşteri eşleşmesi kullanıcı tarafından onaylanmalı.',
+      cta: params.validating ? 'Kaydediliyor' : 'Doğrulamayı kaydet',
+      action: 'validate',
+      disabled: params.validating,
+      loading: params.validating,
+      blockingReasons: [
+        'İthalat/ihracat yönü seçili olmalı.',
+        'Analize dahil edilen her belge için belge türü doğrulanmalı.',
+      ],
+    }
+  }
+
+  if (params.reportStale) {
+    return {
+      title: 'Yeniden analiz hazır',
+      description: 'Doğrulanan belge setiyle raporu yeniden üretin.',
+      cta: params.processing ? 'İşleniyor' : 'Yeniden Analiz Et',
+      action: 'process',
+      disabled: params.processing || !params.canProcess,
+      loading: params.processing,
+      blockingReasons: [],
+    }
+  }
+
+  if (params.submissionStatus === 'FAILED') {
+    return {
+      title: 'Analizi tekrar başlatın',
+      description: 'Son analiz tamamlanamadı. Doğrulanan belgelerle işlemi yeniden çalıştırabilirsiniz.',
+      cta: params.processing ? 'İşleniyor' : 'Analizi tekrar başlat',
+      action: 'process',
+      disabled: params.processing || !params.canProcess,
+      loading: params.processing,
+      blockingReasons: [],
+    }
+  }
+
+  return {
+    title: 'Analizi başlatın',
+    description: 'Doğrulanan belgeler üzerinden okuma, kurallar ve Otomatik Risk Kontrolü çalışacak.',
+    cta: params.processing ? 'İşleniyor' : 'Analizi başlat',
+    action: 'process',
+    disabled: params.processing || !params.canProcess,
+    loading: params.processing,
+    blockingReasons: [],
+  }
 }
 
 export function submissionResumeHref(submissionId: string, status: string, hasReport: boolean): string {

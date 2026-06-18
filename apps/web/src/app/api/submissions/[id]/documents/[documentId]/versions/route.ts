@@ -155,19 +155,37 @@ export async function POST(req: NextRequest, { params }: Params) {
       return created
     })
 
-    const classification = await classifySubmissionDocument({
-      submissionId,
-      tenantId: user.tenantId,
-      documentId,
-    })
-    const targetClassification = classification.documents.find((item) => item.id === documentId)
+    let classification: Awaited<ReturnType<typeof classifySubmissionDocument>> | null = null
+    let classificationError: string | null = null
+    try {
+      classification = await classifySubmissionDocument({
+        submissionId,
+        tenantId: user.tenantId,
+        documentId,
+      })
+    } catch (classificationErr) {
+      classificationError = classificationErr instanceof Error
+        ? classificationErr.message
+        : 'Otomatik sınıflandırma yapılamadı'
+      console.error('document replacement classification failed:', classificationErr)
+      await prisma.submission.update({
+        where: { id: submissionId },
+        data: {
+          status: 'AWAITING_VALIDATION',
+          classificationStatus: 'AWAITING_VALIDATION',
+          classificationValidatedAt: null,
+          classificationValidatedBy: null,
+        },
+      })
+    }
+    const targetClassification = classification?.documents.find((item) => item.id === documentId)
 
     return NextResponse.json({
       documentId,
       versionId: version.id,
       versionNumber: version.versionNumber,
       needsValidation: true,
-      classificationStatus: classification.submission.classificationStatus,
+      classificationStatus: classification?.submission.classificationStatus ?? 'AWAITING_VALIDATION',
       classification: targetClassification
         ? {
             suggestedDocType: targetClassification.suggestedDocType,
@@ -176,6 +194,7 @@ export async function POST(req: NextRequest, { params }: Params) {
             sourceRefs: targetClassification.sourceRefs,
           }
         : null,
+      classificationError,
       reportStale: shouldStaleReport,
       reportStaleReason: shouldStaleReport ? staleReason : null,
     }, { status: 201 })
