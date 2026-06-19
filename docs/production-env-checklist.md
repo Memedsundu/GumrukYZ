@@ -18,6 +18,8 @@ Doğrulama: `pnpm smoke:production` veya `curl https://gumrukyz.vercel.app/api/h
 | `TRIGGER_PROJECT_ID` | Trigger.dev proje kimliği |
 | `TRIGGER_GLOBAL_CONCURRENCY` | Tüm tenant'lar için eşzamanlı submission limiti (varsayılan 15) |
 | `TRIGGER_TENANT_CONCURRENCY` | Tenant başına eşzamanlı submission limiti (varsayılan 2) |
+| `TRIGGER_CLASSIFICATION_CONCURRENCY` | Global sınıflandırma kuyruğu limiti (varsayılan 10) |
+| `TRIGGER_EXPERT_REVIEW_CONCURRENCY` | Global Uzman İncelemesi kuyruğu limiti (varsayılan 5) |
 | `CRON_SECRET` | Vercel cron auth for `/api/platform/reconcile` and `/api/ready` alerts |
 | `HEALTH_STRICT` | `true` — fail health check when Blob/OpenAI/Trigger keys missing |
 

@@ -422,6 +422,19 @@ export default function DocumentUploadClient({
         const data = await res.json() as { error?: string }
         throw new Error(data.error ?? 'Sınıflandırma başarısız')
       }
+
+      if (res.status === 202) {
+        await pollSubmissionUntilSettled(submissionId, {
+          onUpdate: (data) => {
+            if (data.classificationStatus === 'AWAITING_VALIDATION') {
+              setClassificationStatus('AWAITING_VALIDATION')
+            }
+          },
+        })
+        router.refresh()
+        return
+      }
+
       const data = await res.json() as ClassificationResponse
       setClassificationStatus(data.submission.classificationStatus)
       if (data.submission.suggestedTradeFlow === 'IMPORT' || data.submission.suggestedTradeFlow === 'EXPORT') {

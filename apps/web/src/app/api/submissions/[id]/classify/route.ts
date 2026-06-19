@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma, Prisma } from '@gumrukyz/db'
-import { classifySubmissionDocuments } from '@/lib/classification'
 import { requireApiUser } from '@/lib/auth'
+import { startSubmissionClassification } from '@/lib/classification-runner'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -14,10 +14,28 @@ export async function POST(_req: Request, { params }: Params) {
     if (authResult.response) return authResult.response
     const { user } = authResult
 
-    const result = await classifySubmissionDocuments({
+    const result = await startSubmissionClassification({
       submissionId,
       tenantId: user.tenantId,
     })
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, ...(result.code ? { code: result.code } : {}) },
+        { status: result.status },
+      )
+    }
+
+    if (result.async) {
+      return NextResponse.json(
+        {
+          async: true,
+          classificationStatus: result.classificationStatus,
+          triggerRunId: result.triggerRunId,
+        },
+        { status: 202 },
+      )
+    }
 
     await prisma.auditLog.create({
       data: {
@@ -26,21 +44,13 @@ export async function POST(_req: Request, { params }: Params) {
         action: 'submission.classified',
         entityType: 'Submission',
         entityId: submissionId,
-        afterJson: result as unknown as Prisma.InputJsonValue,
+        afterJson: result.result as unknown as Prisma.InputJsonValue,
       },
     })
 
-    return NextResponse.json(result)
+    return NextResponse.json(result.result)
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Classification failed'
-    const status = message === 'Submission not found' ? 404 : message === 'No documents uploaded yet' ? 400 : 500
-    const localizedMessage =
-      message === 'Submission not found'
-        ? 'Dosya bulunamadı'
-        : message === 'No documents uploaded yet'
-          ? 'Henüz belge yüklenmedi'
-          : 'Sınıflandırma başarısız'
     console.error('POST /api/submissions/[id]/classify error:', err)
-    return NextResponse.json({ error: localizedMessage }, { status })
+    return NextResponse.json({ error: 'Sınıflandırma başarısız' }, { status: 500 })
   }
 }

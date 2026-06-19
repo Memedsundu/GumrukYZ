@@ -555,6 +555,12 @@ export async function reserveAnalysisCredit(params: {
  * Returns the number of reservations reconciled.
  */
 export async function reconcileStuckReservations(olderThanMs = 30 * 60 * 1000): Promise<number> {
+  const processing = await reconcileStuckProcessingReservations(olderThanMs)
+  const expert = await reconcileStuckExpertReviewReservations(olderThanMs)
+  return processing + expert
+}
+
+async function reconcileStuckProcessingReservations(olderThanMs: number): Promise<number> {
   const cutoff = new Date(Date.now() - olderThanMs)
   const reserveEvents = await prisma.tenantUsageEvent.findMany({
     where: { action: 'reserve', createdAt: { lt: cutoff }, processingJobId: { not: null } },
@@ -581,6 +587,51 @@ export async function reconcileStuckReservations(olderThanMs = 30 * 60 * 1000): 
       await consumeMetric({ metric: event.metric, processingJobId: jobId })
     } else {
       await refundMetric({ metric: event.metric, processingJobId: jobId, reason: 'reconcile_stuck' })
+    }
+    reconciled++
+  }
+  return reconciled
+}
+
+async function reconcileStuckExpertReviewReservations(olderThanMs: number): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanMs)
+  const reserveEvents = await prisma.tenantUsageEvent.findMany({
+    where: {
+      action: 'reserve',
+      metric: UsageMetric.EXPERT_REVIEW,
+      createdAt: { lt: cutoff },
+      expertReviewId: { not: null },
+    },
+    select: { expertReviewId: true, metric: true },
+    take: 500,
+  })
+
+  let reconciled = 0
+  for (const event of reserveEvents) {
+    const reviewId = event.expertReviewId
+    if (!reviewId) continue
+
+    const settled = await prisma.tenantUsageEvent.findFirst({
+      where: {
+        expertReviewId: reviewId,
+        metric: event.metric,
+        action: { in: ['consume', 'refund'] },
+      },
+    })
+    if (settled) continue
+
+    const review = await prisma.expertReview.findUnique({
+      where: { id: reviewId },
+      select: { status: true },
+    })
+    if (review && review.status !== 'FAILED' && review.status !== 'ERROR' && review.status !== 'COMPLETED') {
+      continue
+    }
+
+    if (review?.status === 'COMPLETED') {
+      await consumeMetric({ metric: event.metric, expertReviewId: reviewId })
+    } else {
+      await refundMetric({ metric: event.metric, expertReviewId: reviewId, reason: 'reconcile_stuck' })
     }
     reconciled++
   }

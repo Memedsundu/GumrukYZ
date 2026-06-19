@@ -16,3 +16,13 @@ export const tenantSubmissionQueue = queue({
   name: 'submission-per-tenant',
   concurrencyLimit: parseEnvInt('TRIGGER_TENANT_CONCURRENCY', 2),
 })
+
+export const classificationQueue = queue({
+  name: 'submission-classification',
+  concurrencyLimit: parseEnvInt('TRIGGER_CLASSIFICATION_CONCURRENCY', 10),
+})
+
+export const expertReviewQueue = queue({
+  name: 'expert-review',
+  concurrencyLimit: parseEnvInt('TRIGGER_EXPERT_REVIEW_CONCURRENCY', 5),
+})

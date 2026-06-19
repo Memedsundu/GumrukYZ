@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Sparkles } from 'lucide-react'
+import { pollExpertReviewUntilSettled } from '@/lib/expert-review-poll'
 import { cn } from '@/lib/utils'
 
 type Quota = {
@@ -71,6 +72,14 @@ export default function ExpertReviewButton({
       const data = await res.json().catch(() => ({})) as ExpertReviewResponse
       if (data.quota) setCurrentQuota(data.quota)
       if (!res.ok) throw new Error(data.error ?? 'Uzman İncelemesi başlatılamadı')
+
+      if (res.status === 202) {
+        const polled = await pollExpertReviewUntilSettled(submissionId)
+        router.refresh()
+        setNotice(expertReviewNotice({ expertReview: polled }))
+        return
+      }
+
       setNotice(expertReviewNotice(data))
       router.refresh()
     } catch (err) {

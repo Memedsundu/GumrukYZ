@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePlatformAdmin } from '@/lib/platform-admin'
 import { reconcileStuckReservations } from '@/lib/entitlements'
+import { reconcileStaleClassifications } from '@/lib/classification-runner'
 
 function isCronAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
@@ -9,8 +10,11 @@ function isCronAuthorized(req: NextRequest): boolean {
 }
 
 async function runReconcile() {
-  const reconciled = await reconcileStuckReservations()
-  return NextResponse.json({ reconciled })
+  const [reconciled, staleClassifications] = await Promise.all([
+    reconcileStuckReservations(),
+    reconcileStaleClassifications(),
+  ])
+  return NextResponse.json({ reconciled, staleClassifications })
 }
 
 /** Vercel Cron — requires CRON_SECRET (sent as Authorization: Bearer). */
