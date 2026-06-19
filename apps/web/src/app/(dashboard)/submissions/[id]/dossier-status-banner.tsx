@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ACTIVE_PROCESSING_STATUSES, shouldPollSubmissionStatus } from '@/lib/submission-status'
-import { fetchSubmissionStatus } from '@/lib/submission-status-poll'
+import { fetchSubmissionStatus, createPollScheduler } from '@/lib/submission-status-poll'
 
 type Props = {
   submissionId: string
@@ -50,10 +50,10 @@ export function DossierStatusBanner({
   useEffect(() => {
     if (!reanalyzing || onDocuments) return
     let cancelled = false
+    const waitForNextPoll = createPollScheduler()
     async function poll() {
+      let attempt = 0
       while (!cancelled) {
-        await new Promise((resolve) => setTimeout(resolve, 3000))
-        if (cancelled) return
         try {
           const data = await fetchSubmissionStatus(submissionId)
           if (cancelled) return
@@ -64,6 +64,7 @@ export function DossierStatusBanner({
         } catch {
           return
         }
+        await waitForNextPoll(attempt++)
       }
     }
     void poll()

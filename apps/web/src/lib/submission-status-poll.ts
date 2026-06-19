@@ -35,6 +35,55 @@ export async function fetchSubmissionStatus(submissionId: string): Promise<Submi
   return res.json() as Promise<SubmissionStatusResponse>
 }
 
+export function createPollScheduler(options?: {
+  baseIntervalMs?: number
+  maxIntervalMs?: number
+  hiddenMultiplier?: number
+}) {
+  const baseIntervalMs = options?.baseIntervalMs ?? 3000
+  const maxIntervalMs = options?.maxIntervalMs ?? 15000
+  const hiddenMultiplier = options?.hiddenMultiplier ?? 4
+
+  function computeDelayMs(attempt: number): number {
+    const backoffSteps = Math.floor(attempt / 10)
+    const withBackoff = Math.min(baseIntervalMs * 1.5 ** backoffSteps, maxIntervalMs)
+    const jitter = withBackoff * (0.8 + Math.random() * 0.4)
+    const hidden =
+      typeof document !== 'undefined' && document.visibilityState === 'hidden'
+    return Math.round(jitter * (hidden ? hiddenMultiplier : 1))
+  }
+
+  return function waitForNextPoll(attempt: number): Promise<void> {
+    const delayMs = computeDelayMs(attempt)
+
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | null = null
+
+      const done = () => {
+        if (timer !== null) clearTimeout(timer)
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('visibilitychange', onVisible)
+        }
+        resolve()
+      }
+
+      const onVisible = () => {
+        if (document.visibilityState === 'visible') {
+          done()
+        }
+      }
+
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', onVisible)
+      }
+
+      timer = setTimeout(done, delayMs)
+    })
+  }
+}
+
+const defaultWaitForNextPoll = createPollScheduler()
+
 export async function pollSubmissionUntilSettled(
   submissionId: string,
   options: {
@@ -42,10 +91,15 @@ export async function pollSubmissionUntilSettled(
     intervalMs?: number
     maxAttempts?: number
     isCancelled?: () => boolean
+    waitForNextPoll?: (attempt: number) => Promise<void>
   },
 ): Promise<SubmissionStatusResponse> {
-  const intervalMs = options.intervalMs ?? 3000
   const maxAttempts = options.maxAttempts ?? 120
+  const waitForNextPoll =
+    options.waitForNextPoll ??
+    (options.intervalMs !== undefined
+      ? createPollScheduler({ baseIntervalMs: options.intervalMs })
+      : defaultWaitForNextPoll)
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (options.isCancelled?.()) {
@@ -67,7 +121,7 @@ export async function pollSubmissionUntilSettled(
       return data
     }
 
-    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    await waitForNextPoll(attempt)
   }
 
   throw new Error('İşlem zaman aşımına uğradı. Lütfen dosya detayından durumu kontrol edin.')

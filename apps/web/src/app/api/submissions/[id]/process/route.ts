@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const maxDuration = 300
 import { requireApiUser } from '@/lib/auth'
 import { startSubmissionProcessing } from '@/lib/processing-runner'
 import { getEntitlementBlock } from '@/lib/entitlements'

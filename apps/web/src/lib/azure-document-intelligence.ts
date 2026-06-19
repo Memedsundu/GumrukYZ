@@ -1,5 +1,6 @@
 import { inferDocumentContentType } from './document-file-types'
 import { readFileArrayBuffer } from './pdf-extractor'
+import { fetchWithProviderRetry } from '@gumrukyz/ai'
 
 const DEFAULT_API_VERSION = '2024-11-30'
 const DEFAULT_TIMEOUT_MS = 90_000
@@ -98,7 +99,7 @@ async function startAnalyze(
   const timeout = setTimeout(() => controller.abort(), getTimeoutMs())
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithProviderRetry('azure', url, {
       method: 'POST',
       headers: {
         'Content-Type': contentType,
@@ -128,7 +129,7 @@ async function pollAnalyzeResult(operationLocation: string, key: string): Promis
   const startedAt = Date.now()
 
   while (Date.now() - startedAt < getTimeoutMs()) {
-    const response = await fetch(operationLocation, {
+    const response = await fetchWithProviderRetry('azure', operationLocation, {
       method: 'GET',
       headers: {
         'Ocp-Apim-Subscription-Key': key,

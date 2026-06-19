@@ -11,7 +11,7 @@ import {
   shouldRefreshOnStatusChange,
   type SubmissionStatusSnapshot,
 } from '@/lib/submission-status'
-import { fetchSubmissionStatus, mapStatusToProgressUpdate } from '@/lib/submission-status-poll'
+import { fetchSubmissionStatus, mapStatusToProgressUpdate, createPollScheduler } from '@/lib/submission-status-poll'
 import { useSmoothProgressPercent } from '@/lib/use-smooth-progress-percent'
 
 type Props = {
@@ -57,8 +57,10 @@ export function SubmissionNextStep({
     }
 
     let cancelled = false
+    const waitForNextPoll = createPollScheduler()
 
     async function pollStatus() {
+      let attempt = 0
       while (!cancelled) {
         try {
           const data = await fetchSubmissionStatus(submissionId)
@@ -95,7 +97,7 @@ export function SubmissionNextStep({
           return
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 3000))
+        await waitForNextPoll(attempt++)
       }
     }
 

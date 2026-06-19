@@ -30,6 +30,10 @@ async function main() {
   }
 
   const required = ['database', 'clerk']
+  if (body.strict === true) {
+    required.push('blob', 'openai', 'trigger')
+  }
+
   for (const key of required) {
     if (body.checks?.[key] !== true) {
       console.error(`\nMissing required check: ${key}`)
@@ -37,24 +41,40 @@ async function main() {
     }
   }
 
-  if (body.checks?.trigger !== true) {
-    console.warn('\nWARN: TRIGGER_SECRET_KEY not set on production — long jobs may timeout.')
+  if (body.strict !== true) {
+    console.warn('\nWARN: HEALTH_STRICT is not enabled — production should set HEALTH_STRICT=true')
+    if (body.checks?.trigger !== true) {
+      console.warn('WARN: TRIGGER_SECRET_KEY not set on production — long jobs may timeout.')
+    }
   }
 
   console.log('\nHealth check OK')
 
-  const betaUrl = `${root}/beta`
-  console.log(`\nChecking ${betaUrl} ...`)
-  const betaRes = await fetch(betaUrl, { signal: AbortSignal.timeout(15_000) })
-  const betaHtml = await betaRes.text()
-  if (!betaRes.ok || !betaHtml.includes('Beta kullanıma başla')) {
-    console.error('\nBeta page smoke check FAILED')
+  const readyUrl = `${root}/api/ready`
+  console.log(`\nChecking ${readyUrl} ...`)
+  const readyRes = await fetch(readyUrl, { signal: AbortSignal.timeout(20_000) })
+  const readyBody = await readyRes.json().catch(() => null)
+  if (readyBody) {
+    console.log(JSON.stringify(readyBody, null, 2))
+  }
+  if (!readyRes.ok || readyBody?.ready !== true) {
+    console.warn('\nWARN: Readiness check not OK (queue/provider saturation — see alerts)')
+  } else {
+    console.log('\nReadiness check OK')
+  }
+
+  const homeUrl = `${root}/`
+  console.log(`\nChecking ${homeUrl} ...`)
+  const homeRes = await fetch(homeUrl, { signal: AbortSignal.timeout(15_000), redirect: 'follow' })
+  const homeHtml = await homeRes.text()
+  if (!homeRes.ok || !homeHtml.includes('Gümrük risklerini beyan öncesi dengeleyin')) {
+    console.error('\nHomepage smoke check FAILED')
     process.exit(1)
   }
-  console.log('Beta page OK')
+  console.log('Homepage OK')
 
   console.log('\nManual E2E (per firm org):')
-  console.log('  1. Open /beta → sign up by email')
+  console.log('  1. Open / → sign up by email')
   console.log('  2. Create/select firm → accept pilot consent')
   console.log('  3. New submission (REAL) → upload PDFs → validate → process → report')
   console.log('  4. Run optional expert AI review and confirm firm quota decreases')

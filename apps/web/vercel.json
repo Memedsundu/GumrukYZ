@@ -2,5 +2,15 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && NODE_OPTIONS=--max-old-space-size=6144 pnpm install --frozen-lockfile --filter @gumrukyz/web... --ignore-scripts && pnpm --filter @gumrukyz/db generate",
   "buildCommand": "cd ../.. && pnpm --filter @gumrukyz/web build",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/platform/reconcile",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/ready",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

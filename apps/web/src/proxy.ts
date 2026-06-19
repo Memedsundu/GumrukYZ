@@ -10,6 +10,8 @@ const isPublicRoute = createRouteMatcher([
   '/sign-up(.*)',
   '/api/webhooks(.*)',
   '/api/health',
+  '/api/ready',
+  '/api/platform/reconcile',
 ])
 
 const isOrgOptionalRoute = createRouteMatcher([

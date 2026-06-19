@@ -13,6 +13,8 @@ const REQUIRED = [
   'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
   'BLOB_READ_WRITE_TOKEN',
   'OPENAI_API_KEY',
+  'CRON_SECRET',
+  'HEALTH_STRICT',
 ]
 
 const RECOMMENDED = [
@@ -56,6 +58,12 @@ console.log('')
 for (const key of RECOMMENDED) {
   const ok = present.has(key)
   console.log(`${ok ? '✓' : '○'} ${key} (recommended)`)
+}
+
+if (present.has('DATABASE_URL')) {
+  console.log('\nManual DATABASE_URL checks (Neon dashboard / Vercel env editor):')
+  console.log('  • hostname contains -pooler.')
+  console.log('  • query string includes connection_limit=1')
 }
 
 if (failed) {

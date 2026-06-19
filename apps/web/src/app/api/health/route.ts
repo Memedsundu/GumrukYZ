@@ -3,6 +3,14 @@ import { prisma } from '@gumrukyz/db'
 
 export const dynamic = 'force-dynamic'
 
+function isStrictHealthCheck(): boolean {
+  return process.env['HEALTH_STRICT'] === 'true'
+}
+
+function isManagedDocumentReader(): boolean {
+  return process.env['DOCUMENT_READER_MODE'] === 'managed'
+}
+
 export async function GET() {
   const checks: Record<string, boolean | string> = {
     database: false,
@@ -21,10 +29,18 @@ export async function GET() {
     checks.database = false
   }
 
-  const ok = checks.database === true && checks.clerk === true
+  const requiredChecks: Array<keyof typeof checks> = ['database', 'clerk']
+  if (isStrictHealthCheck()) {
+    requiredChecks.push('blob', 'openai', 'trigger')
+    if (isManagedDocumentReader()) {
+      requiredChecks.push('azureDocIntel')
+    }
+  }
+
+  const ok = requiredChecks.every((key) => checks[key] === true)
 
   return NextResponse.json(
-    { ok, checks, timestamp: new Date().toISOString() },
+    { ok, strict: isStrictHealthCheck(), checks, timestamp: new Date().toISOString() },
     { status: ok ? 200 : 503 },
   )
 }

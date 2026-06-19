@@ -82,6 +82,8 @@ add_var AZURE_DOCUMENT_INTELLIGENCE_COST_PER_1000_PAGES "${AZURE_DOCUMENT_INTELL
 add_var OCR_SERVICE_SECRET                   "${OCR_SERVICE_SECRET:-change-me}"
 add_var TRIGGER_SECRET_KEY                   "${TRIGGER_SECRET_KEY:-}"
 add_var TRIGGER_PROJECT_ID                   "${TRIGGER_PROJECT_ID:-}"
+add_var CRON_SECRET                          "${CRON_SECRET:-}"
+add_var HEALTH_STRICT                        "${HEALTH_STRICT:-}"
 
 echo ""
 echo "Done. Verify with: vercel env ls"

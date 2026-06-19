@@ -2,6 +2,8 @@ import { prisma, Prisma } from '@gumrukyz/db'
 import { UsageMetric } from '@gumrukyz/domain'
 import { processSubmission } from './processing'
 import { EntitlementExhaustedError, reserveAnalysisCredit, refundMetric } from './entitlements'
+import { allowsSyncProcessingFallback, isAsyncProcessingRequired } from './runtime-env'
+import { tenantSubmissionQueue } from '@/trigger/queues'
 
 const BLOCKED_PROCESSING_STATUSES = [
   'CLASSIFYING',
@@ -70,6 +72,15 @@ export async function startSubmissionProcessing(params: {
     return { ok: false, status: 409, error: `Dosya bu durumdan işlenemez: ${submission.status}` }
   }
 
+  if (isAsyncProcessingRequired() && !isTriggerEnabled()) {
+    return {
+      ok: false,
+      status: 503,
+      error: 'Arka plan işleme şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin.',
+      code: 'PROCESSING_UNAVAILABLE',
+    }
+  }
+
   const job = await prisma.$transaction(async (tx) => {
     const claimed = await tx.submission.updateMany({
       where: {
@@ -130,12 +141,19 @@ export async function startSubmissionProcessing(params: {
   if (isTriggerEnabled()) {
     let handle: { id: string }
     try {
-      const { tasks } = await import('@trigger.dev/sdk/v3')
-      handle = await tasks.trigger('process-submission', {
-        submissionId,
-        tenantId,
-        jobId: job.id,
-      })
+      const { tasks } = await import('@trigger.dev/sdk')
+      handle = await tasks.trigger(
+        'process-submission',
+        {
+          submissionId,
+          tenantId,
+          jobId: job.id,
+        },
+        {
+          queue: tenantSubmissionQueue.name,
+          concurrencyKey: tenantId,
+        },
+      )
       await prisma.processingJob.update({
         where: { id: job.id },
         data: { triggerJobId: handle.id },
@@ -161,6 +179,22 @@ export async function startSubmissionProcessing(params: {
       errorMessage: null,
       async: true,
       triggerRunId: handle.id,
+    }
+  }
+
+  if (!allowsSyncProcessingFallback()) {
+    const errorMessage = 'Arka plan işleme başlatılamadı'
+    await failClaimedJob(submissionId, job.id, errorMessage)
+    await refundMetric({
+      metric: UsageMetric.ANALYSIS,
+      processingJobId: job.id,
+      reason: 'processing_unavailable',
+    }).catch(() => {})
+    return {
+      ok: false,
+      status: 503,
+      error: errorMessage,
+      code: 'PROCESSING_UNAVAILABLE',
     }
   }
 

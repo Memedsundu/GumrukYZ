@@ -10,6 +10,7 @@ import OpenAI from 'openai'
 import { zodTextFormat } from 'openai/helpers/zod'
 import type { z } from 'zod'
 import { ProviderError } from '@gumrukyz/shared'
+import { callProvider } from './provider-throttle.js'
 
 export type StructuredUserContent =
   | string
@@ -65,12 +66,11 @@ export async function parseStructuredOutput<T>(
   if (request.reasoningEffort) body['reasoning'] = { effort: request.reasoningEffort }
   if (request.maxOutputTokens) body['max_output_tokens'] = request.maxOutputTokens
 
-  const response = await client.responses.parse(
-    body as Parameters<OpenAI['responses']['parse']>[0],
-    {
+  const response = await callProvider('openai', () =>
+    client.responses.parse(body as Parameters<OpenAI['responses']['parse']>[0], {
       timeout: request.timeoutMs ?? 60_000,
-      maxRetries: request.maxRetries ?? 1,
-    },
+      maxRetries: 0,
+    }),
   )
 
   const parsed = response.output_parsed as T | null

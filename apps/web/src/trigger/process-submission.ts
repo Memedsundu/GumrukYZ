@@ -1,19 +1,15 @@
 /**
- * Trigger.dev v3 durable task for processing customs submissions.
+ * Trigger.dev durable task for processing customs submissions.
  *
- * This task replaces the synchronous processSubmission call inside the API route.
- * It runs in Trigger.dev's managed infrastructure, surviving Vercel Function timeouts.
- *
- * Setup:
- *   1. Create a project at https://trigger.dev
- *   2. Set TRIGGER_SECRET_KEY and TRIGGER_PROJECT_ID env vars
- *   3. Run: npx trigger.dev@latest dev (local) or deploy via CI
+ * Runs in Trigger.dev managed infrastructure (Wave 2 — async-only in production).
  */
-import { task, logger } from '@trigger.dev/sdk/v3'
+import { task, logger } from '@trigger.dev/sdk'
 import { processSubmission } from '@/lib/processing'
+import { submissionProcessingQueue } from './queues'
 
 export const processSubmissionTask = task({
   id: 'process-submission',
+  queue: submissionProcessingQueue,
   maxDuration: 300,
 
   run: async (payload: { submissionId: string; tenantId: string; jobId: string }) => {

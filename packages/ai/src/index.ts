@@ -2,6 +2,16 @@ export type { LlmProvider, DocumentClassificationResult, ExtractionResult, Expla
 export { OpenAIProvider, RISK_SUMMARY_PROMPT_VERSION } from './openai-provider.js'
 export { AnthropicPlaceholder } from './anthropic-placeholder.js'
 export {
+  callProvider,
+  fetchWithProviderRetry,
+  isRetryableHttpStatus,
+  isRetryableProviderError,
+  RetryableProviderError,
+  type ThrottledProvider,
+  withProviderRetry,
+  withProviderThrottle,
+} from './provider-throttle.js'
+export {
   createStructuredOpenAIClient,
   parseStructuredOutput,
   type StructuredParseRequest,
