@@ -37,7 +37,9 @@ Doğrulama: `pnpm smoke:production` veya `curl https://gumrukyz.vercel.app/api/h
 | `AZURE_DOCUMENT_INTELLIGENCE_*` | `DOCUMENT_READER_MODE=managed` ise |
 | `INTERNAL_TENANT_CLERK_ORG_ID` | Dahili test org Clerk ID |
 | `PLATFORM_ADMIN_CLERK_USER_IDS` | Virgülle ayrılmış platform admin Clerk user ID |
-| `ALERT_WEBHOOK_URL` | Slack/generic webhook — cron `/api/ready` posts when thresholds exceeded |
+| `ALERT_WEBHOOK_URL` | Generic webhook — cron `/api/ready` posts when thresholds exceeded |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook (preferred; Block Kit formatting) — see [slack-alerts-setup.md](./slack-alerts-setup.md) |
+| `ALERT_NOTIFY_EMAIL` | On-call email in alert footer (default: veysel.sundu@gmail.com) |
 | `OPENAI_PROVIDER_MAX_CONCURRENCY` | OpenAI eşzamanlı istek limiti (varsayılan 5) |
 | `AZURE_PROVIDER_MAX_CONCURRENCY` | Azure Doc Intel eşzamanlı istek limiti (varsayılan 3) |
 
@@ -64,3 +66,5 @@ Son migration: `20260519120000_pilot_org_users` (pilot onay + org başına kulla
 See [scalability-plan.md](./scalability-plan.md) for the full 5-wave plan (~1,000 concurrent users).
 
 **Activate Waves 1–4 on production:** [finish-scalability-setup.md](./finish-scalability-setup.md) → `node scripts/finish-scalability-production.mjs`
+
+**Slack alerts:** [slack-alerts-setup.md](./slack-alerts-setup.md) → on-call veysel.sundu@gmail.com

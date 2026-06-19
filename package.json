@@ -20,6 +20,7 @@
     "verify:production-env": "node scripts/verify-production-env.mjs",
     "load-test:readiness": "node scripts/load-test-readiness.mjs",
     "finish:scalability-production": "node scripts/finish-scalability-production.mjs",
+    "test:slack-alert": "node scripts/test-slack-alert.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore"
   },
   "devDependencies": {
