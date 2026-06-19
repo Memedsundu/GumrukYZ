@@ -50,6 +50,18 @@ async function main() {
 
   console.log('\nHealth check OK')
 
+  if (body.scalability) {
+    const s = body.scalability
+    if (!s.distributedRateLimit) {
+      console.warn('\nWARN: Distributed rate limit inactive — set UPSTASH_REDIS_REST_* on production')
+    } else if (s.rateLimitRedisOk !== true) {
+      console.warn('\nWARN: Upstash Redis ping failed — check UPSTASH credentials')
+    }
+    if (!s.spendGuard) {
+      console.warn('\nWARN: Spend circuit breaker inactive — set SPEND_CIRCUIT_BREAKER_ENABLED=true')
+    }
+  }
+
   const readyUrl = `${root}/api/ready`
   console.log(`\nChecking ${readyUrl} ...`)
   const readyRes = await fetch(readyUrl, { signal: AbortSignal.timeout(20_000) })

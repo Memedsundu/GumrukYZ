@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@gumrukyz/db'
+import { getScalabilityStatus } from '@/lib/scalability-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,18 +30,32 @@ export async function GET() {
     checks.database = false
   }
 
+  const scalability = await getScalabilityStatus()
+  if (scalability.distributedRateLimit) {
+    checks.rateLimitRedis = scalability.rateLimitRedisOk === true
+  }
+
   const requiredChecks: Array<keyof typeof checks> = ['database', 'clerk']
   if (isStrictHealthCheck()) {
     requiredChecks.push('blob', 'openai', 'trigger')
     if (isManagedDocumentReader()) {
       requiredChecks.push('azureDocIntel')
     }
+    if (scalability.distributedRateLimit) {
+      requiredChecks.push('rateLimitRedis')
+    }
   }
 
   const ok = requiredChecks.every((key) => checks[key] === true)
 
   return NextResponse.json(
-    { ok, strict: isStrictHealthCheck(), checks, timestamp: new Date().toISOString() },
+    {
+      ok,
+      strict: isStrictHealthCheck(),
+      checks,
+      scalability,
+      timestamp: new Date().toISOString(),
+    },
     { status: ok ? 200 : 503 },
   )
 }

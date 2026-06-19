@@ -18,6 +18,8 @@
     "deploy:prod": "vercel deploy --prod --yes",
     "smoke:production": "node scripts/smoke-production.mjs",
     "verify:production-env": "node scripts/verify-production-env.mjs",
+    "load-test:readiness": "node scripts/load-test-readiness.mjs",
+    "finish:scalability-production": "node scripts/finish-scalability-production.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore"
   },
   "devDependencies": {

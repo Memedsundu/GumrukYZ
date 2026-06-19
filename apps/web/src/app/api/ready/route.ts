@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { collectReadyMetrics } from '@/lib/ready-metrics'
 import { sendReadyAlert } from '@/lib/ready-alerts'
+import { getScalabilityStatus } from '@/lib/scalability-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,7 @@ function isCronAuthorized(req: NextRequest): boolean {
 export async function GET(req: NextRequest) {
   try {
     const metrics = await collectReadyMetrics()
+    const scalability = await getScalabilityStatus()
 
     if (!metrics.ready && isCronAuthorized(req)) {
       await sendReadyAlert(metrics).catch((err) => {
@@ -31,8 +33,10 @@ export async function GET(req: NextRequest) {
           providerErrorsLastHour: metrics.providerErrorsLastHour,
           providerErrorRate: metrics.providerErrorRate,
           providerP95DurationMs: metrics.providerP95DurationMs,
+          globalSpendLastHourUsd: metrics.globalSpendLastHourUsd,
           dbLatencyMs: metrics.dbLatencyMs,
         },
+        scalability,
         thresholds: metrics.thresholds,
         alerts: metrics.alerts,
         timestamp: new Date().toISOString(),

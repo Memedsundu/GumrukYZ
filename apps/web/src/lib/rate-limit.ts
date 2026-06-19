@@ -146,3 +146,14 @@ export function rateLimitResponseHeaders(result: RateLimitResult): Record<string
     'X-RateLimit-Window': '60',
   }
 }
+
+export async function pingRateLimitRedis(): Promise<boolean> {
+  const redis = getRedisClient()
+  if (!redis) return false
+  try {
+    const pong = await redis.ping()
+    return pong === 'PONG'
+  } catch {
+    return false
+  }
+}

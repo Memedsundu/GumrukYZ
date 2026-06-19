@@ -62,3 +62,5 @@ Son migration: `20260519120000_pilot_org_users` (pilot onay + org başına kulla
 ## Scalability roadmap
 
 See [scalability-plan.md](./scalability-plan.md) for the full 5-wave plan (~1,000 concurrent users).
+
+**Activate Waves 1–4 on production:** [finish-scalability-setup.md](./finish-scalability-setup.md) → `node scripts/finish-scalability-production.mjs`

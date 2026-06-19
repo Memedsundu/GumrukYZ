@@ -5,6 +5,7 @@ import type { LlmProvider, DocumentClassificationResult, ExplanationResult, Prov
 import type { DocumentType } from '@gumrukyz/domain'
 import { DocumentType as DocTypeEnum, TradeFlow } from '@gumrukyz/domain'
 import { ProviderError, estimateModelCostUsd } from '@gumrukyz/shared'
+import { callProvider } from './provider-throttle.js'
 
 const DocumentClassificationSchema = z.object({
   detectedType: z.enum([
@@ -76,10 +77,11 @@ export class OpenAIProvider implements LlmProvider {
     rawText: string,
     filename: string,
   ): Promise<{ result: DocumentClassificationResult; meta: ProviderRunMetadata }> {
-    const client = this.getClient()
-    const start = Date.now()
+    return callProvider('openai', async () => {
+      const client = this.getClient()
+      const start = Date.now()
 
-    const { object, usage } = await generateObject({
+      const { object, usage } = await generateObject({
       model: client(this.model),
       schema: DocumentClassificationSchema,
       prompt: `You are a customs document classification system.
@@ -99,19 +101,20 @@ Document text (first 3000 characters):
 ${rawText.slice(0, 3000)}
 
 Return detected document type, document confidence, detected trade flow, trade-flow confidence, sourceRefs used for classification, parties, and brief reasoning.`,
-    })
+      })
 
-    return {
-      result: object,
-      meta: {
-        provider: 'openai',
-        model: this.model,
-        inputTokens: usage.promptTokens,
-        outputTokens: usage.completionTokens,
-        estimatedCostUsd: this.estimateCost(usage.promptTokens, usage.completionTokens),
-        durationMs: Date.now() - start,
-      },
-    }
+      return {
+        result: object,
+        meta: {
+          provider: 'openai',
+          model: this.model,
+          inputTokens: usage.promptTokens,
+          outputTokens: usage.completionTokens,
+          estimatedCostUsd: this.estimateCost(usage.promptTokens, usage.completionTokens),
+          durationMs: Date.now() - start,
+        },
+      }
+    })
   }
 
   async extractStructured<T>(
@@ -120,10 +123,11 @@ Return detected document type, document confidence, detected trade flow, trade-f
     schemaName: string,
     docType: DocumentType,
   ): Promise<{ result: T; meta: ProviderRunMetadata }> {
-    const client = this.getClient()
-    const start = Date.now()
+    return callProvider('openai', async () => {
+      const client = this.getClient()
+      const start = Date.now()
 
-    const { object, usage } = await generateObject({
+      const { object, usage } = await generateObject({
       model: client(this.model),
       schema,
       prompt: `You are a customs document data extraction system.
@@ -140,22 +144,24 @@ For invoices, set free_of_charge=true only when FREE OF CHARGE, F.O.C, or Bedels
 
 Document text:
 ${rawText.slice(0, 6000)}`,
-    })
+      })
 
-    return {
-      result: object,
-      meta: {
-        provider: 'openai',
-        model: this.model,
-        inputTokens: usage.promptTokens,
-        outputTokens: usage.completionTokens,
-        estimatedCostUsd: this.estimateCost(usage.promptTokens, usage.completionTokens),
-        durationMs: Date.now() - start,
-      },
-    }
+      return {
+        result: object,
+        meta: {
+          provider: 'openai',
+          model: this.model,
+          inputTokens: usage.promptTokens,
+          outputTokens: usage.completionTokens,
+          estimatedCostUsd: this.estimateCost(usage.promptTokens, usage.completionTokens),
+          durationMs: Date.now() - start,
+        },
+      }
+    })
   }
 
   async embedText(text: string): Promise<number[]> {
+    return callProvider('openai', async () => {
     const apiKey = process.env['OPENAI_API_KEY']
     if (!apiKey) throw new ProviderError('openai', 'OPENAI_API_KEY is not set')
     const openai = createOpenAI({ apiKey })
@@ -163,6 +169,7 @@ ${rawText.slice(0, 6000)}`,
       values: [text.slice(0, 8000)],
     })
     return Array.from(embeddings[0]!)
+    })
   }
 
   async generateRiskSummary(
@@ -171,10 +178,11 @@ ${rawText.slice(0, 6000)}`,
     regulationContext?: Array<{ title: string; excerpt: string }>,
     documentCoverage?: RiskSummaryCoverageContext,
   ): Promise<{ result: ExplanationResult; meta: ProviderRunMetadata }> {
-    const client = this.getClient()
-    const start = Date.now()
+    return callProvider('openai', async () => {
+      const client = this.getClient()
+      const start = Date.now()
 
-    const findingsList = findings
+      const findingsList = findings
       .map((f) => `[findingId=${f.findingId}] [${f.severity}] ${f.ruleCode}: ${f.message}`)
       .join('\n')
 
@@ -209,19 +217,20 @@ Kurallar:
 - Eksik beklenen belgeler varsa özette açıkça belirt ve sonuçların mevcut belgelerle sınırlı olduğunu vurgula; eksik belge olmadığında fazla temkinli olma
 - Genel özeti 2-3 cümleyle sınırla
 - findingExplanations içinde her bulgunun findingId değerini AYNEN kopyala; yeni findingId uydurma`,
-    })
+      })
 
-    return {
-      result: object,
-      meta: {
-        provider: 'openai',
-        model: this.model,
-        inputTokens: usage.promptTokens,
-        outputTokens: usage.completionTokens,
-        estimatedCostUsd: this.estimateCost(usage.promptTokens, usage.completionTokens),
-        durationMs: Date.now() - start,
-      },
-    }
+      return {
+        result: object,
+        meta: {
+          provider: 'openai',
+          model: this.model,
+          inputTokens: usage.promptTokens,
+          outputTokens: usage.completionTokens,
+          estimatedCostUsd: this.estimateCost(usage.promptTokens, usage.completionTokens),
+          durationMs: Date.now() - start,
+        },
+      }
+    })
   }
 
   private estimateCost(inputTokens: number, outputTokens: number): number {
@@ -229,21 +238,23 @@ Kurallar:
   }
 
   async generateText(prompt: string): Promise<{ text: string; meta: ProviderRunMetadata }> {
-    const client = this.getClient()
-    const start = Date.now()
-    const { text, usage } = await generateText({
-      model: client(this.model),
-      prompt,
+    return callProvider('openai', async () => {
+      const client = this.getClient()
+      const start = Date.now()
+      const { text, usage } = await generateText({
+        model: client(this.model),
+        prompt,
+      })
+      return {
+        text,
+        meta: {
+          provider: 'openai',
+          model: this.model,
+          inputTokens: usage.promptTokens,
+          outputTokens: usage.completionTokens,
+          durationMs: Date.now() - start,
+        },
+      }
     })
-    return {
-      text,
-      meta: {
-        provider: 'openai',
-        model: this.model,
-        inputTokens: usage.promptTokens,
-        outputTokens: usage.completionTokens,
-        durationMs: Date.now() - start,
-      },
-    }
   }
 }
