@@ -1,6 +1,5 @@
 import { neonConfig } from '@neondatabase/serverless'
 import { PrismaNeon } from '@prisma/adapter-neon'
-import '@prisma/client/runtime/library'
 import { PrismaClient } from '@prisma/client'
 import WebSocket from 'ws'
 

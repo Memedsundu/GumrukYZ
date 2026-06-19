@@ -66,6 +66,11 @@ for (const nftPath of nftFiles) {
       }
     }
 
+    // engineType=client bundles must not ship native query engines to Vercel.
+    if (f.includes('libquery_engine') && f.endsWith('.node')) {
+      continue
+    }
+
     cleaned.push(f)
   }
 
