@@ -36,6 +36,8 @@
     "@radix-ui/react-tooltip": "^1.2.7",
     "@react-pdf/renderer": "4.5.1",
     "@trigger.dev/sdk": "^4.4.6",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "@vercel/blob": "^2.3.3",
     "ai": "^4.3.16",
     "class-variance-authority": "^0.7.1",

@@ -17,6 +17,8 @@ import {
   reserveMetric,
 } from './entitlements'
 import { allowsSyncProcessingFallback, isAsyncProcessingRequired } from './runtime-env'
+import { checkSpendAllowed } from './spend-guard'
+import './spend-guard-init'
 
 export type ExpertReviewSummaryResponse = {
   id: string
@@ -174,6 +176,16 @@ export async function startExpertReview(params: {
       ok: false,
       status: 409,
       error: 'Uzman İncelemesi için önce dosya analizinin tamamlanması gerekiyor',
+    }
+  }
+
+  const spend = await checkSpendAllowed(params.tenantId)
+  if (!spend.ok) {
+    return {
+      ok: false,
+      status: spend.status,
+      error: spend.error,
+      code: spend.code,
     }
   }
 

@@ -17,6 +17,29 @@ export class RetryableProviderError extends Error {
   }
 }
 
+export class ProviderCircuitOpenError extends Error {
+  readonly retryable = false
+
+  constructor(message = 'Provider circuit is open — refusing retries to limit spend') {
+    super(message)
+    this.name = 'ProviderCircuitOpenError'
+  }
+}
+
+type ProviderCircuitCheck = () => boolean | Promise<boolean>
+let globalProviderCircuitCheck: ProviderCircuitCheck | null = null
+
+/** Register a global spend/error circuit check (Wave 4). Called from apps/web at startup. */
+export function setGlobalProviderCircuitCheck(check: ProviderCircuitCheck | null): void {
+  globalProviderCircuitCheck = check
+}
+
+async function assertProviderCircuitClosed(): Promise<void> {
+  if (!globalProviderCircuitCheck) return
+  const open = await globalProviderCircuitCheck()
+  if (open) throw new ProviderCircuitOpenError()
+}
+
 class Semaphore {
   private active = 0
   private readonly queue: Array<() => void> = []
@@ -106,6 +129,8 @@ export async function withProviderRetry<T>(
   provider: ThrottledProvider,
   fn: () => Promise<T>,
 ): Promise<T> {
+  await assertProviderCircuitClosed()
+
   const maxAttempts = Math.max(1, parseEnvInt('PROVIDER_RETRY_MAX_ATTEMPTS', 4))
   const baseMs = Math.max(100, parseEnvInt('PROVIDER_RETRY_BASE_MS', 1000))
 
@@ -116,6 +141,7 @@ export async function withProviderRetry<T>(
     } catch (error) {
       lastError = error
       if (attempt >= maxAttempts - 1 || !isRetryableProviderError(error)) throw error
+      await assertProviderCircuitClosed()
       await sleep(computeBackoffMs(baseMs, attempt))
     }
   }

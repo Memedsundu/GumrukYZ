@@ -3,6 +3,8 @@ import { UsageMetric } from '@gumrukyz/domain'
 import { processSubmission } from './processing'
 import { EntitlementExhaustedError, reserveAnalysisCredit, refundMetric } from './entitlements'
 import { allowsSyncProcessingFallback, isAsyncProcessingRequired } from './runtime-env'
+import { checkSpendAllowed } from './spend-guard'
+import './spend-guard-init'
 import { tenantSubmissionQueue } from '@/trigger/queues'
 
 const BLOCKED_PROCESSING_STATUSES = [
@@ -70,6 +72,16 @@ export async function startSubmissionProcessing(params: {
   }
   if (!PROCESSABLE_STATUSES.includes(submission.status)) {
     return { ok: false, status: 409, error: `Dosya bu durumdan işlenemez: ${submission.status}` }
+  }
+
+  const spend = await checkSpendAllowed(tenantId)
+  if (!spend.ok) {
+    return {
+      ok: false,
+      status: spend.status,
+      error: spend.error,
+      code: spend.code,
+    }
   }
 
   if (isAsyncProcessingRequired() && !isTriggerEnabled()) {

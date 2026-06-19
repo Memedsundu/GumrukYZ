@@ -1,4 +1,5 @@
 import { prisma } from '@gumrukyz/db'
+import { getHourlySpend, getSpendLimits, isSpendGuardEnabled } from './spend-guard'
 
 const ACTIVE_PROCESSING_STATUSES = [
   'CLASSIFYING',
@@ -17,6 +18,7 @@ export type ReadyMetrics = {
   providerErrorsLastHour: number
   providerErrorRate: number | null
   providerP95DurationMs: number | null
+  globalSpendLastHourUsd: number | null
   dbLatencyMs: number
   thresholds: {
     maxQueueDepth: number
@@ -24,6 +26,7 @@ export type ReadyMetrics = {
     maxReconcilerBacklog: number
     maxProviderErrorRate: number
     maxProviderP95DurationMs: number
+    maxGlobalSpendUsdPerHour: number
     maxDbLatencyMs: number
   }
   alerts: string[]
@@ -47,6 +50,7 @@ export function getReadyThresholds() {
     maxReconcilerBacklog: parseEnvInt('READY_MAX_RECONCILER_BACKLOG', 10),
     maxProviderErrorRate: parseEnvFloat('READY_MAX_PROVIDER_ERROR_RATE', 0.25),
     maxProviderP95DurationMs: parseEnvInt('READY_MAX_PROVIDER_P95_MS', 120_000),
+    maxGlobalSpendUsdPerHour: parseEnvFloat('SPEND_LIMIT_GLOBAL_USD_PER_HOUR', 500),
     maxDbLatencyMs: parseEnvInt('READY_MAX_DB_LATENCY_MS', 500),
     stuckJobMinutes: parseEnvInt('READY_STUCK_JOB_MINUTES', 30),
     metricsWindowMinutes: parseEnvInt('READY_METRICS_WINDOW_MINUTES', 60),
@@ -130,6 +134,10 @@ export async function collectReadyMetrics(): Promise<ReadyMetrics> {
   const providerErrorRate =
     providerRunsLastHour > 0 ? providerErrorsLastHour / providerRunsLastHour : null
 
+  const globalSpendLastHourUsd = isSpendGuardEnabled()
+    ? (await getHourlySpend()).globalSpendUsd
+    : null
+
   const alerts: string[] = []
   if (queueDepth > thresholds.maxQueueDepth) {
     alerts.push(`queue_depth=${queueDepth} exceeds ${thresholds.maxQueueDepth}`)
@@ -159,6 +167,15 @@ export async function collectReadyMetrics(): Promise<ReadyMetrics> {
   if (dbLatencyMs > thresholds.maxDbLatencyMs) {
     alerts.push(`db_latency_ms=${dbLatencyMs} exceeds ${thresholds.maxDbLatencyMs}`)
   }
+  if (
+    globalSpendLastHourUsd != null &&
+    thresholds.maxGlobalSpendUsdPerHour > 0 &&
+    globalSpendLastHourUsd >= thresholds.maxGlobalSpendUsdPerHour
+  ) {
+    alerts.push(
+      `global_spend_usd=${globalSpendLastHourUsd.toFixed(2)} exceeds ${thresholds.maxGlobalSpendUsdPerHour}`,
+    )
+  }
 
   return {
     queueDepth,
@@ -168,6 +185,7 @@ export async function collectReadyMetrics(): Promise<ReadyMetrics> {
     providerErrorsLastHour,
     providerErrorRate,
     providerP95DurationMs,
+    globalSpendLastHourUsd,
     dbLatencyMs,
     thresholds: {
       maxQueueDepth: thresholds.maxQueueDepth,
@@ -175,6 +193,7 @@ export async function collectReadyMetrics(): Promise<ReadyMetrics> {
       maxReconcilerBacklog: thresholds.maxReconcilerBacklog,
       maxProviderErrorRate: thresholds.maxProviderErrorRate,
       maxProviderP95DurationMs: thresholds.maxProviderP95DurationMs,
+      maxGlobalSpendUsdPerHour: thresholds.maxGlobalSpendUsdPerHour,
       maxDbLatencyMs: thresholds.maxDbLatencyMs,
     },
     alerts,

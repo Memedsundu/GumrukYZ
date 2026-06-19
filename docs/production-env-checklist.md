@@ -20,6 +20,11 @@ Doğrulama: `pnpm smoke:production` veya `curl https://gumrukyz.vercel.app/api/h
 | `TRIGGER_TENANT_CONCURRENCY` | Tenant başına eşzamanlı submission limiti (varsayılan 2) |
 | `TRIGGER_CLASSIFICATION_CONCURRENCY` | Global sınıflandırma kuyruğu limiti (varsayılan 10) |
 | `TRIGGER_EXPERT_REVIEW_CONCURRENCY` | Global Uzman İncelemesi kuyruğu limiti (varsayılan 5) |
+| `UPSTASH_REDIS_REST_URL` | Wave 4 — distributed rate limit (org-keyed, cross-server) |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash REST token |
+| `SPEND_CIRCUIT_BREAKER_ENABLED` | `true` — enforce hourly AI spend ceilings |
+| `SPEND_LIMIT_TENANT_USD_PER_HOUR` | Tenant başına saatlik AI maliyet limiti (USD, varsayılan 25) |
+| `SPEND_LIMIT_GLOBAL_USD_PER_HOUR` | Platform geneli saatlik AI maliyet limiti (USD, varsayılan 500) |
 | `CRON_SECRET` | Vercel cron auth for `/api/platform/reconcile` and `/api/ready` alerts |
 | `HEALTH_STRICT` | `true` — fail health check when Blob/OpenAI/Trigger keys missing |
 

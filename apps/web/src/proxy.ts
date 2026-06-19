@@ -1,6 +1,11 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import {
+  checkDistributedRateLimit,
+  getRateLimitRoute,
+  rateLimitResponseHeaders,
+} from '@/lib/rate-limit'
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -20,51 +25,35 @@ const isOrgOptionalRoute = createRouteMatcher([
   '/api/pilot-consent',
 ])
 
-// Simple in-process rate limiter (per-instance; no Redis needed for MVP).
-// Limits mutating API endpoints to prevent abuse on a warm serverless function.
-// Each slot: { count, windowStart }
-const rateStore = new Map<string, { count: number; windowStart: number }>()
-const RATE_WINDOW_MS = 60_000 // 1 minute
-const LIMITS: Record<string, number> = {
-  '/api/submissions': 30,         // POST new submission
-  '/api/submissions/.*/process': 10, // POST process trigger
-  '/api/submissions/.*/expert-review': 6,
-  '/api/submissions/.*/assistant': 30, // POST chat question
-  '/api/clients': 60,
-  '/api/sales-leads': 10,         // POST upgrade/contact request
+async function enforcePostRateLimit(
+  request: NextRequest,
+  identifier: string,
+): Promise<NextResponse | null> {
+  const { pathname } = request.nextUrl
+  const route = getRateLimitRoute(pathname)
+  if (!route) return null
+
+  const result = await checkDistributedRateLimit({
+    identifier,
+    routeClass: route.routeClass,
+    limit: route.limit,
+  })
+
+  if (result.success) return null
+
+  return NextResponse.json(
+    { error: 'Çok fazla istek gönderildi. Lütfen biraz bekleyip tekrar deneyin.' },
+    {
+      status: 429,
+      headers: rateLimitResponseHeaders(result),
+    },
+  )
 }
 
-function getRateLimit(pathname: string): number | null {
-  for (const [pattern, limit] of Object.entries(LIMITS)) {
-    if (new RegExp(`^${pattern}$`).test(pathname)) return limit
-  }
-  return null
-}
-
-function checkRateLimit(key: string, limit: number): boolean {
-  const now = Date.now()
-  const slot = rateStore.get(key)
-
-  if (!slot || now - slot.windowStart >= RATE_WINDOW_MS) {
-    rateStore.set(key, { count: 1, windowStart: now })
-    return true
-  }
-
-  if (slot.count >= limit) return false
-
-  slot.count++
-  return true
-}
-
-// Periodically clean up stale entries to prevent memory growth on long-lived instances
-let lastCleanup = Date.now()
-function maybeCleanup() {
-  const now = Date.now()
-  if (now - lastCleanup < 5 * 60_000) return
-  lastCleanup = now
-  for (const [key, slot] of rateStore.entries()) {
-    if (now - slot.windowStart >= RATE_WINDOW_MS * 2) rateStore.delete(key)
-  }
+function clientIp(request: NextRequest): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? request.headers.get('x-real-ip')
+    ?? 'unknown'
 }
 
 export default clerkMiddleware(async (auth, request: NextRequest) => {
@@ -76,34 +65,6 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     const { userId, orgId } = await auth()
     if (!userId) return
     return NextResponse.redirect(new URL(orgId ? '/dashboard' : '/onboarding', request.url))
-  }
-
-  // Rate limiting for POST mutation endpoints
-  if (request.method === 'POST') {
-    const { pathname } = request.nextUrl
-    const limit = getRateLimit(pathname)
-
-    if (limit !== null) {
-      maybeCleanup()
-      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-        ?? request.headers.get('x-real-ip')
-        ?? 'unknown'
-      const key = `${ip}:${pathname}`
-
-      if (!checkRateLimit(key, limit)) {
-        return NextResponse.json(
-          { error: 'Çok fazla istek gönderildi. Lütfen biraz bekleyip tekrar deneyin.' },
-          {
-            status: 429,
-            headers: {
-              'Retry-After': '60',
-              'X-RateLimit-Limit': String(limit),
-              'X-RateLimit-Window': '60',
-            },
-          },
-        )
-      }
-    }
   }
 
   if (isOrgOptionalRoute(request)) {
@@ -125,7 +86,19 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
         { status: 403 },
       )
     }
+
+    if (request.method === 'POST') {
+      const rateLimited = await enforcePostRateLimit(request, `org:${orgId}`)
+      if (rateLimited) return rateLimited
+    }
+
     return
+  }
+
+  // Public POST endpoints (e.g. sales leads) — IP-keyed rate limit before auth.
+  if (request.method === 'POST' && pathname.startsWith('/api/')) {
+    const rateLimited = await enforcePostRateLimit(request, `ip:${clientIp(request)}`)
+    if (rateLimited) return rateLimited
   }
 
   if (!isPublicRoute(request)) {

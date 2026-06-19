@@ -1,6 +1,8 @@
 import { prisma } from '@gumrukyz/db'
 import { classifySubmissionDocuments, type ClassificationResponse } from './classification'
 import { allowsSyncProcessingFallback, isAsyncProcessingRequired } from './runtime-env'
+import { checkSpendAllowed } from './spend-guard'
+import './spend-guard-init'
 
 export type StartClassificationResult =
   | {
@@ -41,6 +43,16 @@ export async function startSubmissionClassification(params: {
   }
   if (submission.classificationStatus === 'RUNNING' || submission.status === 'CLASSIFYING') {
     return { ok: false, status: 409, error: 'Sınıflandırma zaten devam ediyor' }
+  }
+
+  const spend = await checkSpendAllowed(tenantId)
+  if (!spend.ok) {
+    return {
+      ok: false,
+      status: spend.status,
+      error: spend.error,
+      code: spend.code,
+    }
   }
 
   if (isAsyncProcessingRequired() && !isTriggerEnabled()) {
