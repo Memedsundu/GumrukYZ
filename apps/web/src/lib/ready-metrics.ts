@@ -58,32 +58,27 @@ export function getReadyThresholds() {
 }
 
 async function countReconcilerBacklog(olderThanMs: number): Promise<number> {
+  // Stranded reservations = a 'reserve' event older than the cutoff whose job is
+  // already terminal (FAILED/COMPLETED) but which has no matching consume/refund.
+  // Single aggregate query — avoids the prior per-event N+1 that hammered the DB
+  // on this (publicly reachable) readiness probe.
   const cutoff = new Date(Date.now() - olderThanMs)
-  const reserveEvents = await prisma.tenantUsageEvent.findMany({
-    where: { action: 'reserve', createdAt: { lt: cutoff }, processingJobId: { not: null } },
-    select: { processingJobId: true, metric: true },
-    take: 500,
-  })
-
-  let backlog = 0
-  for (const event of reserveEvents) {
-    const jobId = event.processingJobId
-    if (!jobId) continue
-
-    const settled = await prisma.tenantUsageEvent.findFirst({
-      where: { processingJobId: jobId, metric: event.metric, action: { in: ['consume', 'refund'] } },
-    })
-    if (settled) continue
-
-    const job = await prisma.processingJob.findUnique({
-      where: { id: jobId },
-      select: { status: true },
-    })
-    if (job && job.status !== 'FAILED' && job.status !== 'COMPLETED') continue
-    backlog++
-  }
-
-  return backlog
+  const rows = await prisma.$queryRaw<Array<{ count: bigint | number | null }>>`
+    SELECT COUNT(*)::int AS count
+    FROM tenant_usage_events r
+    JOIN processing_jobs j ON j.id = r.processing_job_id
+    WHERE r.action = 'reserve'
+      AND r.processing_job_id IS NOT NULL
+      AND r.created_at < ${cutoff}
+      AND j.status IN ('FAILED', 'COMPLETED')
+      AND NOT EXISTS (
+        SELECT 1 FROM tenant_usage_events s
+        WHERE s.processing_job_id = r.processing_job_id
+          AND s.metric = r.metric
+          AND s.action IN ('consume', 'refund')
+      )
+  `
+  return Number(rows[0]?.count ?? 0)
 }
 
 export async function collectReadyMetrics(): Promise<ReadyMetrics> {

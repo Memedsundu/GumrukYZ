@@ -83,14 +83,16 @@ export async function getHourlySpend(tenantId?: string): Promise<SpendSnapshot> 
     return { tenantSpendUsd: 0, globalSpendUsd: globalCache.globalSpendUsd }
   }
 
+  const globalWasFresh = Boolean(globalCache && now - globalCache.at < CACHE_MS)
   const [globalSpendUsd, tenantSpendUsd] = await Promise.all([
-    globalCache && now - globalCache.at < CACHE_MS
-      ? Promise.resolve(globalCache.globalSpendUsd)
-      : queryGlobalSpendLastHour(),
+    globalWasFresh ? Promise.resolve(globalCache!.globalSpendUsd) : queryGlobalSpendLastHour(),
     tenantId ? queryTenantSpendLastHour(tenantId) : Promise.resolve(0),
   ])
 
-  globalCache = { at: now, globalSpendUsd }
+  // Only refresh the global cache timestamp when we actually re-queried. Resetting
+  // `at` on reuse would let continuous per-tenant traffic keep the global figure
+  // stale indefinitely (the breaker would lag well past the 30s window).
+  if (!globalWasFresh) globalCache = { at: now, globalSpendUsd }
   const snapshot = { tenantSpendUsd, globalSpendUsd }
   if (tenantId) spendCache.set(tenantId, { at: now, snapshot })
   return snapshot

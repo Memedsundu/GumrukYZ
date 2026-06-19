@@ -7,6 +7,7 @@ const RATE_WINDOW_MS = 60_000
 export const ROUTE_RATE_LIMITS: Record<string, number> = {
   submissions: 30,
   process: 10,
+  classify: 12,
   'expert-review': 6,
   assistant: 30,
   clients: 60,
@@ -15,6 +16,7 @@ export const ROUTE_RATE_LIMITS: Record<string, number> = {
 
 const ROUTE_PATTERNS: Array<{ pattern: RegExp; routeClass: string }> = [
   { pattern: /^\/api\/submissions\/[^/]+\/process$/, routeClass: 'process' },
+  { pattern: /^\/api\/submissions\/[^/]+\/classify$/, routeClass: 'classify' },
   { pattern: /^\/api\/submissions\/[^/]+\/expert-review$/, routeClass: 'expert-review' },
   { pattern: /^\/api\/submissions\/[^/]+\/assistant$/, routeClass: 'assistant' },
   { pattern: /^\/api\/submissions$/, routeClass: 'submissions' },
@@ -127,12 +129,19 @@ export async function checkDistributedRateLimit(params: {
     return checkMemoryRateLimit(key, params.limit)
   }
 
-  const result = await limiter.limit(key)
-  return {
-    success: result.success,
-    limit: params.limit,
-    remaining: result.remaining,
-    reset: result.reset,
+  try {
+    const result = await limiter.limit(key)
+    return {
+      success: result.success,
+      limit: params.limit,
+      remaining: result.remaining,
+      reset: result.reset,
+    }
+  } catch (err) {
+    // Never let a transient Upstash failure 500 every mutating request.
+    // Degrade to the per-instance memory limiter instead of failing closed.
+    console.error('rate limiter backend error; falling back to in-memory limiter:', err)
+    return checkMemoryRateLimit(key, params.limit)
   }
 }
 

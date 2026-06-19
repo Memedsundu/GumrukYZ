@@ -344,6 +344,23 @@ export async function finalizeExpertReviewRun(params: {
   reviewId: string
   processingJobId?: string | null
 }): Promise<ExpertReviewSummaryResponse | null> {
+  // Idempotency guard for Trigger at-least-once delivery: if this review already
+  // reached a terminal-success state, do not re-run (which would re-call OpenAI and
+  // append a second set of findings). ERROR is intentionally excluded so genuine
+  // task retries can re-attempt a transient failure.
+  const existing = await prisma.expertReview.findFirst({
+    where: { id: params.reviewId, tenantId: params.tenantId },
+    select: { status: true },
+  })
+  if (
+    existing &&
+    (existing.status === 'COMPLETED' ||
+      existing.status === 'SKIPPED' ||
+      existing.status === 'LEGAL_CONTEXT_INCOMPLETE')
+  ) {
+    return getExpertReviewSummary(params.reviewId, params.tenantId)
+  }
+
   const input = await loadExpertReviewInput(params.submissionId, params.tenantId)
   if (!input) {
     await failExpertReviewReservation(params.reviewId, params.tenantId, true)

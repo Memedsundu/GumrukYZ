@@ -16,9 +16,9 @@ Doğrulama: `pnpm smoke:production` veya `curl https://gumrukyz.vercel.app/api/h
 | `OPENAI_API_KEY` | Yapılandırılmış modeller |
 | `TRIGGER_SECRET_KEY` | Uzun işleme pipeline (60s+ timeout önleme) |
 | `TRIGGER_PROJECT_ID` | Trigger.dev proje kimliği |
-| `TRIGGER_GLOBAL_CONCURRENCY` | Tüm tenant'lar için eşzamanlı submission limiti (varsayılan 15) |
-| `TRIGGER_TENANT_CONCURRENCY` | Tenant başına eşzamanlı submission limiti (varsayılan 2) |
-| `TRIGGER_CLASSIFICATION_CONCURRENCY` | Global sınıflandırma kuyruğu limiti (varsayılan 10) |
+| `TRIGGER_GLOBAL_CONCURRENCY` | **Trigger.dev dashboard** → Environment → max concurrent runs (set to **15**). Hard global ceiling across all tenants/tasks. |
+| `TRIGGER_TENANT_CONCURRENCY` | Per-tenant cap via `concurrencyKey` on `submission-processing` / `submission-classification` queues (default **2**) |
+| `TRIGGER_CLASSIFICATION_CONCURRENCY` | Reserved; classification uses tenant concurrency on `submission-classification` queue |
 | `TRIGGER_EXPERT_REVIEW_CONCURRENCY` | Global Uzman İncelemesi kuyruğu limiti (varsayılan 5) |
 | `UPSTASH_REDIS_REST_URL` | Wave 4 — distributed rate limit (org-keyed, cross-server) |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash REST token |

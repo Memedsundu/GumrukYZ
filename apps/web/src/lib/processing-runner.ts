@@ -5,7 +5,7 @@ import { EntitlementExhaustedError, reserveAnalysisCredit, refundMetric } from '
 import { allowsSyncProcessingFallback, isAsyncProcessingRequired } from './runtime-env'
 import { checkSpendAllowed } from './spend-guard'
 import './spend-guard-init'
-import { tenantSubmissionQueue } from '@/trigger/queues'
+import { submissionProcessingQueue } from '@/trigger/queues'
 
 const BLOCKED_PROCESSING_STATUSES = [
   'CLASSIFYING',
@@ -162,7 +162,7 @@ export async function startSubmissionProcessing(params: {
           jobId: job.id,
         },
         {
-          queue: tenantSubmissionQueue.name,
+          queue: submissionProcessingQueue.name,
           concurrencyKey: tenantId,
         },
       )

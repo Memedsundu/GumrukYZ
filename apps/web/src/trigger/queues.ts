@@ -5,13 +5,13 @@ function parseEnvInt(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
 }
 
-/** Global cap — limits concurrent submission runs across all tenants. */
+/** Per-tenant cap when triggering with concurrencyKey: tenantId. */
 export const submissionProcessingQueue = queue({
   name: 'submission-processing',
-  concurrencyLimit: parseEnvInt('TRIGGER_GLOBAL_CONCURRENCY', 15),
+  concurrencyLimit: parseEnvInt('TRIGGER_TENANT_CONCURRENCY', 2),
 })
 
-/** Per-tenant fairness — use with concurrencyKey: tenantId when triggering. */
+/** @deprecated Use submissionProcessingQueue + concurrencyKey instead. Kept for deploy compatibility. */
 export const tenantSubmissionQueue = queue({
   name: 'submission-per-tenant',
   concurrencyLimit: parseEnvInt('TRIGGER_TENANT_CONCURRENCY', 2),
@@ -19,7 +19,7 @@ export const tenantSubmissionQueue = queue({
 
 export const classificationQueue = queue({
   name: 'submission-classification',
-  concurrencyLimit: parseEnvInt('TRIGGER_CLASSIFICATION_CONCURRENCY', 10),
+  concurrencyLimit: parseEnvInt('TRIGGER_TENANT_CONCURRENCY', 2),
 })
 
 export const expertReviewQueue = queue({

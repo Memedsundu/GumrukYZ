@@ -688,6 +688,10 @@ async function persistExpertReview(params: {
   let reviewNeededCount = 0
 
   await prisma.$transaction(async (tx) => {
+    // Clear any findings from a prior run of this same review id before re-creating,
+    // so a re-persist (e.g. Trigger task redelivery) cannot duplicate findings.
+    await tx.expertReviewFinding.deleteMany({ where: { expertReviewId: params.reviewId } })
+
     await tx.expertReview.update({
       where: { id: params.reviewId },
       data: {
